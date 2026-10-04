@@ -32,7 +32,7 @@ export async function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
       <div className="container-site flex h-16 items-center gap-4">
         <Link href="/" className="flex items-center gap-2 font-black tracking-tight">
-          <span className="grid size-8 place-items-center rounded-lg bg-primary text-sm text-primaryfg">
+          <span className="grid size-8 place-items-center rounded-lg bg-accent text-sm text-primaryfg">
             LP
           </span>
           <span className="hidden text-lg sm:block">Les Poroiniens</span>

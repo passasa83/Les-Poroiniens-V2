@@ -65,7 +65,7 @@ export function ReaderControls({
               aria-pressed={mode === m.key}
               className={clsx(
                 "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                mode === m.key ? "bg-primary text-primaryfg" : "text-muted hover:text-fg",
+                mode === m.key ? "bg-accent text-primaryfg" : "text-muted hover:text-fg",
               )}
             >
               {m.icon}

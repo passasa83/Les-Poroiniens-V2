@@ -1,126 +1,217 @@
 @import "tailwindcss";
 
-/* ── Thèmes (sémantique : les tokens changent de valeur selon data-theme) ── */
+/*
+ * ── Direction artistique (cahier_des_charges_ui_ux_da.md §3) ────────────────
+ * Fond anthracite neutre (MANGA Plus), un seul accent : rouge corail.
+ * Les accents sont déclinés en deux valeurs pour rester conformes WCAG AA :
+ *   --accent       → fonds pleins porteurs de texte blanc (4,5:1 minimum)
+ *   --accent-text  → l'accent utilisé en texte / icône sur les surfaces (4,5:1)
+ *   --accent-deep  → fonds d'accent teintés profonds
+ */
+
 :root,
 [data-theme="dark"] {
-  --bg: #0a0b11;
-  --surface: #12141d;
-  --surface-2: #191c27;
-  --line: #262a3a;
-  --fg: #e8eaf2;
-  --muted: #9aa2b8;
-  --primary: #8b5cf6;
-  --primary-strong: #7c3aed;
-  --primary-fg: #ffffff;
-  --adult: #fb7185;
-  --ok: #34d399;
-  --warn: #fbbf24;
+  --bg: #1d1d1f;
+  --header: #232325;
+  --surface: #2b2b2e;
+  --surface-2: #353539;
+  --border: #3c3c41;
+  --fg: #ffffff;
+  --muted: #a0a0a6; /* AA sur --surface-2 (4,7:1) */
+  --accent: #d93a44; /* blanc sur accent : 4,5:1 */
+  --accent-strong: #b92c36; /* survol des fonds pleins */
+  --accent-deep: #8e1b22;
+  --accent-text: #ff757c; /* accent en texte : 4,7:1 sur --surface-2 */
+  --on-accent: #ffffff;
+  --ok: #2fbf71;
+  --warn: #f2a93b;
+  --adult: #ff8fa0; /* +18 et messages d'erreur */
+  --on-adult: #1d1d1f; /* texte sur fond --adult (7,8:1) */
   --shadow: 0 18px 40px -24px rgb(0 0 0 / 0.8);
+
+  /* Alias historiques (utilisés par les composants existants) */
+  --line: var(--border);
+  --primary: var(--accent-text);
+  --primary-strong: var(--accent-strong);
+  --primary-fg: var(--on-accent);
+  --adult-solid: var(--adult);
 }
 
 [data-theme="light"] {
-  --bg: #f6f7fb;
+  --bg: #f5f5f7;
+  --header: #ffffff;
   --surface: #ffffff;
-  --surface-2: #eef0f7;
-  --line: #dfe3ee;
-  --fg: #14161f;
-  --muted: #5d6478;
-  --primary: #6d3ff5;
-  --primary-strong: #5b2fe0;
-  --primary-fg: #ffffff;
-  --adult: #e11d48;
-  --ok: #059669;
-  --warn: #d97706;
+  --surface-2: #edeeF2;
+  --border: #dcdde3;
+  --fg: #1a1a1c;
+  --muted: #5a5f6b; /* 6,4:1 sur blanc */
+  --accent: #c4262f;
+  --accent-strong: #a81e26;
+  --accent-deep: #8e1b22;
+  --accent-text: #c4262f; /* 5,7:1 sur blanc */
+  --on-accent: #ffffff;
+  --ok: #147a4f;
+  --warn: #b45309;
+  --adult: #c4162e;
+  --on-adult: #ffffff;
   --shadow: 0 18px 40px -28px rgb(20 22 31 / 0.35);
+
+  --line: var(--border);
+  --primary: var(--accent-text);
+  --primary-strong: var(--accent-strong);
+  --primary-fg: var(--on-accent);
+  --adult-solid: var(--adult);
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-header: var(--header);
   --color-surface: var(--surface);
   --color-surface2: var(--surface-2);
-  --color-line: var(--line);
+  --color-line: var(--border);
   --color-fg: var(--fg);
   --color-muted: var(--muted);
-  --color-primary: var(--primary);
-  --color-primarystrong: var(--primary-strong);
-  --color-primaryfg: var(--primary-fg);
+
+  /* Accent : texte / icônes */
+  --color-primary: var(--accent-text);
+  --color-primaryfg: var(--on-accent);
+  /* Accent : fonds pleins (texte blanc AA) */
+  --color-accent: var(--accent);
+  --color-accentstrong: var(--accent-strong);
+  --color-primarystrong: var(--accent-strong);
+
   --color-adult: var(--adult);
+  --color-adultfg: var(--on-adult);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Typographie (§3.3) : Poppins, secours système et CJK pour les titres originaux */
+  --font-sans:
+    var(--font-poppins), "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, "Malgun Gothic",
+    "Microsoft YaHei", sans-serif;
+
+  /* Rayons (§3.4) : 8 px pour cartes et champs, 999 px pour badges et chips */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 12px;
+  --radius-4xl: 16px;
 }
 
-html {
-  color-scheme: dark;
-}
-[data-theme="light"] {
-  color-scheme: light;
-}
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+  [data-theme="light"] {
+    color-scheme: light;
+  }
 
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  text-rendering: optimizeLegibility;
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* Mouvement : transitions courtes (150-250 ms), jamais décoratives */
+  @media (prefers-reduced-motion: no-preference) {
+    :where(a, button, .btn, .chip, .card, input, select, textarea) {
+      transition-property: color, background-color, border-color, box-shadow, opacity;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    }
+  }
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--primary) 45%, transparent);
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
-}
-
+/* Focus visible : anneau d'accent de 2 px (§8.1) */
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--accent-text);
   outline-offset: 2px;
 }
 
+/* Respect strict de prefers-reduced-motion (§3.4, §8.1) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer components {
+  /* Conteneur centré : 1280 px, 1440 px au-delà de 1440 px (§4) */
   .container-site {
-    @apply mx-auto w-full max-w-7xl px-4 sm:px-6;
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 min-[1440px]:max-w-[1440px];
   }
 
-  .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  /* ── Bouton (§7) : M = 44 px de haut, cible tactile ≥ 44 px ─────────── */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
+  .btn-sm {
+    @apply min-h-9 px-3 text-xs;
+  }
+  .btn-lg {
+    @apply min-h-12 px-6 text-base;
+  }
+
   .btn-primary {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-primary text-primaryfg hover:bg-primarystrong;
+    @apply bg-accent text-primaryfg hover:bg-accentstrong;
   }
   .btn-secondary {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-surface2 text-fg hover:bg-line;
+    @apply border border-line bg-surface2 text-fg hover:border-muted;
   }
   .btn-ghost {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 text-muted hover:bg-surface2 hover:text-fg;
+    @apply text-muted hover:bg-surface2 hover:text-fg;
   }
   .btn-danger {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-adult text-white hover:opacity-90;
+    @apply bg-adult text-adultfg hover:opacity-90;
   }
 
+  /* ── Champs (§7) ───────────────────────────────────────────────────── */
   .input {
-    @apply w-full rounded-xl border border-line bg-surface2 px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-primary focus:outline-none;
+    @apply w-full min-h-11 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none;
   }
   .label {
     @apply mb-1.5 block text-sm font-medium text-muted;
   }
 
   .card {
-    @apply rounded-2xl border border-line bg-surface;
+    @apply rounded-lg border border-line bg-surface;
     box-shadow: var(--shadow);
   }
 
+  /* Badges, chips et étiquettes : rayon 999 px (§3.4) */
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
-
   .chip {
-    @apply inline-flex cursor-pointer items-center rounded-full border border-line px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-primary hover:text-fg;
+    @apply inline-flex min-h-9 cursor-pointer items-center rounded-full border border-line px-3 py-1 text-xs font-medium text-muted hover:border-accent hover:text-fg;
   }
   .chip-active {
-    @apply border-primary bg-primary/15 text-fg;
+    @apply border-accent bg-accent/15 text-fg;
   }
 
   .section-title {
@@ -128,11 +219,49 @@ body {
   }
 
   .link-muted {
-    @apply text-muted transition-colors hover:text-fg;
+    @apply text-muted hover:text-fg;
   }
 
   .divider {
     @apply h-px w-full bg-line;
+  }
+
+  /* Couverture 2:3 sans déformation, coins à 8 px (§3.4) */
+  .cover {
+    @apply aspect-[2/3] w-full rounded-lg bg-surface2 object-cover;
+  }
+
+  /* Métadonnées : 13 px en --muted (§3.3) */
+  .meta {
+    @apply text-[13px] leading-snug text-muted;
+  }
+
+  /* Squelette de chargement à la forme de l'élément (§3.5) */
+  .skeleton {
+    border-radius: 8px;
+    background: linear-gradient(
+      90deg,
+      var(--surface-2) 25%,
+      color-mix(in oklab, var(--surface-2) 55%, var(--surface)) 37%,
+      var(--surface-2) 63%
+    );
+    background-size: 400% 100%;
+    animation: lp-shimmer 1.4s ease infinite;
+  }
+}
+
+@keyframes lp-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }
 
@@ -154,6 +283,6 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  background: var(--primary);
+  background: var(--accent);
   cursor: pointer;
 }
