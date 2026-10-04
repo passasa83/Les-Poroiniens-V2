@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Les Poroiniens — plateforme de lecture de scans manga
 
-## Getting Started
+Site de lecture de scans (MVP / Phase 1) conforme au cahier des charges
+[`cahier_des_charges_site_scans.md`](./cahier_des_charges_site_scans.md).
 
-First, run the development server:
+- **Front** : Next.js 16 (App Router, TypeScript, Tailwind CSS v4) déployé sur Vercel.
+- **Back** : Appwrite auto-hébergé (authentification, TablesDB, storage) — voir `src/lib/db/`.
+- **Scans** : pages servies depuis le NAS via `/api/image` (proxy) ou un CDN (`CDN_BASE_URL`).
+- **Aucune publicité, aucun traceur publicitaire.** Interface entièrement en français.
+
+## Démarrage
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # puis compléter
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Scripts disponibles :
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Commande                | Rôle                                                        |
+| ----------------------- | ----------------------------------------------------------- |
+| `npm run dev`           | serveur de développement                                     |
+| `npm run build`         | build de production                                          |
+| `npm run typecheck`     | `tsc --noEmit`                                               |
+| `npm run lint`          | ESLint                                                       |
+| `npm run appwrite:setup`| crée les tables, index, bucket avatars et le profil « owner » |
+| `npm run appwrite:seed` | copie les données de démonstration vers Appwrite             |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Bascule démonstration → Appwrite
 
-## Learn More
+Tant que `APPWRITE_API_KEY` est vide, le site tourne sur un **jeu de données de
+démonstration en mémoire** (10 séries, chapitres, commentaires, comptes).
 
-To learn more about Next.js, take a look at the following resources:
+Pour brancher Appwrite :
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Dashboard Appwrite → **Settings → API keys → Create key** avec les scopes
+   `databases.read`, `databases.write`, `users.read`, `users.write`,
+   `storage.read`, `storage.write`.
+2. Coller la clé dans `.env.local` : `APPWRITE_API_KEY=...`
+3. `npm run appwrite:setup` (provisioning : 15 tables + index + bucket `avatars`
+   + profil Gérant pour `APPWRITE_OWNER_EMAIL`).
+4. `npm run appwrite:seed` (données de démonstration, facultatif).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Comptes de démonstration
 
-## Deploy on Vercel
+Mot de passe commun : `demo1234`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Rôle    | E-mail               |
+| ------- | -------------------- |
+| Gérant  | gerant@poroiniens.fr |
+| Admin   | admin@poroiniens.fr  |
+| Modo    | modo@poroiniens.fr   |
+| Membre  | membre@poroiniens.fr |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Le **Gérant** est seul habilité aux imports, à la publication, au Drive, aux
+secrets et à l'audit (matrice des droits : `src/lib/roles.ts`). Les Admins sont
+explicitement exclus de `/gerant`.
+
+## Structure
+
+```
+src/
+  app/          routes App Router (catalogue, lecteur, espace membre, back-office)
+  components/   UI (kit, layout, lecteur, commentaires, adult gate)
+  lib/          auth, rôles, données (data/*), db/ (drivers Appwrite + démo)
+  proxy.ts      redirections d'auth (Next 16 — remplace middleware)
+scripts/        provisioning Appwrite (appwrite-setup.mts)
+```
+
+## Notes d'implémentation
+
+- **URL canonique des chapitres** : `/serie/{slug}/chapitre-{n}`. L'App Router
+  n'accepte que des segments dynamiques entiers, l'URL publique est donc
+  réécrite vers la route interne `/serie/{slug}/{n}` (`rewrites()` dans
+  `next.config.ts`).
+- **404 streamés** : `notFound()` est renvoyé en HTTP 200 lorsque la page est
+  streamée (comportement documenté de Next) ; la balise `noindex` est injectée
+  automatiquement pour empêcher l'indexation de ces URL.
+- **Images** : jamais `next/image` sur `/api/img/...` (services workers) :
+  balises `<img>` standard.
+- **Pas de fournisseur de mails** : la réinitialisation de mot de passe est
+  manuelle, côté Gérant (interface abstraite `mailer`).

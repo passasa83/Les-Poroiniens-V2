@@ -1,17 +1,25 @@
 {
-  "name": "pwnext",
+  "name": "les-poroiniens",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "appwrite:setup": "tsx scripts/appwrite-setup.mts",
+    "appwrite:seed": "node scripts/post-cron.mjs seed",
+    "appwrite:revalidate": "node scripts/post-cron.mjs revalidate"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.51.0",
     "next": "16.3.8",
+    "node-appwrite": "^29.0.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -21,6 +29,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
