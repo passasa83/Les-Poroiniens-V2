@@ -29,7 +29,6 @@ export async function SiteHeader() {
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 font-black tracking-tight"
-          aria-label="Les Poroiniens, accueil"
         >
           <span className="grid size-8 place-items-center rounded-lg bg-accent text-sm text-primaryfg">
             LP

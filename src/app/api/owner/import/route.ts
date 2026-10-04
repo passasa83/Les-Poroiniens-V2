@@ -210,6 +210,8 @@ export async function POST(request: Request) {
       statut: data.statut,
       publish_at: publishAt,
       source: (imgchestId ? "imgchest" : "nas") as Chapter["source"],
+      // dénormalisé pour les filtres de « Dernières sorties » (§6.1)
+      series_type: series.type,
       nb_pages: indexed.length,
       classification: data.classification || series.classification,
       vues: 0,

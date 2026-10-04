@@ -73,6 +73,7 @@ export default async function GerantParametresPage() {
     social_discord: settings.social_discord ?? "",
     social_x: settings.social_x ?? "",
     social_youtube: settings.social_youtube ?? "",
+    adresses_secours: settings.adresses_secours ?? "",
   };
 
   const users = profileRes.items.map((p) => ({

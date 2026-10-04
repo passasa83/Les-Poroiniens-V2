@@ -296,6 +296,8 @@ function build(): DemoDatabase {
         statut: "published" as const,
         publish_at: published,
         source: "nas" as const,
+        // dénormalisé (§6.1) : les onglets « Dernières sorties » filtrent dessus
+        series_type: s.type,
         nb_pages: nbPages,
         classification,
         vues: Math.max(10, (nbChapters - n + 1) * 137 + si * 41),

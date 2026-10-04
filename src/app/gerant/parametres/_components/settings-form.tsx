@@ -23,6 +23,7 @@ type SettingsValues = {
   social_discord: string;
   social_x: string;
   social_youtube: string;
+  adresses_secours: string;
 };
 
 type UserLite = { userId: string; pseudo: string; role: Role };
@@ -251,6 +252,24 @@ export function SettingsForm({
               />
             </Field>
           </div>
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <h2 className="section-title">Adresse de secours</h2>
+          <Field
+            label="Domaines alternatifs"
+            htmlFor="st-adresses"
+            hint="Une adresse par ligne. Elles sont publiées sur la page « Adresse de secours » (§5.4)."
+          >
+            <Textarea
+              id="st-adresses"
+              value={values.adresses_secours}
+              onChange={(e) => set("adresses_secours", e.target.value)}
+              maxLength={1000}
+              rows={3}
+              placeholder={"https://secours.poroiniens.fr\nhttps://les-poroiniens.example"}
+            />
+          </Field>
         </Card>
 
         {error && (

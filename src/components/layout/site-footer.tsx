@@ -38,6 +38,11 @@ export function SiteFooter() {
                 Aide et FAQ
               </Link>
             </li>
+            <li>
+              <Link className="link-muted" href="/adresse-de-secours">
+                Adresse de secours
+              </Link>
+            </li>
           </ul>
         </div>
         <div>

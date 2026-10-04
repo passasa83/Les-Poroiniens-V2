@@ -44,6 +44,9 @@ export interface Chapter {
   publish_at: string | null;
   /** Origine des images : `nas` (chemins relatifs) ou `imgchest` (URLs CDN). */
   source: "nas" | "imgchest";
+  /** Format d'origine de la série, dénormalisé à l'écriture (§6.1 : filtres de
+   *  « Dernières sorties »). Absent sur les lignes créées avant cette colonne. */
+  series_type?: SeriesType;
   nb_pages: number;
   likes?: number;
   classification: Classification;
@@ -211,4 +214,10 @@ export const SERIES_STATUT_LABELS: Record<SeriesStatus, string> = {
   termine: "Terminé",
   hiatus: "Hiatus",
   abandonne: "Abandonné",
+};
+
+export const SERIES_TYPE_LABELS: Record<SeriesType, string> = {
+  manga: "Manga",
+  manhwa: "Manhwa",
+  manhua: "Manhua",
 };

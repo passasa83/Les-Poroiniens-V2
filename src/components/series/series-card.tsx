@@ -24,13 +24,12 @@ export function SeriesCard({
     <Link
       href={`/serie/${series.slug}`}
       className="group block focus-visible:outline-none"
-      aria-label={series.titre}
     >
       <div className="relative overflow-hidden rounded-xl border border-line bg-surface2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
-          alt={`Couverture de ${series.titre}`}
+          alt=""
           width={600}
           height={900}
           loading="lazy"

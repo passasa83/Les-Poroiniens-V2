@@ -137,6 +137,9 @@ const TABLES: Table[] = [
       { key: "nb_pages", type: "integer", def: 0 },
       { key: "likes", type: "integer", def: 0 },
       { key: "classification", type: "enum", elements: ["all", "adult"], def: "all" },
+      // Format d'origine de la série (manga/manhwa/manhua), dénormalisé pour
+      // filtrer les sorties sans jointure — Appwrite TablesDB n'en opère pas (§6.1)
+      { key: "series_type", type: "enum", elements: ["manga", "manhwa", "manhua"], def: "manga" },
       { key: "vues", type: "integer", def: 0 },
       { key: "created_by", ...ID64 },
       { key: "created_at", ...DATE },
@@ -145,6 +148,8 @@ const TABLES: Table[] = [
       { key: "idx_series_numero", type: "key", columns: ["series_id", "numero"] },
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_publish", type: "key", columns: ["publish_at"], orders: ["desc"] },
+      // filtres « Dernières sorties » par format (§6.1)
+      { key: "idx_type_publish", type: "key", columns: ["series_type", "publish_at"], orders: ["asc", "desc"] },
       // requis par SEARCH_FIELDS.chapters (recherche plein texte)
       { key: "idx_titre_ft", type: "fulltext", columns: ["titre"] },
     ],

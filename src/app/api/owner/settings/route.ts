@@ -22,6 +22,8 @@ const settingsInput = z.object({
   social_discord: z.string().trim().max(300).optional(),
   social_x: z.string().trim().max(300).optional(),
   social_youtube: z.string().trim().max(300).optional(),
+  /** Une adresse de secours par ligne (§5.4). */
+  adresses_secours: z.string().max(1000).optional(),
 });
 
 /**
@@ -68,6 +70,7 @@ export async function GET() {
       social_discord: settings.social_discord ?? "",
       social_x: settings.social_x ?? "",
       social_youtube: settings.social_youtube ?? "",
+      adresses_secours: settings.adresses_secours ?? "",
     },
     secrets: Object.fromEntries(
       Object.entries(secrets).map(([key, value]) => [
@@ -120,6 +123,9 @@ export async function PATCH(request: Request) {
   if (incoming.social_discord !== undefined) toStore.social_discord = incoming.social_discord;
   if (incoming.social_x !== undefined) toStore.social_x = incoming.social_x;
   if (incoming.social_youtube !== undefined) toStore.social_youtube = incoming.social_youtube;
+  if (incoming.adresses_secours !== undefined) {
+    toStore.adresses_secours = incoming.adresses_secours;
+  }
 
   for (const [cle, valeur] of Object.entries(toStore)) {
     await setSetting(cle, valeur);

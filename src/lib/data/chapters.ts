@@ -2,7 +2,7 @@ import "server-only";
 import { cached, getDb, invalidate, TABLES } from "@/lib/db";
 import { pageUrl } from "@/lib/media";
 import { mapSeries } from "@/lib/data/series";
-import type { Chapter, ScanPage, Series } from "@/lib/types";
+import type { Chapter, ScanPage, Series, SeriesType } from "@/lib/types";
 
 export async function listChapters(
   seriesId: string,
@@ -123,10 +123,94 @@ export async function recentChapters(limit = 12): Promise<Array<Chapter & { seri
   });
 }
 
+/** Numéro du premier chapitre publié de chaque série (héros de l'accueil, §6.1). */
+export async function firstChapterNumbers(seriesIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (seriesIds.length === 0) return out;
+
+  await Promise.all(
+    seriesIds.map(async (id) => {
+      const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+        filters: [
+          { field: "series_id", op: "eq", value: id },
+          { field: "statut", op: "eq", value: "published" },
+        ],
+        order: { field: "numero", dir: "asc" },
+        limit: 1,
+      });
+      if (items[0]) out.set(id, items[0].numero);
+    }),
+  );
+  return out;
+}
+
+export interface ReleaseItem extends Chapter {
+  series: Series;
+}
+
+/**
+ * « Dernières sorties » (§6.1) : chapitres publiés les plus récents, avec leur
+ * série, filtrables par format (manga / manhwa / manhua) via la colonne
+ * dénormalisée `series_type`, paginés côté serveur.
+ */
+export async function listRecentReleases(
+  opts: {
+    type?: SeriesType | "";
+    page?: number;
+    perPage?: number;
+    includeAdult?: boolean;
+  } = {},
+): Promise<{ items: ReleaseItem[]; total: number; page: number; perPage: number }> {
+  const perPage = Math.min(Math.max(opts.perPage ?? 12, 1), 48);
+  const page = Math.max(opts.page ?? 1, 1);
+  const key = `releases:${opts.type ?? "all"}:${page}:${perPage}:${opts.includeAdult ? "adult" : "safe"}`;
+
+  return cached(key, 60_000, async () => {
+    const filters = [
+      { field: "statut", op: "eq" as const, value: "published" },
+      ...(!opts.includeAdult
+        ? [{ field: "classification", op: "eq" as const, value: "all" }]
+        : []),
+      ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+    ];
+
+    const { items, total } = await getDb().list<Chapter>(TABLES.chapters, {
+      filters,
+      order: { field: "publish_at", dir: "desc" },
+      limit: perPage,
+      offset: (page - 1) * perPage,
+    });
+
+    const out: ReleaseItem[] = [];
+    for (const chapter of items) {
+      const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
+      if (series) out.push({ ...chapter, series: mapSeries(series) });
+    }
+    return { items: out, total, page, perPage };
+  });
+}
+
 export async function saveChapter(chapter: Partial<Chapter> & { id: string }): Promise<Chapter> {
   const db = getDb();
   const { id, ...data } = chapter;
   const existing = await db.get<Chapter>(TABLES.chapters, id);
+
+  /* Format d'origine dénormalisé (Appwrite n'opère pas de jointure) : renseigné
+     à l'écriture, et complété à la volée sur une ligne héritée qui en manque. */
+  if (data.series_type === undefined) {
+    const reused =
+      existing &&
+      existing.series_type &&
+      (!data.series_id || data.series_id === existing.series_id);
+    if (reused) {
+      data.series_type = existing.series_type;
+    } else {
+      const seriesId = data.series_id ?? existing?.series_id;
+      const series = seriesId ? await db.get<Series>(TABLES.series, seriesId) : null;
+      if (series) data.series_type = series.type;
+    }
+  }
+
   const updated = existing
     ? await db.update<Chapter>(TABLES.chapters, id, data as Record<string, unknown>)
     : await db.create<Chapter>(TABLES.chapters, id, {
@@ -134,6 +218,7 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
         ...(data as Record<string, unknown>),
       });
   invalidate("recent-chapters:");
+  invalidate("releases:");
   invalidate("series:");
   return updated;
 }

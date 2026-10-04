@@ -36,7 +36,7 @@ export function UserMenu({ user, unread }: { user: CurrentUser; unread: number }
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <span className="grid size-7 place-items-center rounded-full bg-primary/20 text-xs font-bold text-primary">
+        <span className="grid size-7 place-items-center rounded-full bg-primary/15 text-xs font-bold text-primary">
           {user.pseudo.slice(0, 2).toUpperCase()}
         </span>
         <span className="hidden max-w-24 truncate text-sm sm:inline">{user.pseudo}</span>

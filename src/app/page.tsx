@@ -2,42 +2,93 @@ import Link from "next/link";
 import { ArrowRight, Sparkles, TrendingUp } from "lucide-react";
 import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getDb, TABLES } from "@/lib/db";
-import { recentChapters } from "@/lib/data/chapters";
+import { firstChapterNumbers, listRecentReleases } from "@/lib/data/chapters";
 import {
   activeRecommendations,
   getSeriesById,
+  listSeries,
   popularSeries,
+  similarSeries,
 } from "@/lib/data/series";
-import { listHistory } from "@/lib/data/library";
+import { listHistory, listLibrary } from "@/lib/data/library";
 import { getSettings } from "@/lib/data/moderation";
 import { dataMode } from "@/lib/db";
 import { SeriesGrid } from "@/components/series/series-card";
-import { Badge, EmptyState } from "@/components/ui/kit";
-import type { Chapter, Series } from "@/lib/types";
+import { EmptyState } from "@/components/ui/kit";
+import { Hero, type HeroSlide } from "@/components/home/hero";
+import { ReleasesSection } from "@/components/home/releases-section";
+import { RankList } from "@/components/home/rank-list";
+import { plainText } from "@/lib/format";
+import type { ReleaseItem } from "@/lib/data/chapters";
+import type { ReleaseDto } from "@/lib/dto";
+import { SERIES_TYPE_LABELS, type Chapter, type Series } from "@/lib/types";
 
+/** Sections facultatives : masquées quand elles n'ont rien à montrer (§3.5). */
 export default async function HomePage() {
-  const [user, adult, chapters, recos, settings] = await Promise.all([
+  const [user, adult, recos, settings] = await Promise.all([
     getCurrentUser(),
     adultGateAccepted(),
-    recentChapters(10),
     activeRecommendations("home"),
     getSettings().catch(() => ({}) as Record<string, string>),
   ]);
-  const popular = await popularSeries(12, adult);
 
-  const recoSeries: Series[] = [];
-  for (const rec of recos) {
+  const [popular, releases, nouveautes, library] = await Promise.all([
+    popularSeries(10, adult),
+    listRecentReleases({ perPage: 12, includeAdult: adult }),
+    listSeries({ sort: "nouveautes", perPage: 6, includeAdult: adult }),
+    user ? listLibrary(user.id) : Promise.resolve([]),
+  ]);
+
+  /* ── Héros « À la une » (§6.1) : sélection de la rédaction, sinon les plus lues ── */
+  const editorial: Series[] = [];
+  for (const rec of recos.slice(0, 12)) {
     const s = await getSeriesById(rec.series_id);
-    if (s && (adult || s.classification !== "adult")) {
-      recoSeries.push({ ...s, noteMoy: s.noteMoy });
+    if (s && (adult || s.classification !== "adult")) editorial.push(s);
+  }
+
+  const heroPool = editorial.length > 0 ? editorial : popular;
+  const heroSeries = heroPool.slice(0, 5);
+  const heroIds = new Set(heroSeries.map((s) => s.id));
+  const firstChapters = await firstChapterNumbers(heroSeries.map((s) => s.id));
+  const followedIds = new Set(library.map((entry) => entry.series_id));
+
+  const slides: HeroSlide[] = heroSeries.map((s) => ({
+    id: s.id,
+    slug: s.slug,
+    titre: s.titre,
+    cover: s.couverture || `/api/img/cover/${s.slug}`,
+    typeLabel: SERIES_TYPE_LABELS[s.type],
+    genres: s.genres.slice(0, 3),
+    synopsis: plainText(s.synopsis),
+    chapitre: firstChapters.get(s.id) ?? null,
+    isAdult: s.classification === "adult",
+    followed: followedIds.has(s.id),
+  }));
+
+  /* ── « Ajouts récents » et recommandations (§6.1) ─────────────────────── */
+  let recoSeries: Series[] = [];
+  let recoForVisitor = true;
+  if (user) {
+    const history = await listHistory(user.id, 1);
+    const lastRead = history[0] ? await getSeriesById(history[0].series_id) : null;
+    if (lastRead) {
+      recoForVisitor = false;
+      recoSeries = await similarSeries(lastRead, 6);
     }
   }
+  if (recoSeries.length === 0) {
+    recoForVisitor = true;
+    recoSeries = editorial;
+  }
+  recoSeries = recoSeries
+    .filter((s) => !heroIds.has(s.id) && (adult || s.classification !== "adult"))
+    .slice(0, 6);
 
   const continueReading = user ? await continueBlock(user.id) : null;
   const announcement = settings.announcement?.trim();
 
   return (
-    <div className="container-site space-y-12 py-8">
+    <div className="container-site space-y-12 py-6">
       {announcement && (
         <div className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-fg">
           {announcement}
@@ -63,35 +114,62 @@ export default async function HomePage() {
         </div>
       )}
 
+      {/* Héros « À la une » */}
+      <Hero slides={slides} authed={Boolean(user)} />
+
+      {/* Continuer la lecture */}
       {continueReading}
 
-      {/* Dernières sorties */}
-      <section>
-        <SectionHeader title="Dernières sorties" href="/catalogue?sort=maj" />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {chapters.map((ch) => (
-            <ChapterRow key={ch.id} chapter={ch} adultAllowed={adult} />
-          ))}
-        </div>
-      </section>
+      {/* Dernières sorties : onglets + « Charger plus » (§6.1) */}
+      {releases.total > 0 && (
+        <ReleasesSection
+          initialItems={releases.items.map((ch) => toReleaseDto(ch))}
+          initialTotal={releases.total}
+          adultAllowed={adult}
+        />
+      )}
 
-      {/* Recommandations */}
+      {/* Les plus lues (§6.1) : classement 1 à 10 sur deux colonnes */}
+      {popular.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Les plus lues"
+            href="/catalogue?sort=popularite"
+            icon={<TrendingUp className="size-4" />}
+          />
+          <div className="mt-4">
+            <RankList series={popular} adultAllowed={adult} />
+          </div>
+        </section>
+      )}
+
+      {/* Ajouts récents (§6.1) */}
+      {nouveautes.items.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Ajouts récents"
+            href="/catalogue?sort=nouveautes"
+            icon={<Sparkles className="size-4" />}
+          />
+          <div className="mt-4">
+            <SeriesGrid series={nouveautes.items} adultAllowed={adult} />
+          </div>
+        </section>
+      )}
+
+      {/* Recommandations (§6.1) */}
       {recoSeries.length > 0 && (
         <section>
-          <SectionHeader title="Recommandations de la rédaction" href="/catalogue" icon={<Sparkles className="size-4" />} />
+          <SectionHeader
+            title={recoForVisitor ? "Recommandations de la rédaction" : "Recommandations pour vous"}
+            href="/catalogue"
+            icon={<Sparkles className="size-4" />}
+          />
           <div className="mt-4">
             <SeriesGrid series={recoSeries} adultAllowed={adult} />
           </div>
         </section>
       )}
-
-      {/* Populaires */}
-      <section>
-        <SectionHeader title="Séries populaires" href="/catalogue?sort=popularite" icon={<TrendingUp className="size-4" />} />
-        <div className="mt-4">
-          <SeriesGrid series={popular} adultAllowed={adult} />
-        </div>
-      </section>
 
       {!user && (
         <EmptyState
@@ -106,6 +184,22 @@ export default async function HomePage() {
       )}
     </div>
   );
+}
+
+function toReleaseDto(ch: ReleaseItem): ReleaseDto {
+  return {
+    id: ch.id,
+    numero: ch.numero,
+    publishAt: ch.publish_at,
+    classification: ch.classification,
+    series: {
+      slug: ch.series.slug,
+      titre: ch.series.titre,
+      couverture: ch.series.couverture || `/api/img/cover/${ch.series.slug}`,
+      type: ch.series.type,
+      classification: ch.series.classification,
+    },
+  };
 }
 
 function SectionHeader({
@@ -127,40 +221,6 @@ function SectionHeader({
         Tout voir →
       </Link>
     </div>
-  );
-}
-
-function ChapterRow({ chapter, adultAllowed }: { chapter: Chapter & { series: Series }; adultAllowed: boolean }) {
-  const hidden = chapter.classification === "adult" && !adultAllowed;
-  if (hidden) return null;
-  return (
-    <Link
-      href={`/serie/${chapter.series.slug}/chapitre-${chapter.numero}`}
-      className="card group flex items-center gap-3 p-3 transition-colors hover:border-primary"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={chapter.series.couverture}
-        alt=""
-        width={64}
-        height={96}
-        loading="lazy"
-        className="size-16 rounded-lg object-cover"
-      />
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold group-hover:text-primary">
-          {chapter.series.titre}
-        </p>
-        <p className="text-xs text-muted">
-          Chapitre {chapter.numero} · {relative(chapter.publish_at ?? "")}
-        </p>
-        {chapter.classification === "adult" && (
-          <span className="mt-1 inline-block">
-            <Badge tone="adult">+18</Badge>
-          </span>
-        )}
-      </div>
-    </Link>
   );
 }
 
@@ -209,13 +269,4 @@ async function continueBlock(userId: string) {
       </Link>
     </section>
   );
-}
-
-function relative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86_400_000);
-  if (days <= 0) return "aujourd'hui";
-  if (days === 1) return "hier";
-  if (days < 30) return `il y a ${days} jours`;
-  return `il y a ${Math.floor(days / 30)} mois`;
 }
