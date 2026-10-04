@@ -33,6 +33,11 @@ export function SiteFooter() {
                 Ma bibliothèque
               </Link>
             </li>
+            <li>
+              <Link className="link-muted" href="/aide">
+                Aide et FAQ
+              </Link>
+            </li>
           </ul>
         </div>
         <div>
