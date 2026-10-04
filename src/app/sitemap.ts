@@ -2,6 +2,11 @@ import type { MetadataRoute } from "next";
 import { listChapters } from "@/lib/data/chapters";
 import { allSeries } from "@/lib/data/series";
 
+// Les fichiers sitemap sont mis en cache par défaut par Next : sans cette
+// option, le sitemap continuait de lister des séries supprimées jusqu'au
+// prochain build. On le regénère à chaque requête (une requête DB).
+export const dynamic = "force-dynamic";
+
 const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 /** Routes statiques principales (§14.9). */

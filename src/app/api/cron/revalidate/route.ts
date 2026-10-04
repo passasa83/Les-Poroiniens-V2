@@ -44,10 +44,11 @@ export async function GET(request: Request) {
   invalidate("recent-chapters:");
   revalidatePath("/");
   revalidatePath("/catalogue");
+  revalidatePath("/sitemap.xml");
 
   return NextResponse.json({
     status: "ok",
-    invalidated: ["series:", "recent-chapters:", "/", "/catalogue"],
+    invalidated: ["series:", "recent-chapters:", "/", "/catalogue", "/sitemap.xml"],
     time: new Date().toISOString(),
   });
 }
