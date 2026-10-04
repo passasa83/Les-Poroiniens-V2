@@ -49,6 +49,34 @@ Pour brancher Appwrite :
    + profil Gérant pour `APPWRITE_OWNER_EMAIL`).
 4. `npm run appwrite:seed` (données de démonstration, facultatif).
 
+## Déploiement Vercel
+
+1. **Importer** le repo GitHub sur <https://vercel.com/new> : preset
+   **Next.js**, branche `master`, aucune commande de build personnalisée
+   (la config tient dans `next.config.ts`, pas de `vercel.json`).
+2. **Avant le 1er build** : *Project → Settings → Environment Variables* →
+   coller le bloc du fichier local `.env.vercel` (généré à partir de
+   `.env.local`, non versionné). Les variables vides (`NAS_*`, `GOOGLE_DRIVE_*`,
+   `CDN_BASE_URL`) sont facultatives.
+   ⚠ `NEXT_PUBLIC_SITE_URL` doit valoir l'URL réelle du site
+   (`https://<nom-du-projet>.vercel.app`) : c'est elle qui porte les URL
+   canoniques et le sitemap.
+3. **Deploy** : `next build` puis hébergement des fonctions — 0 réglage
+   supplémentaire.
+4. Après le 1er déploiement, corriger `NEXT_PUBLIC_SITE_URL` si l'URL diffère,
+   puis **Redeploy**.
+5. Recette : accueil, fiche série, lecteur, connexion
+   `gerant@poroiniens.fr` / `demo1234`, accès `/gerant`.
+
+Notes :
+
+- **Aucun seed à refaire** : Vercel et le serveur de développement partagent la
+  même base Appwrite (read-only pour le site, écritures via l'API).
+- Cron manuels contre la prod, depuis la machine de dev :
+  `NEXT_PUBLIC_SITE_URL=https://<projet>.vercel.app npm run appwrite:seed`
+- Le repo étant **public**, aucune secret n'y figure : `.env*` est ignoré et la
+  clé API ne vit que dans `.env.local` et les variables Vercel.
+
 ## Comptes de démonstration
 
 Mot de passe commun : `demo1234`
