@@ -1,6 +1,7 @@
 import "server-only";
 import { DEFAULT_PREFERENCES, type Role } from "@/lib/types";
 import { TABLES } from "./driver";
+import { rowId } from "./ids";
 
 export type DemoDatabase = Record<string, Map<string, Record<string, unknown>>>;
 
@@ -251,7 +252,7 @@ function build(): DemoDatabase {
   // ── Catalogue ────────────────────────────────────────────────────────
   seeds.forEach((s, si) => {
     const slug = slugify(s.titre);
-    const seriesId = `s-${slug}`;
+    const seriesId = rowId(`s-${slug}`);
     const classification = s.classification ?? "all";
     const nbChapters = s.chapters;
     const updatedOffset = -((si % 7) + 1) * DAY;
@@ -281,7 +282,7 @@ function build(): DemoDatabase {
     db[TABLES.series].set(seriesId, seriesRow);
 
     for (let n = 1; n <= nbChapters; n++) {
-      const chapterId = `${seriesId}-c${n}`;
+      const chapterId = rowId(`${seriesId}-c${n}`);
       // les derniers chapitres des 3 premières séries sont très récents
       const ageDays = n === nbChapters && si < 3 ? si : nbChapters - n + 3;
       const published = iso(-ageDays * DAY - n * 3600_000);
@@ -304,7 +305,7 @@ function build(): DemoDatabase {
       db[TABLES.chapters].set(chapterId, chapter);
 
       for (let p = 0; p < nbPages; p++) {
-        const pageId = `${chapterId}-p${p}`;
+        const pageId = rowId(`${chapterId}-p${p}`);
         db[TABLES.pages].set(pageId, {
           id: pageId,
           chapter_id: chapterId,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/lib/db";
 import { getChapterById } from "@/lib/data/chapters";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import type { Chapter } from "@/lib/types";
@@ -31,7 +31,7 @@ export async function POST(
   }
 
   const db = getDb();
-  const likeId = `${user.id}-${chapter.id}`;
+  const likeId = rowId(user.id, chapter.id);
   const existing = await db.get(TABLES.chapterLikes, likeId);
   if (existing) {
     return NextResponse.json({ liked: true, likes: chapter.likes ?? 0 });
@@ -59,7 +59,7 @@ export async function DELETE(
   if (!chapter) return NextResponse.json({ error: "not_found", code: "NOT_FOUND" }, { status: 404 });
 
   const db = getDb();
-  const likeId = `${user.id}-${chapter.id}`;
+  const likeId = rowId(user.id, chapter.id);
   const existing = await db.get(TABLES.chapterLikes, likeId);
   if (!existing) return NextResponse.json({ liked: false, likes: chapter.likes ?? 0 });
 
@@ -79,6 +79,6 @@ export async function GET(
   const { id } = await params;
   const chapter = await getChapterById(id);
   if (!chapter) return NextResponse.json({ error: "not_found", code: "NOT_FOUND" }, { status: 404 });
-  const existing = await getDb().get(TABLES.chapterLikes, `${user.id}-${id}`);
+  const existing = await getDb().get(TABLES.chapterLikes, rowId(user.id, id));
   return NextResponse.json({ liked: Boolean(existing), likes: chapter.likes ?? 0 });
 }

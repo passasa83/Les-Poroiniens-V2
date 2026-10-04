@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { clearHistory } from "@/lib/data/library";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { HistoryEntry } from "@/lib/types";
 
@@ -34,14 +34,14 @@ export async function DELETE(request: Request) {
   const entry = new URL(request.url).searchParams.get("entry");
 
   if (entry) {
-    const row = await db.get<HistoryEntry>(TABLES.history, `${user.id}-${entry}`);
+    const row = await db.get<HistoryEntry>(TABLES.history, rowId(user.id, entry));
     if (!row || row.user_id !== user.id) {
       return NextResponse.json(
         { error: "Entrée introuvable.", code: "not_found" },
         { status: 404 },
       );
     }
-    await db.remove(TABLES.history, `${user.id}-${entry}`);
+    await db.remove(TABLES.history, rowId(user.id, entry));
     return NextResponse.json({ ok: true, supprimes: 1 });
   }
 

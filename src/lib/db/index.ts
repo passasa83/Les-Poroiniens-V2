@@ -4,6 +4,7 @@ import { DemoDriver } from "./demo";
 import type { DbDriver } from "./driver";
 
 export { TABLES } from "./driver";
+export { rowId, ROW_ID_MAX } from "./ids";
 export type { DbDriver, ListQuery, ListResult } from "./driver";
 
 /** Appwrite est actif uniquement si une clé API est renseignée. */

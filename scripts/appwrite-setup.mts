@@ -107,6 +107,9 @@ const TABLES: Table[] = [
     indexes: [
       { key: "idx_slug", type: "unique", columns: ["slug"] },
       { key: "idx_titre", type: "fulltext", columns: ["titre"] },
+      // `Query.search()` exige un index fulltext : un index unique ne suffit
+      // pas, d'où cet index dédié pour la recherche par slug.
+      { key: "idx_slug_ft", type: "fulltext", columns: ["slug"] },
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_type", type: "key", columns: ["type"] },
       { key: "idx_class", type: "key", columns: ["classification"] },
@@ -142,6 +145,8 @@ const TABLES: Table[] = [
       { key: "idx_series_numero", type: "key", columns: ["series_id", "numero"] },
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_publish", type: "key", columns: ["publish_at"], orders: ["desc"] },
+      // requis par SEARCH_FIELDS.chapters (recherche plein texte)
+      { key: "idx_titre_ft", type: "fulltext", columns: ["titre"] },
     ],
   },
   {
@@ -180,6 +185,8 @@ const TABLES: Table[] = [
     ],
     indexes: [
       { key: "idx_pseudo", type: "unique", columns: ["pseudo"] },
+      // requis par SEARCH_FIELDS.profiles (recherche plein texte)
+      { key: "idx_pseudo_ft", type: "fulltext", columns: ["pseudo"] },
       { key: "idx_role", type: "key", columns: ["role"] },
       { key: "idx_user", type: "key", columns: ["user_id"] },
     ],

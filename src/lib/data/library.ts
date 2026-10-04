@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/lib/db";
 import type { HistoryEntry, LibraryEntry, LibraryStatus, Series } from "@/lib/types";
 
 export async function listLibrary(userId: string): Promise<LibraryEntry[]> {
@@ -50,7 +50,7 @@ export async function upsertLibraryEntry(
     series_id: seriesId,
     updated_at: new Date().toISOString(),
   };
-  const id = `${userId}-${seriesId}`;
+  const id = rowId(userId, seriesId);
   if (existing) {
     await db.update<LibraryEntry>(TABLES.library, id, next as unknown as Record<string, unknown>);
   } else {
@@ -60,7 +60,7 @@ export async function upsertLibraryEntry(
 }
 
 export async function removeLibraryEntry(userId: string, seriesId: string): Promise<void> {
-  await getDb().remove(TABLES.library, `${userId}-${seriesId}`);
+  await getDb().remove(TABLES.library, rowId(userId, seriesId));
 }
 
 /* ── Historique de lecture ───────────────────────────────────────────── */
@@ -82,7 +82,7 @@ export async function recordProgress(input: {
   completed?: boolean;
 }): Promise<void> {
   const db = getDb();
-  const id = `${input.userId}-${input.chapterId}`;
+  const id = rowId(input.userId, input.chapterId);
   const entry: HistoryEntry = {
     user_id: input.userId,
     chapter_id: input.chapterId,
@@ -109,7 +109,7 @@ export async function recordProgress(input: {
 export async function clearHistory(userId: string): Promise<void> {
   const entries = await listHistory(userId, 1000);
   for (const e of entries) {
-    await getDb().remove(TABLES.history, `${userId}-${e.chapter_id}`);
+    await getDb().remove(TABLES.history, rowId(userId, e.chapter_id));
   }
 }
 

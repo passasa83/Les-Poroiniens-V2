@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { getComment, toggleLike } from "@/lib/data/comments";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -61,7 +61,7 @@ export async function DELETE(request: Request, { params }: Params) {
   const guard = await ensureLikeable(request, id);
   if ("response" in guard) return guard.response;
 
-  const likeId = `${guard.user.id}-${id}`;
+  const likeId = rowId(guard.user.id, id);
   const existing = await getDb().get<{ id: string }>(TABLES.commentLikes, likeId);
   if (!existing) {
     return NextResponse.json({ likes: guard.comment.likes, liked: false });

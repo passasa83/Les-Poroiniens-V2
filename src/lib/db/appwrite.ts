@@ -7,6 +7,7 @@ import {
   type ListQuery,
   type ListResult,
 } from "./driver";
+import { rowId as normalizeRowId } from "./ids";
 
 type Row = Models.Row & Record<string, unknown>;
 
@@ -89,10 +90,20 @@ function reviveJson(value: unknown): unknown {
   }
 }
 
-/** Champs texte sur lesquels porte la recherche plein texte, par table. */
+/**
+ * Champs texte sur lesquels porte la recherche plein texte, par table.
+ *
+ * Contraintes Appwrite 2.3 :
+ *  - `Query.search()` est refusé sur une colonne **array** (`titresAlt`,
+ *    `auteurs`, `genres`…) ;
+ *  - il exige un index de type **fulltext** sur la colonne (un index unique
+ *    ou key ne suffit pas).
+ * Seules les colonnes string indexées en fulltext sont donc listées ici ;
+ * `appwrite:setup` crée ces index (`idx_titre`, `idx_slug_ft`, …).
+ */
 const SEARCH_FIELDS: Record<string, string[]> = {
-  series: ["titre", "titresAlt", "auteurs", "slug"],
-  profiles: ["pseudo", "bio"],
+  series: ["titre", "slug"],
+  profiles: ["pseudo"],
   chapters: ["titre"],
 };
 
@@ -136,7 +147,7 @@ export class AppwriteDriver implements DbDriver {
 
     // Recherche : une requête par champ texte, fusion côté serveur.
     if (query?.search && fields && fields.length > 0) {
-      const runs = await Promise.all(
+      const settled = await Promise.allSettled(
         fields.map((field) =>
           this.db.listRows<Row>({
             databaseId: this.databaseId,
@@ -149,6 +160,14 @@ export class AppwriteDriver implements DbDriver {
           }),
         ),
       );
+      // Un champ refusé par Appwrite (colonne array, index manquant…) ne
+      // doit pas mettre tout le site en erreur : on garde les champs qui
+      // répondent et on ne propage l'erreur que si aucun n'a abouti.
+      const runs = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
+      if (runs.length === 0) {
+        const failure = settled.find((s) => s.status === "rejected");
+        throw (failure as PromiseRejectedResult).reason;
+      }
       const unique = new Map<string, Row>();
       for (const run of runs) for (const row of run.rows) unique.set(row.$id, row);
       let rows = [...unique.values()].map((r) => mapRow<T>(table, r));
@@ -182,7 +201,7 @@ export class AppwriteDriver implements DbDriver {
       const row = await this.db.getRow<Row>({
         databaseId: this.databaseId,
         tableId: table,
-        rowId: id,
+        rowId: normalizeRowId(id),
       });
       return mapRow<T>(table, row);
     } catch (err) {
@@ -195,7 +214,7 @@ export class AppwriteDriver implements DbDriver {
     const row = await this.db.createRow<Row>({
       databaseId: this.databaseId,
       tableId: table,
-      rowId: id,
+      rowId: normalizeRowId(id),
       data: toWriteData(table, data),
     });
     return mapRow<T>(table, row);
@@ -205,7 +224,7 @@ export class AppwriteDriver implements DbDriver {
     const row = await this.db.updateRow<Row>({
       databaseId: this.databaseId,
       tableId: table,
-      rowId: id,
+      rowId: normalizeRowId(id),
       data: toWriteData(table, data),
     });
     return mapRow<T>(table, row);
@@ -215,7 +234,7 @@ export class AppwriteDriver implements DbDriver {
     await this.db.deleteRow({
       databaseId: this.databaseId,
       tableId: table,
-      rowId: id,
+      rowId: normalizeRowId(id),
     });
   }
 }

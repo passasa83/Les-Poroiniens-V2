@@ -4,7 +4,7 @@ import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit, createImportJob, updateImportJob } from "@/lib/data/moderation";
 import { getSeriesById } from "@/lib/data/series";
-import { dataMode, getDb, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/lib/db";
 import { demoPagePath } from "@/lib/db/seed";
 import type { Chapter } from "@/lib/types";
 
@@ -97,16 +97,13 @@ export async function POST(request: Request) {
     process.env.NAS_API_URL ||
     ""
   ).replace(/\/+$/, "");
-  if (!nasBase && dataMode() !== "demo") {
-    return jsonError(
-      "Stockage des pages non configuré (NAS_PAGE_BASE_URL / NAS_API_URL).",
-      "nas_unconfigured",
-      502,
-    );
-  }
+  // Sans NAS configuré, on indexe quand même le chapitre avec des pages de
+  // démonstration (dégradé assumé : permet de remplir et de tester le site).
+  // Dès que NAS_PAGE_BASE_URL est renseigné, les chemins pointent vers le NAS.
+  const storage: "nas" | "demo" = nasBase ? "nas" : "demo";
 
   const names = naturalSort(data.pages);
-  const chapterId = `${series.id}-c${data.numero}`;
+  const chapterId = rowId(`${series.id}-c${data.numero}`);
   const now = new Date().toISOString();
 
   const job = await createImportJob({
@@ -140,7 +137,7 @@ export async function POST(request: Request) {
     });
 
     for (let index = 0; index < names.length; index++) {
-      const pageId = `${chapterId}-p${index}`;
+      const pageId = rowId(chapterId, `p${index}`);
       await db.create(TABLES.pages, pageId, {
         id: pageId,
         chapter_id: chapterId,
@@ -154,7 +151,9 @@ export async function POST(request: Request) {
     await updateImportJob(job.id, {
       statut: "termine",
       progression: 100,
-      message: `Chapitre ${data.numero} créé en brouillon avec ${names.length} pages.`,
+      message: storage === "nas"
+        ? `Chapitre ${data.numero} créé en brouillon avec ${names.length} pages (NAS).`
+        : `Chapitre ${data.numero} créé en brouillon avec ${names.length} pages de démonstration — configurez NAS_PAGE_BASE_URL pour servir les scans réels.`,
     });
 
     await audit({
@@ -168,7 +167,7 @@ export async function POST(request: Request) {
         pages: names.length,
         classification: chapter.classification,
         source: data.source,
-        storage: nasBase ? "nas" : "demo",
+        storage,
       },
       ip,
     });

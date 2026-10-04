@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/lib/db";
 import type { Comment } from "@/lib/types";
 
 export interface CommentThread extends Comment {
@@ -133,7 +133,7 @@ export async function toggleLike(
   commentId: string,
 ): Promise<{ likes: number; liked: boolean }> {
   const db = getDb();
-  const likeId = `${userId}-${commentId}`;
+  const likeId = rowId(userId, commentId);
   const existing = await db.get<{ id: string }>(TABLES.commentLikes, likeId);
   const comment = await getComment(commentId);
   if (!comment) return { likes: 0, liked: false };

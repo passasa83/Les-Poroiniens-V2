@@ -4,7 +4,7 @@ import { getCurrentUser, logout } from "@/lib/auth";
 import { audit } from "@/lib/data/moderation";
 import { clearHistory, listLibrary } from "@/lib/data/library";
 import { getProfile } from "@/lib/data/users";
-import { dataMode, getDb, TABLES } from "@/lib/db";
+import { dataMode, getDb, rowId, TABLES } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { Comment, Notification } from "@/lib/types";
 
@@ -58,7 +58,7 @@ export async function DELETE(request: Request) {
 
   // 2. Bibliothèque
   for (const entry of await listLibrary(user.id)) {
-    await db.remove(TABLES.library, `${user.id}-${entry.series_id}`);
+    await db.remove(TABLES.library, rowId(user.id, entry.series_id));
   }
 
   // 3. Commentaires : contenu retiré, structure conservée (§8)
