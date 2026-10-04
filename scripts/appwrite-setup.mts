@@ -44,7 +44,7 @@ const DB_ID = process.env.APPWRITE_DATABASE_ID || "poroiniens";
 
 if (!ENDPOINT || !PROJECT || !API_KEY) {
   console.error(
-    "✖ Renseignez APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID et APPWRITE_API_KEY (créée dans le dashboard Appwrite, scopes : databases, users, storage.read, storage.write).",
+    "✖ Renseignez APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID et APPWRITE_API_KEY (créée dans le dashboard Appwrite, scopes : databases.read, databases.write, users.read, users.write, buckets.read, buckets.write, files.read, files.write).",
   );
   process.exit(1);
 }

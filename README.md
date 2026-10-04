@@ -34,9 +34,11 @@ démonstration en mémoire** (10 séries, chapitres, commentaires, comptes).
 
 Pour brancher Appwrite :
 
-1. Dashboard Appwrite → **Settings → API keys → Create key** avec les scopes
-   `databases.read`, `databases.write`, `users.read`, `users.write`,
-   `storage.read`, `storage.write`.
+1. Dashboard Appwrite → **Settings → API keys → Create key**, puis cocher dans
+   *Scopes* : `databases.read`, `databases.write`, `users.read`, `users.write`,
+   `buckets.read`, `buckets.write`, `files.read`, `files.write`
+   (inutiles : `tokens.*` — pas d'URLs signées — et `account.*` — la connexion
+   passe par un client anonyme puis la session utilisateur).
 2. Coller la clé dans `.env.local` : `APPWRITE_API_KEY=...`
 3. `npm run appwrite:setup` (provisioning : 15 tables + index + bucket `avatars`
    + profil Gérant pour `APPWRITE_OWNER_EMAIL`).
