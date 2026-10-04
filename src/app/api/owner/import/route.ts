@@ -7,6 +7,7 @@ import { getSeriesById } from "@/lib/data/series";
 import { getDb, rowId, TABLES } from "@/lib/db";
 import { demoPagePath } from "@/lib/db/seed";
 import { nasErrorMessage, nasList, type NasPage } from "@/lib/nas";
+import { imgchestErrorMessage, imgchestPost as fetchImgChestPost } from "@/lib/imgchest";
 import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
 import type { Chapter } from "@/lib/types";
 
@@ -22,10 +23,13 @@ const importInput = z.object({
   titre: z.string().trim().max(200).default(""),
   volume: z.number().int().min(1).max(999).nullable().default(null),
   classification: z.enum(["all", "adult"]).default("all"),
-  /** `upload` : noms déposés ; `nas` : dossier déjà présent sur le NAS (§5.1). */
-  source: z.enum(["upload", "nas"]).default("upload"),
+  /** `upload` : noms déposés ; `nas` : dossier déjà présent sur le NAS (§5.1) ;
+   *  `imgchest` : album ImgChest déjà publié par le Gérant. */
+  source: z.enum(["upload", "nas", "imgchest"]).default("upload"),
   /** Dossier du NAS : si renseigné, le listing est fait **côté serveur** (§4.1). */
   chemin: z.string().trim().max(500).optional(),
+  /** Identifiant d'album ImgChest (`qe4gwgozq7j`) : résolu côté serveur. */
+  imgchest_post: z.string().trim().max(64).optional(),
   /** Noms de fichiers uniquement (les octets ne transitent pas par Vercel). */
   pages: z.array(z.string().trim().min(1).max(255)).max(5000).default([]),
   /** Brouillon (défaut), programmé ou publié directement (§5.1, étape 4). */
@@ -49,7 +53,9 @@ type IndexedPage = {
 /**
  * POST /api/owner/import — import d'un chapitre (Gérant exclusif, §5).
  *
- * Deux sources :
+ * Trois sources d'indexation :
+ * - `imgchest` : album déjà publié par le Gérant — les URLs CDN du fichier
+ *   sont résolues ici puis stockées en base (la lecture n'appelle pas ImgChest) ;
  * - `chemin` renseigné : listing serveur via `GET /list` — largeurs, hauteurs,
  *   poids et hash sont lus sur le NAS puis stockés en base (§5.2) ;
  * - sinon : indexation des seuls noms, avec pages de démonstration si le NAS
@@ -84,8 +90,19 @@ export async function POST(request: Request) {
 
   const data = parsed.data;
   const nasPath = data.chemin?.trim().replace(/^\/+/, "").replace(/\/+$/, "") || "";
-  if (!nasPath && data.pages.length === 0) {
-    return jsonError("Sélectionnez un dossier NAS ou des pages.", "invalid_body", 400);
+  const imgchestId = data.source === "imgchest" ? (data.imgchest_post ?? "").trim() : "";
+  if (data.source === "imgchest" && !imgchestId) {
+    return jsonError("Sélectionnez un album ImgChest.", "invalid_body", 400);
+  }
+  if (imgchestId && !/^[a-z0-9]{4,32}$/i.test(imgchestId)) {
+    return jsonError("Identifiant d'album ImgChest invalide.", "invalid_body", 400);
+  }
+  if (data.source !== "imgchest" && !nasPath && data.pages.length === 0) {
+    return jsonError(
+      "Sélectionnez un dossier NAS ou des pages.",
+      "invalid_body",
+      400,
+    );
   }
   if (data.statut === "scheduled" && !data.publish_at) {
     return jsonError("Une date de publication est requise.", "publish_at_required", 400);
@@ -112,9 +129,26 @@ export async function POST(request: Request) {
 
   // ── Indexation des pages (§5.1, étape 3) ─────────────────────────────
   let indexed: IndexedPage[];
-  let storage: "nas" | "demo";
+  let storage: "nas" | "demo" | "imgchest";
 
-  if (nasPath) {
+  if (imgchestId) {
+    // Album ImgChest : la liste des pages est résolue ici, puis les URLs CDN
+    // sont stockées en base — la lecture n'appelle plus ImgChest.
+    let album;
+    try {
+      album = await fetchImgChestPost(imgchestId);
+    } catch (err) {
+      return jsonError(imgchestErrorMessage(err), "imgchest_error", 502);
+    }
+    indexed = album.files.map((file) => ({
+      chemin: file.url,
+      largeur: file.width ?? 1200,
+      hauteur: file.height ?? 1800,
+      ...(file.bytes ? { bytes: file.bytes } : {}),
+      ...(file.hash ? { hash: file.hash } : {}),
+    }));
+    storage = "imgchest";
+  } else if (nasPath) {
     let listing: { pages: NasPage[] };
     try {
       listing = await nasList(nasPath);
@@ -158,7 +192,7 @@ export async function POST(request: Request) {
         : null;
 
   const job = await createImportJob({
-    type: data.source === "nas" || nasPath ? "nas" : "upload",
+    type: imgchestId ? "imgchest" : data.source === "nas" || nasPath ? "nas" : "upload",
     statut: "cours",
     progression: 10,
     message: `Indexation de ${indexed.length} pages…`,
@@ -175,7 +209,7 @@ export async function POST(request: Request) {
       titre: data.titre || `Chapitre ${data.numero}`,
       statut: data.statut,
       publish_at: publishAt,
-      source: "nas",
+      source: (imgchestId ? "imgchest" : "nas") as Chapter["source"],
       nb_pages: indexed.length,
       classification: data.classification || series.classification,
       vues: 0,
@@ -216,7 +250,9 @@ export async function POST(request: Request) {
         ? `Chapitre ${data.numero} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
         : storage === "nas"
           ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis ${nasPath}.`
-          : `Chapitre ${data.numero} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`,
+          : storage === "imgchest"
+            ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis l'album ImgChest ${imgchestId}.`
+            : `Chapitre ${data.numero} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`,
       ...(warning ? { erreurs: [warning] } : {}),
     });
 

@@ -133,7 +133,7 @@ const TABLES: Table[] = [
       { key: "titre", type: "varchar", size: 255 },
       { key: "statut", type: "enum", elements: ["draft", "scheduled", "published"] },
       { key: "publish_at", ...DATE },
-      { key: "source", type: "enum", elements: ["nas"], def: "nas" },
+      { key: "source", type: "enum", elements: ["nas", "imgchest"], def: "nas" },
       { key: "nb_pages", type: "integer", def: 0 },
       { key: "likes", type: "integer", def: 0 },
       { key: "classification", type: "enum", elements: ["all", "adult"], def: "all" },
@@ -369,7 +369,7 @@ const TABLES: Table[] = [
     id: "import_jobs",
     name: "Jobs d'import",
     columns: [
-      { key: "type", type: "enum", elements: ["upload", "nas", "drive", "batch"] },
+      { key: "type", type: "enum", elements: ["upload", "nas", "drive", "batch", "imgchest"] },
       {
         key: "statut",
         type: "enum",
@@ -469,6 +469,31 @@ async function ensureTable(t: Table): Promise<void> {
       console.log(`  ✔ colonne ${t.id}.${c.key}`);
     } catch (err) {
       report(err, `colonne ${t.id}.${c.key}`);
+    }
+  }
+  // Énumérations déjà en place : on complète les valeurs manquantes
+  // (ajout d'une source ImgChest, d'un type d'import…). Rien n'est retiré.
+  for (const c of t.columns) {
+    if (c.type !== "enum" || !c.elements) continue;
+    const current = existing?.columns.find((col) => col.key === c.key) as
+      | Models.ColumnEnum
+      | undefined;
+    const have = Array.isArray(current?.elements) ? current.elements : null;
+    if (!have) continue;
+    const missing = c.elements.filter((value) => !have.includes(value));
+    if (missing.length === 0) continue;
+    try {
+      await db.updateEnumColumn({
+        databaseId: DB_ID,
+        tableId: t.id,
+        key: c.key,
+        elements: c.elements,
+        required: Boolean(current?.required),
+        xdefault: current?.default,
+      });
+      console.log(`  ✔ énumération ${t.id}.${c.key} (+${missing.join(", ")})`);
+    } catch (err) {
+      report(err, `enum ${t.id}.${c.key}`);
     }
   }
   let existingIdx: Models.ColumnIndexList | null = null;

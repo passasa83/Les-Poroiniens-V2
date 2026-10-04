@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 const TYPE_LABELS: Record<ImportJob["type"], string> = {
   upload: "Upload direct",
   nas: "Depuis le NAS",
+  imgchest: "Depuis ImgChest",
   drive: "Google Drive",
   batch: "Import par lot",
 };

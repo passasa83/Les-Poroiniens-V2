@@ -3,6 +3,7 @@ import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { allSeries } from "@/lib/data/series";
 import { imageEnv } from "@/lib/media";
+import { imgchestListAvailable } from "@/lib/imgchest";
 import { ImportPanel, type SeriesLite } from "./_components/import-panel";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function GerantImportPage() {
         series={lite}
         nasConfigured={Boolean(imageEnv().nasApiBase)}
         driveConfigured={Boolean(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT)}
+        imgchestList={imgchestListAvailable()}
       />
     </div>
   );

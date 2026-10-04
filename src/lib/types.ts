@@ -42,7 +42,8 @@ export interface Chapter {
   titre: string;
   statut: ChapterStatus;
   publish_at: string | null;
-  source: "nas";
+  /** Origine des images : `nas` (chemins relatifs) ou `imgchest` (URLs CDN). */
+  source: "nas" | "imgchest";
   nb_pages: number;
   likes?: number;
   classification: Classification;
@@ -170,7 +171,7 @@ export interface AuditEntry {
 
 export interface ImportJob {
   id: string;
-  type: "upload" | "nas" | "drive" | "batch";
+  type: "upload" | "nas" | "drive" | "batch" | "imgchest";
   statut: "attente" | "cours" | "termine" | "erreur";
   progression: number;
   message: string;

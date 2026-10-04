@@ -88,12 +88,19 @@ Notes :
 - Le repo étant **public**, aucune secret n'y figure : `.env*` est ignoré et la
   clé API ne vit que dans `.env.local` et les variables Vercel.
 
-## Système d'images (NAS → Cloudflare)
+## Système d'images
 
-Chemin nominal : **NAS** (`/content/{staging,public}/…`) → **API de listing**
-(`api-img.`) pour l'import, **CDN** (`img.`) pour la lecture → navigateur. Les
-octets ne transitent jamais par Vercel : le serveur ne fait que construire des
-URLs et indexer un index.
+Deux sources d'images coexistent, avec le même modèle (index des pages en base,
+octets jamais transmis par Vercel) :
+
+- **ImgChest** — *source active* : un album par chapitre, images servies
+  directement par le CDN d'ImgChest (`cdn.imgchest.com`) ;
+  voir « Source d'images ImgChest » plus bas.
+- **NAS → Cloudflare** — parcours nominal du cahier des charges : **NAS**
+  (`/content/{staging,public}/…`) → **API de listing** (`api-img.`) pour l'import,
+  **CDN** (`img.`) pour la lecture → navigateur.
+
+Dans les deux cas, le serveur ne fait que construire des URLs et indexer un index.
 
 ### Variables d'environnement (§7.4)
 
@@ -154,6 +161,34 @@ validé contre le path traversal. Conventions de nommage (§3.2) :
 - Optionnel : activer `IMG_CDN_BLUR=1` **uniquement** si `/cdn-cgi/image/`
   fonctionne sur `img.` (sinon les couvertures concernées renverraient 404).
 
+## Source d'images ImgChest (active)
+
+Un album ImgChest = un chapitre. C'est la source utilisée en production :
+les pages sont servies par le CDN tiers, aucun stockage ni transfet par Vercel.
+
+| Variable           | Exemple           | Rôle                                                             |
+| ------------------ | ----------------- | ---------------------------------------------------------------- |
+| `IMG_CHEST_USERNAME` | `Big_herooooo`   | compte du Gérant : liste ses albums (`GET /api/owner/imgchest/posts`) |
+| `IMG_CHEST_API_KEY`  | *(secret)*       | envoyée en `Authorization: Bearer` + `X-Api-Key` si elle est fournie |
+| `IMG_CHEST_API_BASE` | *(facultatif)*   | surcharge du domaine (`https://imgchest.com`)                     |
+
+- **Import** : onglet « Depuis ImgChest » de l'espace Gérant → liste des albums
+  récents (24 par page) ou saisie directe d'un identifiant
+  (`GET /api/owner/imgchest/post?id=`) qui affiche titre, nombre de pages et
+  poids avant indexation. `POST /api/owner/import` accepte alors
+  `source: "imgchest"` + `imgchest_post`.
+- **Lecture** : les URLs CDN étant complètes, `pageUrl()` les sert telles quelles
+  avec `?v=<id du fichier>` (version courte à durée de vie du fichier) — aucune
+  requête vers ImgChest pendant la lecture, dimensions connues à l'avance.
+- **Publication** : aucun déplacement de fichier (`transitionChapterFiles`
+  renvoie `none` pour les URLs externes) ; la purge Cloudflare est sans objet.
+- **Cache** : résolution serveur de l'album (30 jours) et liste des albums
+  (1 heure), en mémoire par instance.
+- **Cloisonnement** : les routes `/api/owner/imgchest/*` exigent la session du
+  Gérant ; le navigateur ne dispose jamais des identifiants du compte.
+- La CSP du site autorise déjà `img-src https:` : les images `cdn.imgchest.com`
+  s'affichent sans réglage supplémentaire.
+
 ## Contenu
 
 **Le site en production est volontairement vide** (remise à zéro du
@@ -163,12 +198,12 @@ subsiste. Les tables Appwrite sont conservées (structure prête à l'emploi).
 Pour (re)remplir le site :
 
 - **Espace Gérant → Import** : crée la fiche série (back-office `/admin/series`)
-  puis importe un chapitre, soit depuis un dossier du NAS (listing serveur,
-  largeurs/hauteurs/poids/hash lus sur place), soit en indexant des noms de
-  fichiers. Tant que `NAS_API_BASE` est absent, les pages importées sont des
-  **images de démonstration** — le site est alors remplissable et testable de
-  bout en bout ; dès que le NAS est renseigné, l'onglet « Depuis le NAS »
-  indexe les scans réels.
+  puis importe un chapitre, **depuis un album ImgChest** (source active : liste
+  des albums du compte ou identifiant collé), depuis un dossier du NAS (listing
+  serveur, largeurs/hauteurs/poids/hash lus sur place), ou en indexant des noms
+  de fichiers. Tant que `NAS_API_BASE` est absent et qu'aucun album n'est choisi,
+  les pages importées sont des **images de démonstration** — le site est alors
+  remplissable et testable de bout en bout.
 - **`npm run appwrite:seed`** : recopie le jeu de démonstration (10 séries) —
   à éviter si l'on veut garder un site vide.
 

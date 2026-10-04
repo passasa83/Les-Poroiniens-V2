@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileImage,
   FolderTree,
+  Images,
   Loader2,
   RefreshCw,
   Rocket,
@@ -31,12 +32,31 @@ type ImportResult = {
   slug: string;
   nbPages: number;
   seriesTitre: string;
-  storage: "nas" | "demo";
+  storage: "nas" | "demo" | "imgchest";
   statut: ImportStatut;
   warning?: string;
 };
 
 type NasItem = { name: string; isDir: boolean };
+
+/** Album ImgChest : un album = un chapitre, ses images sont servies par le CDN. */
+type ImgPost = {
+  id: string;
+  title: string;
+  views: number;
+  nsfw: boolean;
+  thumbnail: string | null;
+  created: string | null;
+};
+
+type ImgInfo = {
+  id: string;
+  title: string;
+  count: number;
+  bytes: number;
+  views: number;
+  nsfw: boolean;
+};
 
 /** Aperçu d'un dossier avant indexation (§5.1, étape 2). */
 type PreviewData = {
@@ -114,17 +134,33 @@ function normalizeNas(raw: unknown): NasItem[] {
     .filter((item) => item.name.length > 0);
 }
 
+/** Taille lisible : `18,4 Mo` (album ImgChest avant import). */
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 o";
+  const units = ["o", "Ko", "Mo", "Go"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ${units[unit]}`;
+}
+
 export function ImportPanel({
   series,
   nasConfigured,
   driveConfigured,
+  imgchestList,
 }: {
   series: SeriesLite[];
   nasConfigured: boolean;
   driveConfigured: boolean;
+  /** Vrai si `IMG_CHEST_USERNAME` est renseignée (liste des albums). */
+  imgchestList: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"upload" | "nas" | "drive">("upload");
+  const [tab, setTab] = useState<"upload" | "nas" | "imgchest" | "drive">("upload");
 
   // État commun du formulaire d'import
   const [seriesFilter, setSeriesFilter] = useState("");
@@ -156,6 +192,16 @@ export function ImportPanel({
   const [driveBusy, setDriveBusy] = useState(false);
   const [driveMessage, setDriveMessage] = useState<string | null>(null);
   const [driveTone, setDriveTone] = useState<"ok" | "warn" | "adult">("ok");
+
+  // État ImgChest (source d'images : un album par chapitre)
+  const [imgPosts, setImgPosts] = useState<ImgPost[]>([]);
+  const [imgPage, setImgPage] = useState(1);
+  const [imgMore, setImgMore] = useState(false);
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgError, setImgError] = useState<string | null>(null);
+  const [imgManual, setImgManual] = useState("");
+  const [imgSelected, setImgSelected] = useState<string | null>(null);
+  const [imgInfo, setImgInfo] = useState<ImgInfo | null>(null);
 
   const serie = series.find((s) => s.id === seriesId) ?? null;
   const filteredSeries = useMemo(() => {
@@ -219,7 +265,10 @@ export function ImportPanel({
     if (target) setClassification(target.classification);
   }
 
-  async function submitImport(source: "upload" | "nas", event?: FormEvent) {
+  async function submitImport(
+    source: "upload" | "nas" | "imgchest",
+    event?: FormEvent,
+  ) {
     event?.preventDefault();
     setError(null);
 
@@ -232,7 +281,12 @@ export function ImportPanel({
       setError("Indiquez un numéro de chapitre valide.");
       return;
     }
-    if (entries.length === 0 && !nasFolder) {
+    if (source === "imgchest") {
+      if (!imgSelected) {
+        setError("Sélectionnez un album ImgChest (ou saisissez son identifiant).");
+        return;
+      }
+    } else if (entries.length === 0 && !nasFolder) {
       setError("Ajoutez d'abord les pages du chapitre (ou sélectionnez un dossier NAS).");
       return;
     }
@@ -261,6 +315,7 @@ export function ImportPanel({
           source,
           pages: entries.map((e) => e.name),
           ...(nasFolder ? { chemin: nasFolder } : {}),
+          ...(source === "imgchest" && imgSelected ? { imgchest_post: imgSelected } : {}),
           statut,
           publish_at: statut === "scheduled" ? new Date(publishAt).toISOString() : null,
         }),
@@ -270,7 +325,7 @@ export function ImportPanel({
             error?: string;
             chapter?: { id: string; numero: number; titre: string };
             nbPages?: number;
-            storage?: "nas" | "demo";
+            storage?: "nas" | "demo" | "imgchest";
             warning?: string;
           }
         | null;
@@ -284,6 +339,8 @@ export function ImportPanel({
       setEntries([]);
       setNasFolder(null);
       setPreview(null);
+      setImgSelected(null);
+      setImgInfo(null);
       setResult({
         chapterId: data.chapter.id,
         numero: data.chapter.numero,
@@ -390,9 +447,80 @@ export function ImportPanel({
     }
   }
 
-  const tabs: Array<{ key: "upload" | "nas" | "drive"; label: string }> = [
+  /** Albums récents du compte (Gérant) : une page = 24 albums. */
+  async function loadImgPosts(page = 1) {
+    setImgBusy(true);
+    setImgError(null);
+    try {
+      const res = await fetch(`/api/owner/imgchest/posts?page=${page}`);
+      const data = (await res.json().catch(() => null)) as
+        | { error?: string; posts?: ImgPost[]; hasMore?: boolean }
+        | null;
+      if (!res.ok) {
+        setImgError(data?.error ?? "Liste des albums impossible.");
+        if (page === 1) setImgPosts([]);
+        return;
+      }
+      const posts = Array.isArray(data?.posts) ? data.posts : [];
+      setImgPosts((prev) => (page === 1 ? posts : [...prev, ...posts]));
+      setImgPage(page);
+      setImgMore(Boolean(data?.hasMore));
+    } catch {
+      setImgError("Erreur réseau : réessayez.");
+    } finally {
+      setImgBusy(false);
+    }
+  }
+
+  /** Retient un album : le nombre de pages est vérifié avant l'import. */
+  async function selectImgPost(id: string) {
+    const target = id.trim();
+    if (!target) {
+      setError("Saisissez un identifiant d'album.");
+      return;
+    }
+    setImgBusy(true);
+    setImgError(null);
+    try {
+      const res = await fetch(`/api/owner/imgchest/post?id=${encodeURIComponent(target)}`);
+      const data = (await res.json().catch(() => null)) as
+        | {
+            error?: string;
+            id?: string;
+            title?: string;
+            count?: number;
+            bytes?: number;
+            views?: number;
+            nsfw?: boolean;
+          }
+        | null;
+      if (!res.ok || typeof data?.count !== "number") {
+        setImgError(data?.error ?? "Album introuvable.");
+        setImgInfo(null);
+        setImgSelected(null);
+        return;
+      }
+      setImgInfo({
+        id: data.id ?? target,
+        title: data.title ?? "Sans titre",
+        count: data.count,
+        bytes: data.bytes ?? 0,
+        views: data.views ?? 0,
+        nsfw: Boolean(data.nsfw),
+      });
+      setImgSelected(data.id ?? target);
+      setImgManual(data.id ?? target);
+    } catch {
+      setImgError("Erreur réseau : réessayez.");
+    } finally {
+      setImgBusy(false);
+    }
+  }
+
+  const tabs: Array<{ key: "upload" | "nas" | "imgchest" | "drive"; label: string }> = [
     { key: "upload", label: "Upload direct" },
     { key: "nas", label: "Depuis le NAS" },
+    { key: "imgchest", label: "Depuis ImgChest" },
     { key: "drive", label: "Google Drive (séries)" },
   ];
 
@@ -593,7 +721,130 @@ export function ImportPanel({
         </Card>
       )}
 
-      {/* ── Onglet 3 : Google Drive ──────────────────────────────────── */}
+      {/* ── Onglet 3 : ImgChest ──────────────────────────────────────── */}
+      {tab === "imgchest" && (
+        <Card className="space-y-5 p-5">
+          <div>
+            <h2 className="section-title flex items-center gap-2">
+              <Images className="size-4 text-primary" /> Albums ImgChest
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              Un album = un chapitre. Les images restent sur le CDN d&apos;ImgChest : seul l&apos;index
+              des pages est enregistré en base, la lecture n&apos;appelle jamais ImgChest.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Identifiant d'album" htmlFor="i-imgchest" hint="Ex. : qe4gwgozq7j">
+              <Input
+                id="i-imgchest"
+                value={imgManual}
+                onChange={(e) => setImgManual(e.target.value)}
+                placeholder="qe4gwgozq7j"
+                className="max-w-[16rem]"
+              />
+            </Field>
+            <Button
+              type="button"
+              onClick={() => void selectImgPost(imgManual)}
+              disabled={imgBusy}
+            >
+              {imgBusy ? <Loader2 className="size-4 animate-spin" /> : <FileImage className="size-4" />}
+              Vérifier l&apos;album
+            </Button>
+            {imgchestList && (
+              <Button type="button" onClick={() => void loadImgPosts(1)} disabled={imgBusy}>
+                <RefreshCw className="size-4" />
+                Albums récents
+              </Button>
+            )}
+          </div>
+
+          {!imgchestList && (
+            <p className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
+              La liste automatique est désactivée : renseignez la variable{" "}
+              <code className="font-mono">IMG_CHEST_USERNAME</code> (compte qui héberge les scans)
+              puis redéployez. La saisie manuelle d&apos;identifiant fonctionne déjà.
+            </p>
+          )}
+
+          {imgError && <p className="text-sm text-adult">{imgError}</p>}
+
+          {imgPosts.length > 0 && (
+            <ul className="max-h-80 overflow-auto rounded-xl border border-line divide-y divide-line">
+              {imgPosts.map((post) => (
+                <li key={post.id}>
+                  <button
+                    type="button"
+                    aria-pressed={imgSelected === post.id}
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm ${
+                      imgSelected === post.id ? "bg-surface2" : "hover:bg-surface2"
+                    }`}
+                    onClick={() => void selectImgPost(post.id)}
+                  >
+                    {post.thumbnail ? (
+                      <img
+                        src={post.thumbnail}
+                        alt=""
+                        loading="lazy"
+                        className="size-10 shrink-0 rounded-md border border-line object-cover"
+                      />
+                    ) : (
+                      <Images className="size-5 shrink-0 text-muted" />
+                    )}
+                    <span className="truncate text-fg">{post.title}</span>
+                    {post.nsfw && <Badge tone="adult">+18</Badge>}
+                    <span className="ml-auto shrink-0 text-xs tabular-nums text-muted">
+                      {post.views.toLocaleString("fr-FR")} vues
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {imgMore && (
+            <div>
+              <Button type="button" onClick={() => void loadImgPosts(imgPage + 1)} disabled={imgBusy}>
+                <RefreshCw className="size-4" /> Albums suivants
+              </Button>
+            </div>
+          )}
+
+          {imgInfo && (
+            <p className="rounded-xl border border-ok/40 bg-ok/10 px-4 py-3 text-sm text-ok">
+              Album retenu :{" "}
+              <span className="font-semibold text-fg">{imgInfo.title}</span> — {imgInfo.count} pages ·{" "}
+              {formatBytes(imgInfo.bytes)}
+              {imgInfo.nsfw ? " · +18" : ""}
+            </p>
+          )}
+
+          <ImportForm
+            series={filteredSeries}
+            seriesFilter={seriesFilter}
+            onFilter={setSeriesFilter}
+            seriesId={seriesId}
+            onSeries={onPickSeries}
+            numero={numero}
+            onNumero={setNumero}
+            titre={titre}
+            onTitre={setTitre}
+            classification={classification}
+            onClassification={setClassification}
+            error={error}
+            busy={busy}
+            onSubmit={(e) => submitImport("imgchest", e)}
+            source="imgchest"
+            statut={statut}
+            onStatut={setStatut}
+            publishAt={publishAt}
+            onPublishAt={setPublishAt}
+          />
+        </Card>
+      )}
+
+      {/* ── Onglet 4 : Google Drive ──────────────────────────────────── */}
       {tab === "drive" && (
         <Card className="space-y-4 p-5">
           <h2 className="section-title flex items-center gap-2">
@@ -768,20 +1019,22 @@ function ImportForm(props: {
   error: string | null;
   busy: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  source: "upload" | "nas";
+  source: "upload" | "nas" | "imgchest";
   statut: ImportStatut;
   onStatut: (value: ImportStatut) => void;
   publishAt: string;
   onPublishAt: (value: string) => void;
 }) {
+  /** Sources où seuls des noms / URLs sont indexés (aucun octet transité). */
+  const indexed = props.source === "nas" || props.source === "imgchest";
   const submitLabel =
     props.statut === "published"
-      ? props.source === "nas"
+      ? indexed
         ? "Indexer et publier"
         : "Importer et publier"
       : props.statut === "scheduled"
         ? "Programmer la publication"
-        : props.source === "nas"
+        : indexed
           ? "Indexer le chapitre (brouillon)"
           : "Importer en brouillon";
 
