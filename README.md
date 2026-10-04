@@ -72,11 +72,15 @@ Pour brancher Appwrite :
 
 Notes :
 
-- **Crons** : `vercel.json` déclenche `/api/cron/revalidate` (toutes les 10 min —
-  revalide l'ISR **et publie les chapitres programmés**) et `/api/cron/health`
-  (toutes les heures — supervision NAS + erreurs d'images). Vercel ajoute
-  automatiquement `Authorization: Bearer ${CRON_SECRET}` ; sans `CRON_SECRET`
-  défini, les crons répondent 503 et ne font rien.
+- **Crons** : `vercel.json` déclenche `/api/cron/revalidate` (tous les jours à
+  04:20 UTC — revalide l'ISR **et publie les chapitres programmés**) et
+  `/api/cron/health` (tous les jours à 05:50 UTC — supervision NAS + erreurs
+  d'images). **Le plan Hobby de Vercel n'autorise qu'une exécution par jour et
+  par cron** (une fréquence plus élevée fait échouer le déploiement) : c'est
+  pourquoi la publication des chapitres échus est aussi déclenchée **à la
+  demande** quand un lecteur ouvre une fiche série ou un chapitre (`/serie/…`).
+  Vercel ajoute automatiquement `Authorization: Bearer ${CRON_SECRET}` ; sans
+  `CRON_SECRET` défini, les crons répondent 401 et ne font rien.
 - **Aucun seed à refaire** : Vercel et le serveur de développement partagent la
   même base Appwrite (read-only pour le site, écritures via l'API).
 - Cron manuels contre la prod, depuis la machine de dev :
@@ -138,7 +142,7 @@ validé contre le path traversal. Conventions de nommage (§3.2) :
   cache long et invalidation automatique), index lu en base, dimensions connues
   avant chargement, 2 reprises puis page de remplacement + signalement.
 - **Supervision** : `/api/owner/nas/health` (espace Gérant) et
-  `/api/cron/health` (cron horaire) remontent disponibilité du NAS, espace disque
+  `/api/cron/health` (cron quotidien) remontent disponibilité du NAS, espace disque
   et erreurs d'images remontées par le lecteur (`POST /api/telemetry/images`).
 
 ### Réglages Cloudflare à faire de leur côté (§6)

@@ -9,6 +9,7 @@ import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getChapter, getReaderContext, recordView } from "@/lib/data/chapters";
 import { listHistory } from "@/lib/data/library";
 import { getSeriesBySlug } from "@/lib/data/series";
+import { publishDueChaptersOnDemand } from "@/lib/publishing";
 import { can } from "@/lib/roles";
 
 type Params = Promise<{ slug: string; n: string }>;
@@ -61,6 +62,10 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   const numero = parseNumero(n);
   const series = await getSeriesBySlug(slug);
   if (!series || !numero) notFound();
+
+  // Un lien direct vers un chapitre programmé mais déjà échu doit fonctionner
+  // sans attendre le cron quotidien (limite du plan Hobby).
+  await publishDueChaptersOnDemand();
 
   const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
   // Aperçu des brouillons réservé au Gérant (§5.1, étape 4) : les pages sont

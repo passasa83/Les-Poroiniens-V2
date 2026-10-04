@@ -11,6 +11,7 @@ import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { listChapters } from "@/lib/data/chapters";
 import { getLibraryEntry, listHistory } from "@/lib/data/library";
 import { getSeriesBySlug, seriesStats, similarSeries } from "@/lib/data/series";
+import { publishDueChaptersOnDemand } from "@/lib/publishing";
 import {
   SERIES_STATUT_LABELS,
   type Chapter,
@@ -68,6 +69,10 @@ export default async function SeriePage({
   const sp = await searchParams;
   const series = await getSeriesBySlug(slug);
   if (!series) notFound();
+
+  // Chapitres programmés échus : publiés immédiatement (le cron quotidien ne
+  // couvre qu'une exécution par jour sur le plan Hobby de Vercel).
+  await publishDueChaptersOnDemand();
 
   const isAdult = series.classification === "adult";
   const [user, gateOk, stats] = await Promise.all([

@@ -166,3 +166,42 @@ export async function publishDueChapters(limit = 50): Promise<{
 
   return { published, errors };
 }
+
+/**
+ * Publication à la demande des chapitres programmés.
+ *
+ * Le plan Hobby de Vercel limite les crons à **une exécution par jour** : le
+ * cron quotidien reste la source principale, mais dès qu'un lecteur ouvre une
+ * fiche série ou un chapitre, on vérifie qu'aucun chapitre programmé n'est
+ * arrivé à échéance, pour que la lecture ne dépende pas de l'horaire du cron.
+ *
+ * Le coût est une requête indexée (`statut` + `publish_at`) ; la publication
+ * elle-même n'est déclenchée que si un chapitre est effectivement dû, et au
+ * plus une fois par minute et par instance pour éviter les doublons.
+ */
+let lastPublishRun = 0;
+
+export async function publishDueChaptersOnDemand(): Promise<void> {
+  try {
+    const { items } = await getDb().list<{ id: string }>(TABLES.chapters, {
+      filters: [
+        { field: "statut", op: "eq", value: "scheduled" },
+        { field: "publish_at", op: "lte", value: new Date().toISOString() },
+      ],
+      limit: 1,
+    });
+    if (items.length === 0) return;
+
+    const now = Date.now();
+    if (now - lastPublishRun < 60_000) return;
+    lastPublishRun = now;
+
+    const { published, errors } = await publishDueChapters();
+    if (published.length > 0) {
+      console.info(`[publishing] chapitres programmés publiés : ${published.join(", ")}`);
+    }
+    for (const error of errors) console.error(`[publishing] ${error.id} : ${error.error}`);
+  } catch (err) {
+    console.error("[publishing] publication à la demande impossible", err);
+  }
+}
