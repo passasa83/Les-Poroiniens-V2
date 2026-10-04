@@ -77,6 +77,22 @@ Notes :
 - Le repo étant **public**, aucune secret n'y figure : `.env*` est ignoré et la
   clé API ne vit que dans `.env.local` et les variables Vercel.
 
+## Contenu
+
+**Le site en production est volontairement vide** (remise à zéro du
+04/10/2026) : 0 série, 0 chapitre, 0 commentaire, seul le compte Gérant
+subsiste. Les tables Appwrite sont conservées (structure prête à l'emploi).
+
+Pour (re)remplir le site :
+
+- **Espace Gérant → Import** : crée la fiche série (back-office `/admin/series`)
+  puis importe un chapitre. Tant que `NAS_PAGE_BASE_URL` / `NAS_API_URL` sont
+  absents, les pages importées sont des **images de démonstration** — le site
+  est alors remplissable et testable de bout en bout ; dès que le NAS est
+  renseigné, les chemins pointent vers les scans réels.
+- **`npm run appwrite:seed`** : recopie le jeu de démonstration (10 séries) —
+  à éviter si l'on veut garder un site vide.
+
 ## Comptes
 
 **Aucun mot de passe n'est publié dans ce dépôt** (il est public).
@@ -112,6 +128,12 @@ scripts/        provisioning Appwrite (appwrite-setup.mts)
 ```
 
 ## Notes d'implémentation
+
+- **Identifiants de lignes Appwrite** : 36 caractères maximum. Tous les ids
+  composites passent par `rowId()` (`src/lib/db/ids.ts`) : ils sont conservés
+  s'ils tiennent dans la limite, sinon remplacés par un hash déterministe de
+  32 caractères. Sans cette règle, bibliothèque, historique, likes et imports
+  échouaient en 500 pour tout vrai compte (id de 20 caractères).
 
 - **URL canonique des chapitres** : `/serie/{slug}/chapitre-{n}`. L'App Router
   n'accepte que des segments dynamiques entiers, l'URL publique est donc
