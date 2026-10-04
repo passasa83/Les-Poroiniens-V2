@@ -58,6 +58,9 @@ function filterToQuery(f: Filter): string {
 /** Normalise une ligne Appwrite : `$id` -> `id`, `ordre` -> `index` (pages). */
 function mapRow<T>(table: string, row: Row): T {
   const { $id, $createdAt, $updatedAt, $sequence, $permissions, ...rest } = row;
+  for (const [key, value] of Object.entries(rest)) {
+    rest[key] = reviveJson(value);
+  }
   if (table === "pages" && "ordre" in rest) {
     rest.index = rest.ordre;
     delete rest.ordre;
@@ -68,6 +71,22 @@ function mapRow<T>(table: string, row: Row): T {
     $createdAt: $createdAt,
     $updatedAt: $updatedAt,
   } as T;
+}
+
+/**
+ * Les colonnes `longtext` stockent le JSON sous forme de texte : on le
+ * relit en objet, en laissant tel quel tout ce qui n'est pas du JSON
+ * (texte libre, valeur « 0 », etc.).
+ */
+function reviveJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trimStart();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 /** Champs texte sur lesquels porte la recherche plein texte, par table. */
@@ -83,6 +102,15 @@ function toWriteData(table: string, data: Record<string, unknown>): Record<strin
   if (table === "pages" && "index" in rest) {
     rest.ordre = rest.index;
     delete rest.index;
+  }
+  // Les objets/tableaux vont dans les colonnes `longtext` : JSON.stringify,
+  // sinon Appwrite répond « Attribute … has invalid type ».
+  for (const [key, value] of Object.entries(rest)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      rest[key] = JSON.stringify(value);
+    } else if (value === undefined) {
+      delete rest[key];
+    }
   }
   return rest;
 }

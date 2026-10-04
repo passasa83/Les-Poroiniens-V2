@@ -10,7 +10,8 @@
  * Variables lues dans .env.local / l'environnement :
  *   APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY (obligatoires)
  *   APPWRITE_DATABASE_ID (défaut : poroiniens)
- *   APPWRITE_OWNER_EMAIL (optionnel : promeut ce compte en Gérant)
+ *   APPWRITE_OWNER_EMAIL (optionnel : promeut ce compte en Gérant, le crée s'il
+ *                         manque — mot de passe APPWRITE_OWNER_PASSWORD, défaut demo1234)
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -44,7 +45,7 @@ const DB_ID = process.env.APPWRITE_DATABASE_ID || "poroiniens";
 
 if (!ENDPOINT || !PROJECT || !API_KEY) {
   console.error(
-    "✖ Renseignez APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID et APPWRITE_API_KEY (créée dans le dashboard Appwrite, scopes : databases.read, databases.write, users.read, users.write, buckets.read, buckets.write, files.read, files.write).",
+    "✖ Renseignez APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID et APPWRITE_API_KEY (créée dans le dashboard Appwrite, scopes : rows.read, rows.write, documents.read, documents.write, tables.read, tables.write, collections.read, collections.write, databases.read, databases.write, users.read, users.write, buckets.read, buckets.write, files.read, files.write).",
   );
   process.exit(1);
 }
@@ -109,8 +110,9 @@ const TABLES: Table[] = [
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_type", type: "key", columns: ["type"] },
       { key: "idx_class", type: "key", columns: ["classification"] },
-      { key: "idx_genres", type: "key", columns: ["genres"] },
-      { key: "idx_tags", type: "key", columns: ["tags"] },
+      // Pas d'index sur `genres`/`tags` (colonnes array) : Appwrite refuse
+      // « Creating indexes on array attributes is not currently supported ».
+      // Le filtrage par genre se fait sans index (effectif réduit).
       { key: "idx_populaire", type: "key", columns: ["populaire"], orders: ["desc"] },
       { key: "idx_note", type: "key", columns: ["noteMoy"], orders: ["desc"] },
       { key: "idx_vues", type: "key", columns: ["vues"], orders: ["desc"] },
@@ -406,7 +408,7 @@ async function ensureTable(t: Table): Promise<void> {
     key: i.key,
     type: i.type as unknown as TablesDBIndexType,
     attributes: i.columns,
-    orders: i.orders as unknown as OrderBy[] | undefined,
+    orders: i.orders?.map((o) => o.toUpperCase()) as unknown as OrderBy[] | undefined,
   }));
 
   try {
@@ -460,7 +462,7 @@ async function ensureTable(t: Table): Promise<void> {
         key: i.key,
         type: i.type as unknown as TablesDBIndexType,
         columns: i.columns,
-        orders: i.orders as unknown as OrderBy[] | undefined,
+        orders: i.orders?.map((o) => o.toUpperCase()) as unknown as OrderBy[] | undefined,
       });
       console.log(`  ✔ index ${t.id}.${i.key}`);
     } catch (err) {
@@ -521,10 +523,12 @@ async function ensureOwner(): Promise<void> {
   if (!email) return;
   try {
     const res = await users.list({ queries: [Query.equal("email", email)] });
-    const user = res.users[0];
+    let user = res.users[0];
     if (!user) {
-      errors.push(`owner : aucun utilisateur Appwrite avec l'e-mail ${email}`);
-      return;
+      // Pas de compte : on le crée (sinon impossible de se connecter en Gérant).
+      const password = process.env.APPWRITE_OWNER_PASSWORD || "demo1234";
+      user = await users.create({ userId: ID.unique(), email, password, name: "Gérant" });
+      console.log(`  ✔ compte Appwrite créé → ${email} (mot de passe : ${password})`);
     }
     const now = new Date().toISOString();
     const existing = await db
@@ -595,7 +599,6 @@ async function main() {
   }
 }
 
-void ID;
 main().catch((err) => {
   console.error("✖ Échec :", err);
   process.exit(1);

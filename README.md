@@ -35,9 +35,14 @@ démonstration en mémoire** (10 séries, chapitres, commentaires, comptes).
 Pour brancher Appwrite :
 
 1. Dashboard Appwrite → **Settings → API keys → Create key**, puis cocher dans
-   *Scopes* : `databases.read`, `databases.write`, `users.read`, `users.write`,
+   *Scopes* : `rows.read`, `rows.write`, `documents.read`, `documents.write`,
+   `tables.read`, `tables.write`, `collections.read`, `collections.write`,
+   `databases.read`, `databases.write`, `users.read`, `users.write`,
    `buckets.read`, `buckets.write`, `files.read`, `files.write`
-   (inutiles : `tokens.*` — pas d'URLs signées — et `account.*` — la connexion
+   (Appwrite 2.x stocke les données via TablesDB : sans `tables.*` ni
+   `collections.*`, toute création de table renvoie `401 missing scopes` ; sans
+   `rows.*` + `documents.*`, lecture/écriture de lignes en est refusée ;
+   inutiles : `tokens.*` — pas d'URLs signées — et `account.*` — la connexion
    passe par un client anonyme puis la session utilisateur).
 2. Coller la clé dans `.env.local` : `APPWRITE_API_KEY=...`
 3. `npm run appwrite:setup` (provisioning : 15 tables + index + bucket `avatars`

@@ -33,6 +33,8 @@ type Probe = {
   key?: boolean;
   body?: Record<string, unknown>;
   attendu: string;
+  /** Un 401 « missing scopes » est le résultat attendu de cette sonde. */
+  attendu401?: boolean;
 };
 
 const probes: Probe[] = [
@@ -41,12 +43,14 @@ const probes: Probe[] = [
     label: "Contrôle des scopes (sans clé)",
     path: "/users",
     attendu: "401 + « missing scopes » — le contrôle de scopes fonctionne",
+    attendu401: true,
   },
   {
     label: "Authentification de la clé",
     path: "/projects",
     key: true,
     attendu: "401 + « missing scopes (projects.read) » — la clé est reconnue",
+    attendu401: true,
   },
   {
     label: "Session anonyme (données, sans clé)",
@@ -88,15 +92,17 @@ for (const p of probes) {
     body = (err as Error).message;
   }
 
+  const scope401 = status === 401 && body.includes("missing scopes");
+  const scopeManquantAttendu = Boolean(p.attendu401) && scope401;
   const symptome =
     status >= 500
       ? "PROBLÈME SERVEUR (500) : base/Redis/disque d'Appwrite"
-      : status === 401 && body.includes("missing scopes")
+      : scope401 && !scopeManquantAttendu
         ? "scope manquant côté clé"
         : "ok";
 
   if (status >= 500) serveurKO = true;
-  if (status === 401 && body.includes("missing scopes")) scopeManquant = true;
+  if (scope401 && !scopeManquantAttendu) scopeManquant = true;
 
   const icone = symptome === "ok" ? "✔" : status >= 500 ? "✖" : "⚠";
   console.log(`${icone} ${p.label}  [${status || "erreur réseau"}]`);
@@ -114,9 +120,10 @@ if (serveurKO) {
 if (scopeManquant) {
   console.log(
     "⚠ Scopes manquants : ajoutez-les dans le dashboard (Settings → API keys) puis relancez.\n" +
-      "  En général : tables.read, tables.write, collections.read, collections.write,\n" +
-      "  databases.read, databases.write, users.read, users.write, buckets.read,\n" +
-      "  buckets.write, files.read, files.write.",
+      "  En général : rows.read, rows.write, documents.read, documents.write,\n" +
+      "  tables.read, tables.write, collections.read, collections.write,\n" +
+      "  databases.read, databases.write, users.read, users.write,\n" +
+      "  buckets.read, buckets.write, files.read, files.write.",
   );
   process.exit(1);
 }

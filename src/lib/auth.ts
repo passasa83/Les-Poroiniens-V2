@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { accounts, adminClient, anonClient, sessionClient, users } from "@/lib/appwrite";
+import { accounts, adminClient, createEmailSessionToken, sessionClient, users } from "@/lib/appwrite";
 import { getDb, TABLES } from "@/lib/db";
 import {
   DEFAULT_PREFERENCES,
@@ -51,7 +51,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const raw = store.get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   try {
-    return appwriteMode() ? fromAppwrite(raw) : fromDemo(raw);
+    // `await` obligatoire : sans lui, la promesse rejetée échappe au catch et
+    // la page tombe en 500 au lieu de basculer en « visiteur ».
+    return await (appwriteMode() ? fromAppwrite(raw) : fromDemo(raw));
   } catch {
     return null;
   }
@@ -125,11 +127,12 @@ export async function login(email: string, password: string): Promise<AuthResult
   }
   if (appwriteMode()) {
     try {
-      const session = await accounts(anonClient()).createEmailPasswordSession({
-        email: cleanEmail,
-        password,
-      });
-      await setSessionCookie(session.$id);
+      const token = await createEmailSessionToken(cleanEmail, password);
+      if (!token) {
+        // Message unique : pas de distinction email / mot de passe (§14.2)
+        return { ok: false, error: "Identifiants invalides." };
+      }
+      await setSessionCookie(token);
       return { ok: true };
     } catch {
       // Message unique : pas de distinction email / mot de passe (§14.2)
@@ -183,16 +186,16 @@ export async function register(input: {
         password: input.password,
         name: pseudo,
       });
-      const session = await accounts(anonClient()).createEmailPasswordSession({
-        email,
-        password: input.password,
-      });
+      const token = await createEmailSessionToken(email, input.password);
       const profile = await ensureProfile(userId, email, pseudo);
       await db.update<Profile>(TABLES.profiles, userId, {
         ...profile,
         pseudo,
       } as unknown as Record<string, unknown>);
-      await setSessionCookie(session.$id);
+      if (!token) {
+        return { ok: false, error: "Compte créé mais connexion impossible : réessayez." };
+      }
+      await setSessionCookie(token);
       return { ok: true };
     } catch {
       return { ok: false, error: "Impossible de créer le compte (adresse déjà utilisée ?)." };

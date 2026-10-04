@@ -244,7 +244,7 @@ function build(): DemoDatabase {
       adult_ok_at: u.role === "owner" ? iso(-290 * DAY) : null,
       confidentialite: { bibliothequePublique: true, statsPubliques: true },
       preferences: { ...DEFAULT_PREFERENCES },
-      created_at: iso(-300 * DAY),
+      // pas de created_at : la table profiles porte date_inscription
     });
   });
 

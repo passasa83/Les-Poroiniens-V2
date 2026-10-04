@@ -31,6 +31,46 @@ export function accounts(client: Client) {
   return new Account(client);
 }
 
+/**
+ * Crée une session e-mail/mot de passe et renvoie la valeur du cookie Appwrite.
+ *
+ * En Appwrite 2.x, l'en-tête `X-Appwrite-Session` attend le jeton du cookie
+ * `a_session_<projet>` (base64 de `{id, secret}`) et non l'`$id` de session :
+ * envoyé seul, l'`$id` est ignoré et Appwrite répond « role: guests missing
+ * scopes (["account"]) ». Le SDK ne renvoie `secret` qu'avec une clé API, on
+ * lit donc directement le `Set-Cookie` de la réponse de connexion.
+ */
+export async function createEmailSessionToken(
+  email: string,
+  password: string,
+): Promise<string | null> {
+  const endpoint = requireEnv("APPWRITE_ENDPOINT").replace(/\/+$/, "");
+  const project = requireEnv("APPWRITE_PROJECT_ID");
+  const res = await fetch(`${endpoint}/account/sessions/email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Appwrite-Project": project,
+      "X-Appwrite-Response-Format": "2.0.0",
+    },
+    body: JSON.stringify({ email, password }),
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const prefix = `a_session_${project}=`;
+  const raw =
+    typeof res.headers.getSetCookie === "function"
+      ? res.headers.getSetCookie()
+      : [res.headers.get("set-cookie") ?? ""];
+  for (const cookie of raw) {
+    const start = cookie.indexOf(prefix);
+    if (start === -1) continue;
+    const value = cookie.slice(start + prefix.length).split(";")[0].trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 export function users(client: Client) {
   return new Users(client);
 }

@@ -59,6 +59,7 @@ export async function POST(request: Request) {
   const demo = getDemoStore();
   const created: Record<string, number> = {};
   const skipped: Record<string, number> = {};
+  const failures: string[] = [];
 
   // `users` n'existe pas côté Appwrite (Appwrite Auth gère les comptes).
   for (const [table, rows] of Object.entries(demo)) {
@@ -67,7 +68,8 @@ export async function POST(request: Request) {
     let skip = 0;
     for (const row of rows.values()) {
       const id = String(row.id);
-      const existing = await db.get(table, id);
+      // une table absente ou une ligne illisible ne doit pas masquer le reste
+      const existing = await db.get(table, id).catch(() => null);
       if (existing) {
         skip += 1;
         continue;
@@ -77,7 +79,9 @@ export async function POST(request: Request) {
         count += 1;
       } catch (err) {
         // une ligne en conflit (pseudo unique…) ne doit pas bloquer la suite
-        console.error(`seed ${table}/${id}:`, (err as Error).message);
+        const message = (err as Error).message ?? String(err);
+        console.error(`seed ${table}/${id}:`, message);
+        if (failures.length < 20) failures.push(`${table}/${id} : ${message}`);
       }
     }
     created[table] = count;
@@ -88,5 +92,5 @@ export async function POST(request: Request) {
   invalidate("recent-chapters:");
   invalidate("stats:");
 
-  return NextResponse.json({ status: "ok", created, skipped });
+  return NextResponse.json({ status: "ok", created, skipped, failures });
 }
