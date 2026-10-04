@@ -65,8 +65,8 @@ Pour brancher Appwrite :
    supplémentaire.
 4. Après le 1er déploiement, corriger `NEXT_PUBLIC_SITE_URL` si l'URL diffère,
    puis **Redeploy**.
-5. Recette : accueil, fiche série, lecteur, connexion
-   `gerant@poroiniens.fr` / `demo1234`, accès `/gerant`.
+5. Recette : accueil, fiche série, lecteur, connexion au compte Gérant (identifiants
+   non publiés, voir « Comptes » plus bas), accès `/gerant`.
 
 Notes :
 
@@ -77,9 +77,14 @@ Notes :
 - Le repo étant **public**, aucune secret n'y figure : `.env*` est ignoré et la
   clé API ne vit que dans `.env.local` et les variables Vercel.
 
-## Comptes de démonstration
+## Comptes
 
-Mot de passe commun : `demo1234`
+**Aucun mot de passe n'est publié dans ce dépôt** (il est public).
+
+- En mode **Appwrite** (celui du site en ligne), seul le compte **Gérant** existe réellement.
+  Il est créé au provisioning par `npm run appwrite:setup` avec `APPWRITE_OWNER_PASSWORD`
+  (défini dans `.env.local`, jamais versionné) : c'est là qu'il faut le définir/changer.
+- En mode **démonstration hors ligne** (`DEMO_MODE`), des comptes fictifs servent aux tests :
 
 | Rôle    | E-mail               |
 | ------- | -------------------- |
@@ -87,6 +92,9 @@ Mot de passe commun : `demo1234`
 | Admin   | admin@poroiniens.fr  |
 | Modo    | modo@poroiniens.fr   |
 | Membre  | membre@poroiniens.fr |
+
+Leur mot de passe n'est pas documenté : définissez-le via `DEMO_PASSWORD` dans `.env.local`
+si vous avez besoin de vous connecter en démo.
 
 Le **Gérant** est seul habilité aux imports, à la publication, au Drive, aux
 secrets et à l'audit (matrice des droits : `src/lib/roles.ts`). Les Admins sont
