@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { imageEnv } from "@/lib/media";
+import { nasHeaders } from "@/lib/nas";
 
 export const runtime = "nodejs";
 
@@ -8,9 +10,8 @@ export const runtime = "nodejs";
  * en-tête de cache long pour que le CDN en amont puisse absorber les lectures.
  */
 export async function GET(request: NextRequest) {
-  const base = process.env.NAS_API_URL;
-  const key = process.env.NAS_API_KEY;
-  if (!base || !key) {
+  const base = imageEnv().nasApiBase;
+  if (!base) {
     return NextResponse.json(
       { error: "source_unavailable", code: "NAS_NOT_CONFIGURED" },
       { status: 502 },
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
   try {
     const target = `${base.replace(/\/$/, "")}/file?path=${encodeURIComponent(rawPath)}`;
     const upstream = await fetch(target, {
-      headers: { "x-api-key": key },
+      headers: nasHeaders(),
       cache: "no-store",
     });
     if (!upstream.ok) {

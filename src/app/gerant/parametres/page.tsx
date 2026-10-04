@@ -3,6 +3,7 @@ import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { getDb, TABLES } from "@/lib/db";
 import { getSettings } from "@/lib/data/moderation";
+import { imageEnv } from "@/lib/media";
 import type { Profile, Role } from "@/lib/types";
 import { SettingsForm, type SecretStatus } from "./_components/settings-form";
 
@@ -39,7 +40,7 @@ export default async function GerantParametresPage() {
     {
       key: "nas",
       label: "API du NAS",
-      present: Boolean(process.env.NAS_API_URL),
+      present: Boolean(imageEnv().nasApiBase),
       hint: "Stockage et listing des pages de scans.",
     },
     {

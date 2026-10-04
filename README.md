@@ -5,7 +5,8 @@ Site de lecture de scans (MVP / Phase 1) conforme au cahier des charges
 
 - **Front** : Next.js 16 (App Router, TypeScript, Tailwind CSS v4) déployé sur Vercel.
 - **Back** : Appwrite auto-hébergé (authentification, TablesDB, storage) — voir `src/lib/db/`.
-- **Scans** : pages servies depuis le NAS via `/api/image` (proxy) ou un CDN (`CDN_BASE_URL`).
+- **Scans** : pages servies par le CDN `img.` depuis le NAS (voir « Système
+  d'images » plus bas) ; repli sur le proxy `/api/image` si aucun CDN.
 - **Aucune publicité, aucun traceur publicitaire.** Interface entièrement en français.
 
 ## Démarrage
@@ -53,7 +54,8 @@ Pour brancher Appwrite :
 
 1. **Importer** le repo GitHub sur <https://vercel.com/new> : preset
    **Next.js**, branche `master`, aucune commande de build personnalisée
-   (la config tient dans `next.config.ts`, pas de `vercel.json`).
+   (la config tient dans `next.config.ts` ; `vercel.json` ne déclare que les
+   crons).
 2. **Avant le 1er build** : *Project → Settings → Environment Variables* →
    coller le bloc du fichier local `.env.vercel` (généré à partir de
    `.env.local`, non versionné). Les variables vides (`NAS_*`, `GOOGLE_DRIVE_*`,
@@ -70,12 +72,83 @@ Pour brancher Appwrite :
 
 Notes :
 
+- **Crons** : `vercel.json` déclenche `/api/cron/revalidate` (toutes les 10 min —
+  revalide l'ISR **et publie les chapitres programmés**) et `/api/cron/health`
+  (toutes les heures — supervision NAS + erreurs d'images). Vercel ajoute
+  automatiquement `Authorization: Bearer ${CRON_SECRET}` ; sans `CRON_SECRET`
+  défini, les crons répondent 503 et ne font rien.
 - **Aucun seed à refaire** : Vercel et le serveur de développement partagent la
   même base Appwrite (read-only pour le site, écritures via l'API).
 - Cron manuels contre la prod, depuis la machine de dev :
   `NEXT_PUBLIC_SITE_URL=https://<projet>.vercel.app npm run appwrite:seed`
 - Le repo étant **public**, aucune secret n'y figure : `.env*` est ignoré et la
   clé API ne vit que dans `.env.local` et les variables Vercel.
+
+## Système d'images (NAS → Cloudflare)
+
+Chemin nominal : **NAS** (`/content/{staging,public}/…`) → **API de listing**
+(`api-img.`) pour l'import, **CDN** (`img.`) pour la lecture → navigateur. Les
+octets ne transitent jamais par Vercel : le serveur ne fait que construire des
+URLs et indexer un index.
+
+### Variables d'environnement (§7.4)
+
+| Variable                    | Exemple                          | Rôle                                                        |
+| --------------------------- | -------------------------------- | ----------------------------------------------------------- |
+| `IMG_BASE_URL`              | `https://img.lesporoiniens.org`  | domaine qui sert les fichiers ; `${IMG_BASE_URL}/${chemin}`  |
+| `NAS_API_BASE`              | `https://api-img.lesporoiniens.org` | appel **serveur** à l'API de listing (`/list`, `/tree`, `/health`, `/move`) |
+| `NAS_API_CLIENT_ID`         | *(secret)*                       | service token Cloudflare Access — `CF-Access-Client-Id`      |
+| `NAS_API_CLIENT_SECRET`     | *(secret)*                       | service token Cloudflare Access — `CF-Access-Client-Secret`  |
+| `NAS_API_KEY`               | *(secret)*                       | `X-Api-Key` + `Authorization: Bearer` (alternative à Access) |
+| `IMG_SIGNING_SECRET`        | *(secret)*                       | HMAC des URLs à 10 min (chapitres non publiés / aperçus)     |
+| `CF_API_TOKEN` + `CF_ZONE_ID` | *(secret)*                     | purge ciblée du cache à la publication (best effort)         |
+| `IMG_CDN_BLUR`              | `1`                              | **opt-in** : flou serveur `/cdn-cgi/image/blur=60,width=600/` des couvertures +18 (sinon flou CSS) |
+| `IMAGE_ERROR_ALERT`         | `20`                             | seuil d'alerte du cron santé sur les erreurs d'images / 48 h |
+| `CDN_BASE_URL`              | —                                | alias hérité de `IMG_BASE_URL`                               |
+
+`NAS_API_URL` / `NAS_PAGE_BASE_URL` restent lus par compatibilité mais sont
+suppléés par les variables ci-dessus.
+
+### Contrat de l'API du NAS (§4)
+
+| Route              | Usage                                                             |
+| ------------------ | ----------------------------------------------------------------- |
+| `GET /list?path=`  | pages d'un dossier : `{ name, path, width, height, bytes, hash }`  |
+| `GET /tree?path=`  | arborescence pour l'écran d'import                                 |
+| `GET /health`      | `{ status, disk_free_pct }` (404 toléré : considéré comme OK)      |
+| `POST /move`       | `{ from, to }` — `staging/` → `public/` à la publication           |
+
+Toutes les routes sont appelées depuis le serveur (`src/lib/nas.ts`) avec
+`CF-Access-Client-Id/Secret` et/ou `X-Api-Key`, un délai de 15 s, et un chemin
+validé contre le path traversal. Conventions de nommage (§3.2) :
+`{slug}/chapitres/{numero sur 4 chiffres}/` + pages numérotées `001.webp`,
+`002.webp`… en tri naturel.
+
+### Ce que fait le site
+
+- **Import** (`POST /api/owner/import`) : si `chemin` est fourni, listing serveur,
+  stockage des dimensions/poids/hash en base, statut choisi (brouillon /
+  programmé / publié). `GET /api/owner/nas/preview?path=` affiche l'aperçu avant
+  indexation (trous de numérotation, doublons de hash, pages inhabituelles).
+- **Publication** (`PATCH /api/admin/chapters/{id}` ou cron) : déplacement
+  `staging/` → `public/` via `POST /move`, réécriture des chemins en base, purge
+  Cloudflare (≤ 30 URLs), entrée au journal d'audit. Échec possible sans bloquer
+  : l'erreur est renvoyée au panneau d'import.
+- **Lecture** : URLs `${IMG_BASE_URL}/${chemin}?v=${hash[0..8]}` (versionnées, donc
+  cache long et invalidation automatique), index lu en base, dimensions connues
+  avant chargement, 2 reprises puis page de remplacement + signalement.
+- **Supervision** : `/api/owner/nas/health` (espace Gérant) et
+  `/api/cron/health` (cron horaire) remontent disponibilité du NAS, espace disque
+  et erreurs d'images remontées par le lecteur (`POST /api/telemetry/images`).
+
+### Réglages Cloudflare à faire de leur côté (§6)
+
+- `img.` : cache long, `s-maxage` élevé ; règle WAF / limitation de débit par IP
+  (compter 20 à 80 pages par chapitre) ; tunnel uniquement sur `/content/public/*`.
+- `api-img.` : protégé par Cloudflare Access (service token) ou clé, tunnel
+  uniquement sur l'API — jamais exposé au navigateur.
+- Optionnel : activer `IMG_CDN_BLUR=1` **uniquement** si `/cdn-cgi/image/`
+  fonctionne sur `img.` (sinon les couvertures concernées renverraient 404).
 
 ## Contenu
 
@@ -86,10 +159,12 @@ subsiste. Les tables Appwrite sont conservées (structure prête à l'emploi).
 Pour (re)remplir le site :
 
 - **Espace Gérant → Import** : crée la fiche série (back-office `/admin/series`)
-  puis importe un chapitre. Tant que `NAS_PAGE_BASE_URL` / `NAS_API_URL` sont
-  absents, les pages importées sont des **images de démonstration** — le site
-  est alors remplissable et testable de bout en bout ; dès que le NAS est
-  renseigné, les chemins pointent vers les scans réels.
+  puis importe un chapitre, soit depuis un dossier du NAS (listing serveur,
+  largeurs/hauteurs/poids/hash lus sur place), soit en indexant des noms de
+  fichiers. Tant que `NAS_API_BASE` est absent, les pages importées sont des
+  **images de démonstration** — le site est alors remplissable et testable de
+  bout en bout ; dès que le NAS est renseigné, l'onglet « Depuis le NAS »
+  indexe les scans réels.
 - **`npm run appwrite:seed`** : recopie le jeu de démonstration (10 séries) —
   à éviter si l'on veut garder un site vide.
 

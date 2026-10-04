@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
+import { purgeImageErrors } from "@/lib/data/image-errors";
 import { deleteSeries, getSeriesById, getSeriesBySlug, saveSeries } from "@/lib/data/series";
 import { getDb, TABLES } from "@/lib/db";
 import type { Series } from "@/lib/types";
@@ -161,6 +162,7 @@ export async function DELETE(
     });
     for (const page of pages) await db.remove(TABLES.pages, page.id);
     await db.remove(TABLES.chapters, chapter.id);
+    await purgeImageErrors(chapter.id);
   }
 
   const { items: recos } = await db.list<{ id: string }>(TABLES.recommendations, {

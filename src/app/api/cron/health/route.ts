@@ -1,11 +1,17 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { notify } from "@/lib/data/moderation";
+import { countRecentImageErrors } from "@/lib/data/image-errors";
 import { listProfiles } from "@/lib/data/users";
+import { imageEnv } from "@/lib/media";
+import { nasConfigured, nasHealth } from "@/lib/nas";
 
 export const runtime = "nodejs";
 
-const CHECK_TIMEOUT_MS = 5_000;
+/** Seuil d'alerte sur les erreurs d'images des 48 dernières heures (§9.2). */
+const IMAGE_ERROR_ALERT = Number(process.env.IMAGE_ERROR_ALERT ?? 20);
+/** Espace disque libre minimal avant alerte, en pourcentage (§9.2). */
+const DISK_FREE_MIN_PCT = 15;
 
 /** Même contrôle de secret que /api/cron/revalidate (§14.8). */
 function isAuthorized(request: Request): boolean | null {
@@ -24,35 +30,12 @@ function isAuthorized(request: Request): boolean | null {
   return timingSafeEqual(a, b);
 }
 
-/** Vérifie que l'API du NAS répond (§5.3 : alerte si l'API ne répond plus). */
-async function checkNas(): Promise<{ ok: boolean; reason?: string }> {
-  const base = process.env.NAS_API_URL;
-  if (!base) return { ok: false, reason: "nas_not_configured" };
-
-  const key = process.env.NAS_API_KEY;
-  try {
-    const res = await fetch(base.replace(/\/$/, ""), {
-      method: "GET",
-      headers: key ? { "x-api-key": key } : undefined,
-      cache: "no-store",
-      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
-    });
-    // Une réponse reçue (hors erreur serveur) signifie que l'API est en service.
-    if (res.status >= 500) return { ok: false, reason: `http_${res.status}` };
-    return { ok: true };
-  } catch (error) {
-    const timedOut =
-      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    return { ok: false, reason: timedOut ? "timeout" : "unreachable" };
-  }
-}
-
 async function notifyOwners(reason: string): Promise<number> {
   try {
     const owners = (await listProfiles(500)).filter((p) => p.role === "owner");
     const payload = {
-      titre: "API du NAS injoignable",
-      message: `La vérification d'intégrité de l'API des scans a échoué (${reason}). Les pages de scans peuvent être indisponibles.`,
+      titre: "Alerte système d'images",
+      message: `La supervision a détecté un problème (${reason}). Voir la page d'administration pour le détail.`,
       raison: reason,
       lien: "/admin",
     };
@@ -64,6 +47,10 @@ async function notifyOwners(reason: string): Promise<number> {
   }
 }
 
+/**
+ * Supervision du système d'images (§9.1) : API du NAS (disponibilité, temps
+ * de réponse, espace disque) et erreurs remontées par le lecteur.
+ */
 export async function GET(request: Request) {
   const authorized = isAuthorized(request);
 
@@ -77,22 +64,44 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
   }
 
-  if (!process.env.NAS_API_URL) {
-    return NextResponse.json({ status: "skipped", reason: "nas_not_configured" });
-  }
-
-  const check = await checkNas();
   const time = new Date().toISOString();
+  const env = imageEnv();
 
-  if (check.ok) {
-    return NextResponse.json({ status: "ok", nas: "ok", time });
+  if (!nasConfigured()) {
+    return NextResponse.json({
+      status: "skipped",
+      reason: "nas_not_configured",
+      env: { IMG_BASE_URL: env.imgBase, NAS_API_BASE: env.nasApiBase },
+      time,
+    });
   }
 
-  const notified = await notifyOwners(check.reason ?? "unreachable");
-  return NextResponse.json({
-    status: "error",
-    nas: check.reason ?? "unreachable",
-    notified,
+  const [health, imageErrors] = await Promise.all([
+    nasHealth(),
+    countRecentImageErrors().catch(() => ({ total: 0, byChapter: 0 })),
+  ]);
+
+  const reasons: string[] = [];
+  if (!health.ok) reasons.push(health.reason ?? "nas_unreachable");
+  if (typeof health.diskFreePct === "number" && health.diskFreePct < DISK_FREE_MIN_PCT) {
+    reasons.push(`disk_low_${health.diskFreePct}`);
+  }
+  if (imageErrors.total >= IMAGE_ERROR_ALERT) {
+    reasons.push(`image_errors_${imageErrors.total}`);
+  }
+
+  const payload = {
+    status: reasons.length === 0 ? "ok" : "error",
+    nas: health.ok ? "ok" : (health.reason ?? "unreachable"),
+    latencyMs: health.latencyMs ?? null,
+    diskFreePct: health.diskFreePct ?? null,
+    imageErrors,
+    reasons,
     time,
-  });
+  };
+
+  if (reasons.length === 0) return NextResponse.json(payload);
+
+  const notified = await notifyOwners(reasons.join(", "));
+  return NextResponse.json({ ...payload, notified });
 }

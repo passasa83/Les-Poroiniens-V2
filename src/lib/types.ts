@@ -55,9 +55,14 @@ export interface ScanPage {
   id: string;
   chapter_id: string;
   index: number;
+  /** Chemin **relatif** au CDN (`public/<slug>/chapitres/0012/001.webp`) ou
+   *  route locale `/api/img/…` en démonstration (§5.2). */
   chemin: string;
   largeur: number;
   hauteur: number;
+  /** Taille en octets et hash du fichier : la version d'URL en dérive (§5.2). */
+  bytes?: number | null;
+  hash?: string | null;
 }
 
 export interface Profile {

@@ -1,6 +1,18 @@
 import "server-only";
 import { cached, getDb, invalidate, TABLES } from "@/lib/db";
+import { resolveCover, storeCover } from "@/lib/media";
 import type { Recommendation, Series, SeriesStatus, SeriesType } from "@/lib/types";
+
+/**
+ * Lisibilité : la couverture stockée en base est un chemin relatif (`public/`
+ * sur le NAS) ou une URL ; on renvoie toujours une URL servable, versionnée
+ * par la dernière mise à jour (§7.3). `saveSeries` applique l'opération
+ * inverse pour ne jamais réécrire une URL résolue.
+ */
+export function mapSeries<T extends Series>(row: T): T {
+  if (!row) return row;
+  return { ...row, couverture: resolveCover(row.couverture, row.updated_at) };
+}
 
 export type SeriesSort =
   | "popularite"
@@ -64,7 +76,9 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
     });
 
     return {
-      items: f.includeAdult ? items : items.filter((s) => s.classification !== "adult"),
+      items: (f.includeAdult ? items : items.filter((s) => s.classification !== "adult")).map(
+        mapSeries,
+      ),
       total,
       page,
       pageCount: Math.max(1, Math.ceil(total / perPage)),
@@ -77,11 +91,12 @@ export async function getSeriesBySlug(slug: string): Promise<Series | null> {
     filters: [{ field: "slug", op: "eq", value: slug }],
     limit: 1,
   });
-  return res.items[0] ?? null;
+  return res.items[0] ? mapSeries(res.items[0]) : null;
 }
 
 export async function getSeriesById(id: string): Promise<Series | null> {
-  return getDb().get<Series>(TABLES.series, id);
+  const row = await getDb().get<Series>(TABLES.series, id);
+  return row ? mapSeries(row) : null;
 }
 
 export async function allSeries(): Promise<Series[]> {
@@ -89,7 +104,7 @@ export async function allSeries(): Promise<Series[]> {
     order: { field: "titre", dir: "asc" },
     limit: 1000,
   });
-  return items;
+  return items.map(mapSeries);
 }
 
 /** « Séries similaires » : genres puis tags en commun (§12.2). */
@@ -135,7 +150,8 @@ export async function popularSeries(limit = 10, includeAdult = false): Promise<S
     order: { field: "vues", dir: "desc" },
     limit,
   });
-  return includeAdult ? items : items.filter((s) => s.classification !== "adult");
+  const rows = includeAdult ? items : items.filter((s) => s.classification !== "adult");
+  return rows.map(mapSeries);
 }
 
 export async function seriesStats(slug: string): Promise<{
@@ -166,6 +182,10 @@ export async function seriesStats(slug: string): Promise<{
 export async function saveSeries(series: Partial<Series> & { id: string }): Promise<Series> {
   const db = getDb();
   const { id, ...data } = series;
+  if (typeof data.couverture === "string") {
+    // Jamais de résolution en base : on stocke un chemin relatif (§5.2).
+    data.couverture = storeCover(data.couverture);
+  }
   const existing = await db.get<Series>(TABLES.series, id);
   const updated = existing
     ? await db.update<Series>(TABLES.series, id, {
@@ -179,7 +199,7 @@ export async function saveSeries(series: Partial<Series> & { id: string }): Prom
       });
   invalidate("series:");
   invalidate("stats:");
-  return updated;
+  return mapSeries(updated);
 }
 
 export async function deleteSeries(id: string): Promise<void> {

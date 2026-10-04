@@ -1,5 +1,6 @@
 import "server-only";
 import { getDb, rowId, TABLES } from "@/lib/db";
+import { mapSeries } from "@/lib/data/series";
 import type { HistoryEntry, LibraryEntry, LibraryStatus, Series } from "@/lib/types";
 
 export async function listLibrary(userId: string): Promise<LibraryEntry[]> {
@@ -192,7 +193,8 @@ export async function libraryWithSeries(
   const entries = await listLibrary(userId);
   const out: Array<LibraryEntry & { series: Series | null }> = [];
   for (const entry of entries) {
-    out.push({ ...entry, series: await getDb().get<Series>(TABLES.series, entry.series_id) });
+    const row = await getDb().get<Series>(TABLES.series, entry.series_id);
+    out.push({ ...entry, series: row ? mapSeries(row) : null });
   }
   return out;
 }

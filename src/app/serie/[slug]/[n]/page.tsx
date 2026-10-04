@@ -9,6 +9,7 @@ import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getChapter, getReaderContext, recordView } from "@/lib/data/chapters";
 import { listHistory } from "@/lib/data/library";
 import { getSeriesBySlug } from "@/lib/data/series";
+import { can } from "@/lib/roles";
 
 type Params = Promise<{ slug: string; n: string }>;
 
@@ -61,16 +62,20 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   const series = await getSeriesBySlug(slug);
   if (!series || !numero) notFound();
 
-  const context = await getReaderContext(series, numero);
+  const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
+  // Aperçu des brouillons réservé au Gérant (§5.1, étape 4) : les pages sont
+  // alors servies avec des URLs signées à 10 minutes.
+  const allowDraft = Boolean(user && can(user.role, "publish_chapter"));
+
+  const context = await getReaderContext(series, numero, { allowDraft });
   if (!context) notFound();
 
   const isAdult = series.classification === "adult" || context.chapter.classification === "adult";
-  const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
   const needsGate = isAdult && !gateOk;
 
   const href = chapterHref(series.slug, context.chapter.numero);
 
-  if (!needsGate) {
+  if (!needsGate && !context.preview) {
     await recordView(context.chapter);
   }
 
@@ -106,6 +111,15 @@ export default async function ChapitrePage({ params }: { params: Params }) {
         </div>
       </div>
 
+      {context.preview && (
+        <div className="container-site">
+          <div className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
+            <strong>Aperçu d&apos;un chapitre non publié.</strong> Ce lien n&apos;est visible que
+            pour vous (Gérant) et les URLs des pages expirent au bout de 10 minutes.
+          </div>
+        </div>
+      )}
+
       {needsGate ? (
         <div className="container-site space-y-4">
           <AdultGate open next={href} />
@@ -128,9 +142,10 @@ export default async function ChapitrePage({ params }: { params: Params }) {
               initialMode={user?.preferences.mode_lecture}
               initialSens={user?.preferences.sens_lecture}
               initialPage={initialPage}
-              canProgress={Boolean(user)}
+              canProgress={Boolean(user) && !context.preview}
               prevHref={prevHref}
               nextHref={nextHref}
+              nextChapterId={context.next?.id ?? null}
             />
           </div>
 

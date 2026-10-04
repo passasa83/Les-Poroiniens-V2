@@ -61,6 +61,7 @@ export const TABLES = {
   audit: "audit_log",
   settings: "site_settings",
   importJobs: "import_jobs",
+  imageErrors: "image_errors",
   users: "users", // démo uniquement (Appwrite Auth gère les comptes réels)
 } as const;
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { cached, getDb, invalidate, TABLES } from "@/lib/db";
 import { pageUrl } from "@/lib/media";
+import { mapSeries } from "@/lib/data/series";
 import type { Chapter, ScanPage, Series } from "@/lib/types";
 
 export async function listChapters(
@@ -45,8 +46,12 @@ export async function getPages(chapterId: string): Promise<ScanPage[]> {
   return items;
 }
 
-/** URLs de lecture (signées en production, locales en démo). */
-export async function getChapterPageUrls(chapterId: string): Promise<{
+/** URLs de lecture : publiques et versionnées en lecture normale, signées à
+ *  durée courte pour un brouillon prévisualisé par le Gérant (§6.3). */
+export async function getChapterPageUrls(
+  chapterId: string,
+  opts: { signed?: boolean } = {},
+): Promise<{
   pages: { index: number; url: string; largeur: number; hauteur: number }[];
   total: number;
 }> {
@@ -55,7 +60,7 @@ export async function getChapterPageUrls(chapterId: string): Promise<{
     total: pages.length,
     pages: pages.map((p) => ({
       index: p.index,
-      url: pageUrl(p),
+      url: pageUrl(p, { signed: opts.signed }),
       largeur: p.largeur,
       hauteur: p.hauteur,
     })),
@@ -69,18 +74,28 @@ export interface ReaderContext {
   prev: Chapter | null;
   next: Chapter | null;
   pages: { index: number; url: string; largeur: number; hauteur: number }[];
+  /** vrai quand le chapitre n'est pas publié (aperçu Gérant, URLs signées). */
+  preview: boolean;
 }
 
+/**
+ * Contexte du lecteur (§7.2). `allowDraft` est réservé au Gérant : le chapitre
+ * s'affiche alors avec des URLs signées à 10 minutes.
+ */
 export async function getReaderContext(
   series: Series,
   numero: number,
+  opts: { allowDraft?: boolean } = {},
 ): Promise<ReaderContext | null> {
   const chapter = await getChapter(series.id, numero);
-  if (!chapter || chapter.statut !== "published") return null;
-  const chapters = await listChapters(series.id, { publishedOnly: true });
+  if (!chapter) return null;
+  const preview = chapter.statut !== "published";
+  if (preview && !opts.allowDraft) return null;
+
+  const chapters = await listChapters(series.id, opts.allowDraft ? {} : { publishedOnly: true });
   const ordered = [...chapters].sort((a, b) => a.numero - b.numero);
   const idx = ordered.findIndex((c) => c.id === chapter.id);
-  const { pages } = await getChapterPageUrls(chapter.id);
+  const { pages } = await getChapterPageUrls(chapter.id, { signed: preview });
   return {
     series,
     chapter,
@@ -88,6 +103,7 @@ export async function getReaderContext(
     prev: idx > 0 ? ordered[idx - 1] : null,
     next: idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1] : null,
     pages,
+    preview,
   };
 }
 
@@ -101,7 +117,7 @@ export async function recentChapters(limit = 12): Promise<Array<Chapter & { seri
     const out: Array<Chapter & { series: Series }> = [];
     for (const chapter of items) {
       const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      if (series) out.push({ ...chapter, series });
+      if (series) out.push({ ...chapter, series: mapSeries(series) });
     }
     return out;
   });

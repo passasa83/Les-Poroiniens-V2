@@ -4,7 +4,9 @@ import { atLeast, can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
 import { getChapterById, saveChapter } from "@/lib/data/chapters";
+import { purgeImageErrors } from "@/lib/data/image-errors";
 import { getDb, TABLES } from "@/lib/db";
+import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
 import type { Chapter } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -143,6 +145,11 @@ export async function PATCH(
           ? "chapter.schedule"
           : "chapter.update";
 
+  // Passage `staging/` ↔ `public/` + purge ciblée (§3.4 et §5.1, étape 5).
+  let nas: FileTransition | undefined;
+  if (action === "chapter.publish") nas = await transitionChapterFiles(chapter, "publish");
+  if (action === "chapter.unpublish") nas = await transitionChapterFiles(chapter, "unpublish");
+
   await audit({
     actorId: user.id,
     actorPseudo: user.pseudo,
@@ -161,11 +168,12 @@ export async function PATCH(
       titre: chapter.titre,
       numero: chapter.numero,
       classification: chapter.classification,
+      ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
     },
     ip: clientIp(request),
   });
 
-  return Response.json({ chapter });
+  return Response.json({ chapter, ...(nas ? { nas } : {}) });
 }
 
 /** DELETE /api/admin/chapters/[id] — suppression (Gérant). */
@@ -194,6 +202,7 @@ export async function DELETE(
   });
   for (const page of pages) await db.remove(TABLES.pages, page.id);
   await db.remove(TABLES.chapters, id);
+  await purgeImageErrors(id);
 
   await audit({
     actorId: user.id,

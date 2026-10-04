@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Flag, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, ImageOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
@@ -36,6 +36,7 @@ export function Reader({
   canProgress = false,
   prevHref = null,
   nextHref = null,
+  nextChapterId = null,
 }: {
   pages: ReaderPage[];
   chapterId: string;
@@ -47,6 +48,8 @@ export function Reader({
   canProgress?: boolean;
   prevHref?: string | null;
   nextHref?: string | null;
+  /** Sert au préchargement de la première page du chapitre suivant (§7.2). */
+  nextChapterId?: string | null;
 }) {
   const total = pages.length;
   const lastIndex = Math.max(total - 1, 0);
@@ -58,12 +61,16 @@ export function Reader({
   const [fullscreen, setFullscreen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportPage, setReportPage] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef(page);
   const lastSentRef = useRef(0);
   const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const throttleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Pages dont le chargement a échec après reprise (§9.1), envoyées par lots. */
+  const failedRef = useRef<Set<number>>(new Set());
+  const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     pageRef.current = page;
@@ -203,7 +210,7 @@ export function Reader({
         let best = 0;
         let bestDist = Number.POSITIVE_INFINITY;
         containerRef.current
-          ?.querySelectorAll("img[id^='reader-page-']")
+          ?.querySelectorAll("[id^='reader-page-']")
           .forEach((el, index) => {
           if (!el) return;
           const dist = Math.abs(el.getBoundingClientRect().top - 72);
@@ -274,6 +281,44 @@ export function Reader({
     return () => window.removeEventListener("pagehide", onHide);
   }, [canProgress, send]);
 
+  /* ── Échecs de chargement : remontée groupée (§9.1) ─────────────────── */
+  const flushFailures = useCallback(async () => {
+    const indexes = [...failedRef.current];
+    if (indexes.length === 0) return;
+    failedRef.current.clear();
+    try {
+      await fetch("/api/telemetry/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chapterId, indexes }),
+        keepalive: true,
+      });
+    } catch {
+      /* la télémétrie n'est jamais bloquante */
+    }
+  }, [chapterId]);
+
+  const onPageFailed = useCallback(
+    (index: number) => {
+      failedRef.current.add(index);
+      if (failTimer.current) clearTimeout(failTimer.current);
+      failTimer.current = setTimeout(() => void flushFailures(), 2000);
+    },
+    [flushFailures],
+  );
+
+  const openReport = useCallback((index?: number | null) => {
+    setReportPage(typeof index === "number" ? index : null);
+    setReportOpen(true);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (failTimer.current) clearTimeout(failTimer.current);
+    },
+    [],
+  );
+
   /* ── Swipe tactile ────────────────────────────────────────────────── */
   const touch = useRef<{ x: number; y: number } | null>(null);
 
@@ -298,22 +343,8 @@ export function Reader({
   const isLast = page >= lastIndex;
   const showEnd = mode === "vertical" || isLast;
   const widthStyle = useMemo(() => ({ width: `${clamp(width, 50, 100)}%` }), [width]);
-
-  function imageProps(index: number): React.ImgHTMLAttributes<HTMLImageElement> {
-    const item = pages[index];
-    const eager = index < 3;
-    return {
-      id: `reader-page-${index}`,
-      src: item?.url ?? "",
-      alt: `Page ${index + 1} du chapitre ${chapterNumero}`,
-      loading: eager ? "eager" : "lazy",
-      fetchPriority: index < 3 ? "high" : "auto",
-      width: item?.largeur,
-      height: item?.hauteur,
-      className: "w-full select-none",
-      draggable: false,
-    };
-  }
+  /** Page paysage : en double page elle s'affiche seule (§7.2). */
+  const soloSpread = useMemo(() => isLandscape(pages[page]), [pages, page]);
 
   return (
     <div
@@ -336,45 +367,96 @@ export function Reader({
         onFullscreen={toggleFullscreen}
         panelOpen={panelOpen}
         onPanel={() => setPanelOpen((v) => !v)}
-        onReport={() => setReportOpen(true)}
+        onReport={() => openReport(null)}
       />
 
       <div className="flex justify-center py-4">
         {mode === "vertical" && (
           <div className="space-y-2" style={widthStyle}>
             {pages.map((item, index) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={item.index} {...imageProps(index)} alt={`Page ${index + 1} du chapitre ${chapterNumero}`} />
+              <ReaderImage
+                key={`${index}:${item.url}`}
+                page={item}
+                index={index}
+                chapterNumero={chapterNumero}
+                eager={index === 0}
+                onFailed={onPageFailed}
+                onReport={openReport}
+              />
             ))}
           </div>
         )}
 
         {mode === "single" && pages[page] && (
           <div className="w-full" style={widthStyle}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img {...imageProps(page)} alt={`Page ${page + 1} du chapitre ${chapterNumero}`} />
+            <ReaderImage
+              key={`${page}:${pages[page].url}`}
+              page={pages[page]}
+              index={page}
+              chapterNumero={chapterNumero}
+              eager
+              onFailed={onPageFailed}
+              onReport={openReport}
+            />
             <Prefetch pages={pages} from={page + 1} />
           </div>
         )}
 
         {mode === "double" && (
-          <div className="flex w-full items-start justify-center gap-1" style={widthStyle}>
-            <div className="w-1/2">
-              {pages[sens === "rtl" ? page + 1 : page] && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img {...imageProps(sens === "rtl" ? page + 1 : page)} alt={`Page ${sens === "rtl" ? page + 2 : page + 1} du chapitre ${chapterNumero}`} />
-              )}
-            </div>
-            <div className="w-1/2">
-              {pages[sens === "rtl" ? page : page + 1] && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img {...imageProps(sens === "rtl" ? page : page + 1)} alt={`Page ${sens === "rtl" ? page + 1 : page + 2} du chapitre ${chapterNumero}`} />
-              )}
-            </div>
-            <Prefetch pages={pages} from={page + 2} />
+          <div
+            className={soloSpread ? "w-full" : "flex w-full items-start justify-center gap-1"}
+            style={widthStyle}
+          >
+            {soloSpread ? (
+              <ReaderImage
+                key={`${page}:${pages[page]?.url ?? ""}`}
+                page={pages[page]}
+                index={page}
+                chapterNumero={chapterNumero}
+                eager
+                onFailed={onPageFailed}
+                onReport={openReport}
+              />
+            ) : (
+              <>
+                <div className="w-1/2">
+                  {pages[sens === "rtl" ? page + 1 : page] && (
+                    <ReaderImage
+                      key={`${sens === "rtl" ? page + 1 : page}:${
+                        pages[sens === "rtl" ? page + 1 : page].url
+                      }`}
+                      page={pages[sens === "rtl" ? page + 1 : page]}
+                      index={sens === "rtl" ? page + 1 : page}
+                      chapterNumero={chapterNumero}
+                      eager={page <= 2}
+                      onFailed={onPageFailed}
+                      onReport={openReport}
+                    />
+                  )}
+                </div>
+                <div className="w-1/2">
+                  {pages[sens === "rtl" ? page : page + 1] && (
+                    <ReaderImage
+                      key={`${sens === "rtl" ? page : page + 1}:${
+                        pages[sens === "rtl" ? page : page + 1].url
+                      }`}
+                      page={pages[sens === "rtl" ? page : page + 1]}
+                      index={sens === "rtl" ? page : page + 1}
+                      chapterNumero={chapterNumero}
+                      eager={page <= 2}
+                      onFailed={onPageFailed}
+                      onReport={openReport}
+                    />
+                  )}
+                </div>
+                <Prefetch pages={pages} from={page + 2} />
+              </>
+            )}
           </div>
         )}
       </div>
+
+      <NextChapterPrefetch chapterId={nextChapterId} active={isLast} />
 
       <div className="flex items-center justify-between gap-2 px-3 pb-3">
         <NavButton
@@ -425,7 +507,14 @@ export function Reader({
         </section>
       )}
 
-      <ReportDialog open={reportOpen} onClose={() => setReportOpen(false)} chapterId={chapterId} />
+      <ReportDialog
+        key={`report-${reportPage ?? "manual"}`}
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        chapterId={chapterId}
+        chapterNumero={chapterNumero}
+        page={reportPage}
+      />
     </div>
   );
 }
@@ -442,6 +531,138 @@ function Prefetch({ pages, from }: { pages: ReaderPage[]; from: number }) {
       ))}
     </div>
   );
+}
+
+/** Une page est paysage quand sa largeur dépasse sa hauteur (§7.2). */
+function isLandscape(page: ReaderPage | undefined): boolean {
+  return Boolean(page?.largeur && page.hauteur && page.largeur > page.hauteur);
+}
+
+/**
+ * Page de scan avec reprise (§7.2) : 2 nouvelles tentatives avec délai
+ * croissant, puis une page de remplacement avec bouton « Signaler un
+ * problème ». Dimensions toujours transmises au DOM : aucune surprise de
+ * mise en page (CLS < 0,05).
+ */
+const MAX_RETRIES = 2;
+
+function ReaderImage({
+  page,
+  index,
+  chapterNumero,
+  eager,
+  onFailed,
+  onReport,
+}: {
+  page: ReaderPage;
+  index: number;
+  chapterNumero: number;
+  eager: boolean;
+  onFailed: (index: number) => void;
+  onReport: (index: number) => void;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const retriesRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // L'état est réinitialisé par le `key` du parent quand l'URL change :
+  // aucun effet de remise à zéro nécessaire.
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  const src =
+    attempt === 0 ? page.url : `${page.url}${page.url.includes("?") ? "&" : "?"}retry=${attempt}`;
+  const alt = `Page ${index + 1} du chapitre ${chapterNumero}`;
+
+  function onError() {
+    if (failed || timerRef.current) return;
+    if (retriesRef.current < MAX_RETRIES) {
+      const delay = 400 * 2 ** retriesRef.current;
+      retriesRef.current += 1;
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        setAttempt((current) => current + 1);
+      }, delay);
+      return;
+    }
+    setFailed(true);
+    onFailed(index);
+  }
+
+  if (failed) {
+    return (
+      <div
+        id={`reader-page-${index}`}
+        style={
+          page.largeur && page.hauteur
+            ? { aspectRatio: `${page.largeur} / ${page.hauteur}` }
+            : { minHeight: "50vh" }
+        }
+        className="flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-surface2 p-6 text-center"
+      >
+        <ImageOff className="size-6 text-muted" />
+        <p className="text-sm font-semibold text-fg">Page {index + 1} indisponible</p>
+        <p className="max-w-xs text-xs text-muted">
+          Le fichier n&apos;a pas pu être chargé malgré les reprises automatiques.
+        </p>
+        <button type="button" className="btn-secondary text-sm" onClick={() => onReport(index)}>
+          <Flag className="size-4" /> Signaler un problème
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      id={`reader-page-${index}`}
+      src={src}
+      alt={alt}
+      width={page.largeur}
+      height={page.hauteur}
+      loading={eager ? "eager" : "lazy"}
+      fetchPriority={eager ? "high" : "auto"}
+      decoding={eager ? undefined : "async"}
+      onError={onError}
+      className="w-full select-none"
+      draggable={false}
+    />
+  );
+}
+
+/** Préchargement de la première page du chapitre suivant en fin de lecture. */
+function NextChapterPrefetch({ chapterId, active }: { chapterId: string | null; active: boolean }) {
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    if (!active || !chapterId || doneRef.current) return;
+    doneRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/chapters/${encodeURIComponent(chapterId)}/pages`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { pages?: { url?: string }[] };
+        const url = data.pages?.[0]?.url;
+        if (url) {
+          const img = new Image();
+          img.src = url;
+        }
+      } catch {
+        /* préchargement best effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, chapterId]);
+
+  return null;
 }
 
 function NavButton({
@@ -488,13 +709,25 @@ function ReportDialog({
   open,
   onClose,
   chapterId,
+  chapterNumero,
+  page,
 }: {
   open: boolean;
   onClose: () => void;
   chapterId: string;
+  chapterNumero: number;
+  page: number | null;
 }) {
-  const [raison, setRaison] = useState(REPORT_REASONS[0].value);
-  const [details, setDetails] = useState("");
+  // Signalement déclenché depuis une page en échec : le motif est pré-rempli
+  // à l'ouverture (le parent re-clé le composant quand `page` change).
+  const [raison, setRaison] = useState(
+    typeof page === "number" ? "page_manquante" : REPORT_REASONS[0].value,
+  );
+  const [details, setDetails] = useState(
+    typeof page === "number"
+      ? `Page ${page + 1} du chapitre ${chapterNumero} : impossible à charger malgré les reprises automatiques.`
+      : "",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -31,9 +31,23 @@ type ImportResult = {
   slug: string;
   nbPages: number;
   seriesTitre: string;
+  storage: "nas" | "demo";
+  statut: ImportStatut;
+  warning?: string;
 };
 
 type NasItem = { name: string; isDir: boolean };
+
+/** Aperçu d'un dossier avant indexation (§5.1, étape 2). */
+type PreviewData = {
+  path: string;
+  count: number;
+  missing: number[];
+  duplicates: string[][];
+  anomalies: { name: string; reason: string }[];
+};
+
+type ImportStatut = "draft" | "scheduled" | "published";
 
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
 const ARCHIVE_EXT = /\.(zip|cbz)$/i;
@@ -93,6 +107,7 @@ function normalizeNas(raw: unknown): NasItem[] {
         type === "directory" ||
         type === "folder" ||
         row.is_dir === true ||
+        row.isDir === true ||
         name.endsWith("/");
       return { name, isDir };
     })
@@ -128,6 +143,14 @@ export function ImportPanel({
   const [nasItems, setNasItems] = useState<NasItem[]>([]);
   const [nasBusy, setNasBusy] = useState(false);
   const [nasError, setNasError] = useState<string | null>(null);
+  /** Dossier de chapitre retenu : le listing est alors fait côté serveur (§5.1). */
+  const [nasFolder, setNasFolder] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+
+  // Statut à la création (§5.1, étape 4)
+  const [statut, setStatut] = useState<ImportStatut>("draft");
+  const [publishAt, setPublishAt] = useState("");
 
   // État Drive
   const [driveBusy, setDriveBusy] = useState(false);
@@ -209,9 +232,19 @@ export function ImportPanel({
       setError("Indiquez un numéro de chapitre valide.");
       return;
     }
-    if (entries.length === 0) {
-      setError("Ajoutez d'abord les pages du chapitre.");
+    if (entries.length === 0 && !nasFolder) {
+      setError("Ajoutez d'abord les pages du chapitre (ou sélectionnez un dossier NAS).");
       return;
+    }
+    if (statut === "scheduled") {
+      if (!publishAt) {
+        setError("Indiquez la date et l'heure de publication.");
+        return;
+      }
+      if (new Date(publishAt).getTime() <= Date.now()) {
+        setError("La date de publication doit être dans le futur.");
+        return;
+      }
     }
 
     setBusy(true);
@@ -227,10 +260,19 @@ export function ImportPanel({
           classification,
           source,
           pages: entries.map((e) => e.name),
+          ...(nasFolder ? { chemin: nasFolder } : {}),
+          statut,
+          publish_at: statut === "scheduled" ? new Date(publishAt).toISOString() : null,
         }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { error?: string; chapter?: { id: string; numero: number; titre: string }; nbPages?: number }
+        | {
+            error?: string;
+            chapter?: { id: string; numero: number; titre: string };
+            nbPages?: number;
+            storage?: "nas" | "demo";
+            warning?: string;
+          }
         | null;
 
       if (!res.ok || !data?.chapter) {
@@ -240,6 +282,8 @@ export function ImportPanel({
 
       releasePreviews();
       setEntries([]);
+      setNasFolder(null);
+      setPreview(null);
       setResult({
         chapterId: data.chapter.id,
         numero: data.chapter.numero,
@@ -247,6 +291,9 @@ export function ImportPanel({
         slug: serie?.slug ?? "",
         nbPages: data.nbPages ?? entries.length,
         seriesTitre: serie?.titre ?? "",
+        storage: data.storage ?? "demo",
+        statut,
+        warning: data.warning,
       });
       router.refresh();
     } catch {
@@ -259,6 +306,8 @@ export function ImportPanel({
   async function listNas(path: string) {
     setNasBusy(true);
     setNasError(null);
+    setNasFolder(null);
+    setPreview(null);
     try {
       const res = await fetch(`/api/owner/nas/list?path=${encodeURIComponent(path)}`);
       const data = (await res.json().catch(() => null)) as
@@ -274,6 +323,44 @@ export function ImportPanel({
       setNasError("Erreur réseau : réessayez.");
     } finally {
       setNasBusy(false);
+    }
+  }
+
+  /** Aperçu d'un dossier avant indexation (§5.1, étape 2) : trous de
+   *  numérotation, doublons de hash et pages inhabituelles. */
+  async function loadPreview(path: string) {
+    setPreviewBusy(true);
+    setNasError(null);
+    try {
+      const res = await fetch(`/api/owner/nas/preview?path=${encodeURIComponent(path)}`);
+      const data = (await res.json().catch(() => null)) as
+        | {
+            error?: string;
+            path?: string;
+            count?: number;
+            missing?: number[];
+            duplicates?: string[][];
+            anomalies?: { name: string; reason: string }[];
+          }
+        | null;
+      if (!res.ok || typeof data?.count !== "number") {
+        setNasError(data?.error ?? "Aperçu impossible.");
+        setPreview(null);
+        setNasFolder(null);
+        return;
+      }
+      setPreview({
+        path: data.path ?? path,
+        count: data.count,
+        missing: data.missing ?? [],
+        duplicates: data.duplicates ?? [],
+        anomalies: data.anomalies ?? [],
+      });
+      setNasFolder(data.path ?? path);
+    } catch {
+      setNasError("Erreur réseau : réessayez.");
+    } finally {
+      setPreviewBusy(false);
     }
   }
 
@@ -372,7 +459,11 @@ export function ImportPanel({
             error={error}
             busy={busy}
             onSubmit={(e) => submitImport("upload", e)}
-            submitLabel="Importer en brouillon"
+            source="upload"
+            statut={statut}
+            onStatut={setStatut}
+            publishAt={publishAt}
+            onPublishAt={setPublishAt}
           />
         </Card>
       )}
@@ -392,9 +483,11 @@ export function ImportPanel({
           {!nasConfigured ? (
             <p className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
               Fonctionnalité désactivée : la variable d&apos;environnement{" "}
-              <code className="font-mono">NAS_API_URL</code> n&apos;est pas renseignée. Ajoutez
-              l&apos;URL de l&apos;API du NAS (et éventuellement{" "}
-              <code className="font-mono">NAS_API_KEY</code>) puis redémarrez le serveur.
+              <code className="font-mono">NAS_API_BASE</code> n&apos;est pas renseignée. Ajoutez
+              l&apos;URL de l&apos;API du NAS (et les identifiants{" "}
+              <code className="font-mono">NAS_API_CLIENT_ID</code> /{" "}
+              <code className="font-mono">NAS_API_CLIENT_SECRET</code> si elle est protégée par
+              Cloudflare Access) puis redéployez.
             </p>
           ) : (
             <>
@@ -452,6 +545,26 @@ export function ImportPanel({
                 </ul>
               )}
 
+              {nasItems.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void loadPreview(nasPath)}
+                    disabled={previewBusy}
+                  >
+                    {previewBusy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <FileImage className="size-4" />
+                    )}
+                    Aperçu de ce dossier
+                  </Button>
+                  {nasFolder && <Badge tone="ok">Dossier retenu : {nasFolder}</Badge>}
+                </div>
+              )}
+
+              {preview && <PreviewPanel preview={preview} />}
+
               <EntryList entries={entries} onClear={() => setEntries([])} />
 
               <ImportForm
@@ -469,7 +582,11 @@ export function ImportPanel({
                 error={error}
                 busy={busy}
                 onSubmit={(e) => submitImport("nas", e)}
-                submitLabel="Indexer le chapitre (brouillon)"
+                source="nas"
+                statut={statut}
+                onStatut={setStatut}
+                publishAt={publishAt}
+                onPublishAt={setPublishAt}
               />
             </>
           )}
@@ -527,6 +644,57 @@ export function ImportPanel({
       )}
 
       {result && <ResultPanel result={result} onChanged={() => setResult(null)} />}
+    </div>
+  );
+}
+
+/* ── Aperçu d'un dossier NAS avant indexation (§5.1) ──────────────────── */
+
+function PreviewPanel({ preview }: { preview: PreviewData }) {
+  const clean = preview.anomalies.length === 0;
+  return (
+    <div className="space-y-3 rounded-xl border border-line bg-surface2 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-fg">
+          <FolderTree className="size-4 text-primary" />
+          <span className="truncate">{preview.path}</span>
+          <span className="text-muted">· {preview.count} page(s)</span>
+        </p>
+        <Badge tone={clean ? "ok" : "warn"}>
+          {clean ? "Aucune anomalie" : `${preview.anomalies.length} point(s) à vérifier`}
+        </Badge>
+      </div>
+
+      {preview.missing.length > 0 && (
+        <p className="text-xs text-warn">
+          Numéros manquants dans la séquence : {preview.missing.join(", ")}
+        </p>
+      )}
+
+      {preview.duplicates.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-warn">Contenus identiques (doublons probables) :</p>
+          <ul className="space-y-0.5 text-xs text-muted">
+            {preview.duplicates.map((group, index) => (
+              <li key={index}>• {group.join(", ")}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {preview.anomalies.length > 0 && (
+        <ul className="max-h-32 space-y-1 overflow-auto text-xs text-muted">
+          {preview.anomalies.map((anomaly, index) => (
+            <li key={index}>
+              • <span className="text-fg">{anomaly.name}</span> — {anomaly.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="text-xs text-muted">
+        Ces points n&apos;empêchent pas l&apos;indexation : ils sont à vérifier avant publication.
+      </p>
     </div>
   );
 }
@@ -600,8 +768,23 @@ function ImportForm(props: {
   error: string | null;
   busy: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  submitLabel: string;
+  source: "upload" | "nas";
+  statut: ImportStatut;
+  onStatut: (value: ImportStatut) => void;
+  publishAt: string;
+  onPublishAt: (value: string) => void;
 }) {
+  const submitLabel =
+    props.statut === "published"
+      ? props.source === "nas"
+        ? "Indexer et publier"
+        : "Importer et publier"
+      : props.statut === "scheduled"
+        ? "Programmer la publication"
+        : props.source === "nas"
+          ? "Indexer le chapitre (brouillon)"
+          : "Importer en brouillon";
+
   return (
     <form onSubmit={props.onSubmit} className="grid gap-4 md:grid-cols-2">
       <div className="md:col-span-2 grid gap-4 md:grid-cols-2">
@@ -652,10 +835,34 @@ function ImportForm(props: {
         </Select>
       </Field>
 
+      <Field label="Statut à la création" htmlFor="i-statut"
+        hint="Les chapitres programmés sont publiés automatiquement par le cron.">
+        <Select
+          id="i-statut"
+          value={props.statut}
+          onChange={(e) => props.onStatut(e.target.value as ImportStatut)}
+        >
+          <option value="draft">Brouillon</option>
+          <option value="scheduled">Programmé</option>
+          <option value="published">Publié immédiatement</option>
+        </Select>
+      </Field>
+
+      {props.statut === "scheduled" && (
+        <Field label="Date et heure de publication" htmlFor="i-publish">
+          <Input
+            id="i-publish"
+            type="datetime-local"
+            value={props.publishAt}
+            onChange={(e) => props.onPublishAt(e.target.value)}
+          />
+        </Field>
+      )}
+
       <div className="flex items-end gap-3">
         <Button type="submit" variant="primary" disabled={props.busy}>
           {props.busy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
-          {props.busy ? "Import en cours…" : props.submitLabel}
+          {props.busy ? "Import en cours…" : submitLabel}
         </Button>
       </div>
 
@@ -681,21 +888,37 @@ function ResultPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [when, setWhen] = useState("");
+  const [currentStatut, setCurrentStatut] = useState<ImportStatut>(result.statut);
+  const [nasError, setNasError] = useState<string | null>(null);
+
+  const statutLabel =
+    currentStatut === "published"
+      ? "Publié"
+      : currentStatut === "scheduled"
+        ? "Programmé"
+        : "Brouillon";
+  const statutTone = currentStatut === "published" ? "ok" : "warn";
+  const isPublished = currentStatut === "published";
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
     setError(null);
+    setNasError(null);
     try {
       const res = await fetch(`/api/admin/chapters/${result.chapterId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      const data = (await res.json().catch(() => null)) as
+        | { error?: string; nas?: { action?: string; error?: string } }
+        | null;
       if (!res.ok) {
         setError(data?.error ?? "Action impossible.");
         return;
       }
+      if (typeof body.statut === "string") setCurrentStatut(body.statut as ImportStatut);
+      if (data?.nas?.error) setNasError(data.nas.error);
       router.refresh();
     } catch {
       setError("Erreur réseau : réessayez.");
@@ -712,11 +935,20 @@ function ResultPanel({
             Chapitre {result.numero} créé — {result.nbPages} pages indexées
           </h2>
           <p className="text-sm text-muted">
-            {result.seriesTitre} · statut <span className="text-fg">brouillon</span>
+            {result.seriesTitre} ·{" "}
+            {result.storage === "nas"
+              ? "index lu sur le NAS (dimensions et hash en base)"
+              : "pages de démonstration"}
           </p>
         </div>
-        <Badge tone="warn">Brouillon</Badge>
+        <Badge tone={statutTone}>{statutLabel}</Badge>
       </div>
+
+      {(result.warning || nasError) && (
+        <p className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
+          {result.warning ?? nasError}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         {result.slug && (
@@ -729,30 +961,34 @@ function ResultPanel({
             <ExternalLink className="size-4" /> Ouvrir dans le lecteur
           </a>
         )}
-        <Button
-          type="button"
-          variant="primary"
-          disabled={busy}
-          onClick={() => patch({ statut: "published" })}
-        >
-          <Rocket className="size-4" /> Publier maintenant
-        </Button>
-        <div className="flex items-center gap-2">
-          <input
-            type="datetime-local"
-            className="input w-auto"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-            aria-label="Date et heure de publication"
-          />
+        {!isPublished && (
           <Button
             type="button"
-            disabled={busy || !when}
-            onClick={() => patch({ statut: "scheduled", publish_at: new Date(when).toISOString() })}
+            variant="primary"
+            disabled={busy}
+            onClick={() => patch({ statut: "published" })}
           >
-            Planifier
+            <Rocket className="size-4" /> Publier maintenant
           </Button>
-        </div>
+        )}
+        {!isPublished && (
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              className="input w-auto"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              aria-label="Date et heure de publication"
+            />
+            <Button
+              type="button"
+              disabled={busy || !when}
+              onClick={() => patch({ statut: "scheduled", publish_at: new Date(when).toISOString() })}
+            >
+              Planifier
+            </Button>
+          </div>
+        )}
         <button type="button" className="btn-ghost" onClick={onChanged} disabled={busy}>
           Nouvel import
         </button>
@@ -760,7 +996,9 @@ function ResultPanel({
 
       {error && <p className="text-sm text-adult">{error}</p>}
       <p className="text-xs text-muted">
-        Toute publication est tracée au journal d&apos;audit (acteur, date, IP).
+        Publication = déplacement <code className="font-mono">staging/</code> →{" "}
+        <code className="font-mono">public/</code> sur le NAS, purge Cloudflare ciblée et entrée
+        au journal d&apos;audit (acteur, date, IP).
       </p>
     </Card>
   );

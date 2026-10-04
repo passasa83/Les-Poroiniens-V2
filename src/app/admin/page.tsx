@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { imageEnv } from "@/lib/media";
 import {
   Activity,
   AlertTriangle,
@@ -124,7 +125,7 @@ export default async function AdminDashboard() {
     }
   }
   const driveConfigured = Boolean(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT);
-  const nasConfigured = Boolean(process.env.NAS_API_URL || process.env.NAS_PAGE_BASE_URL);
+  const nasConfigured = Boolean(imageEnv().nasApiBase);
 
   const recentChapters = chapters.slice(0, 8);
   const seriesById = new Map(series.map((s) => [s.id, s] as const));
@@ -266,7 +267,7 @@ export default async function AdminDashboard() {
               label="Quota Drive / espace disque"
               value="Non connecté"
               tone="neutral"
-              hint="Aucune API de quota n'est branchée : voir variables GOOGLE_DRIVE_* et NAS_API_URL."
+              hint="Aucune API de quota n'est branchée : voir variables GOOGLE_DRIVE_* et NAS_API_BASE."
             />
             <HealthRow
               label="NAS / espace de stockage"

@@ -156,9 +156,12 @@ const TABLES: Table[] = [
       { key: "chapter_id", ...ID64 },
       // `index` est un mot réservé SQL : stocké sous `ordre` (mapping dans src/lib/db/appwrite.ts)
       { key: "ordre", type: "integer" },
+      // Chemin **relatif** au CDN : `${IMG_BASE_URL}/${chemin}?v=${hash}` (§5.2)
       { key: "chemin", type: "varchar", size: 512 },
       { key: "largeur", type: "integer" },
       { key: "hauteur", type: "integer" },
+      { key: "bytes", type: "integer", def: 0 },
+      { key: "hash", type: "varchar", size: 64 },
     ],
     indexes: [{ key: "idx_chapter_ordre", type: "key", columns: ["chapter_id", "ordre"] }],
   },
@@ -382,6 +385,21 @@ const TABLES: Table[] = [
     indexes: [
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_created", type: "key", columns: ["created_at"], orders: ["desc"] },
+    ],
+  },
+  {
+    id: "image_errors",
+    name: "Erreurs d'images",
+    columns: [
+      { key: "day", type: "varchar", size: 10 },
+      { key: "chapter_id", ...ID64 },
+      { key: "page_index", type: "integer" },
+      { key: "count", type: "integer", def: 0 },
+      { key: "updated_at", ...DATE },
+    ],
+    indexes: [
+      { key: "idx_day", type: "key", columns: ["day"] },
+      { key: "idx_chapter", type: "key", columns: ["chapter_id"] },
     ],
   },
 ];

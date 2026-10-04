@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit, getSettings, setSetting } from "@/lib/data/moderation";
+import { imageEnv } from "@/lib/media";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,7 @@ function secretStatus(): Record<string, { present: boolean; label: string }> {
       present: Boolean(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT),
       label: "Google Drive (compte de service)",
     },
-    nas: { present: Boolean(process.env.NAS_API_URL), label: "API du NAS" },
+    nas: { present: Boolean(imageEnv().nasApiBase), label: "API du NAS" },
     captcha: {
       present: Boolean(process.env.HCAPTCHA_SECRET || process.env.TURNSTILE_SECRET),
       label: "Captcha (hCaptcha / Turnstile)",

@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { allSeries } from "@/lib/data/series";
+import { imageEnv } from "@/lib/media";
 import { ImportPanel, type SeriesLite } from "./_components/import-panel";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function GerantImportPage() {
 
       <ImportPanel
         series={lite}
-        nasConfigured={Boolean(process.env.NAS_API_URL)}
+        nasConfigured={Boolean(imageEnv().nasApiBase)}
         driveConfigured={Boolean(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT)}
       />
     </div>

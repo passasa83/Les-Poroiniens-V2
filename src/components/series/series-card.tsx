@@ -1,6 +1,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { Badge, Rating } from "@/components/ui/kit";
+import { coverBlurUrl } from "@/lib/media";
 import { SERIES_STATUT_LABELS, type Series } from "@/lib/types";
 
 export function SeriesCard({
@@ -14,6 +15,10 @@ export function SeriesCard({
 }) {
   const isAdult = series.classification === "adult";
   const hidden = isAdult && !adultAllowed;
+  const cover = series.couverture || `/api/img/cover/${series.slug}`;
+  // Variante floue servie par le CDN quand la transformation est activée (§7.3) ;
+  // sinon le flou reste appliqué en CSS sur la vignette verrouillée.
+  const src = hidden ? coverBlurUrl(cover) ?? cover : cover;
 
   return (
     <Link
@@ -24,7 +29,7 @@ export function SeriesCard({
       <div className="relative overflow-hidden rounded-xl border border-line bg-surface2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={series.couverture || `/api/img/cover/${series.slug}`}
+          src={src}
           alt={`Couverture de ${series.titre}`}
           width={600}
           height={900}

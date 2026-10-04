@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { invalidate } from "@/lib/db";
+import { publishDueChapters } from "@/lib/publishing";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
   }
 
+  // Chapitres programmés dont l'échéance est passée (§5.1, étape 4) : la
+  // publication bascule les fichiers `staging/` → `public/` et trace l'audit.
+  const scheduling = await publishDueChapters();
+
   // Cache mémoire des listes/catalogues (§14.1) puis ISR des pages publiques.
   invalidate("series:");
   invalidate("recent-chapters:");
@@ -48,6 +53,8 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     status: "ok",
+    published: scheduling.published.length,
+    publishErrors: scheduling.errors,
     invalidated: ["series:", "recent-chapters:", "/", "/catalogue", "/sitemap.xml"],
     time: new Date().toISOString(),
   });

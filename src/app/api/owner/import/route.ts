@@ -6,6 +6,8 @@ import { audit, createImportJob, updateImportJob } from "@/lib/data/moderation";
 import { getSeriesById } from "@/lib/data/series";
 import { getDb, rowId, TABLES } from "@/lib/db";
 import { demoPagePath } from "@/lib/db/seed";
+import { nasErrorMessage, nasList, type NasPage } from "@/lib/nas";
+import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
 import type { Chapter } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,12 +22,15 @@ const importInput = z.object({
   titre: z.string().trim().max(200).default(""),
   volume: z.number().int().min(1).max(999).nullable().default(null),
   classification: z.enum(["all", "adult"]).default("all"),
-  /** `upload` : fichiers déposés ; `nas` : dossier déjà présent sur le NAS. */
+  /** `upload` : noms déposés ; `nas` : dossier déjà présent sur le NAS (§5.1). */
   source: z.enum(["upload", "nas"]).default("upload"),
-  /** Noms de fichiers uniquement (les octets ne transitent pas par Vercel, §5.3). */
-  pages: z.array(z.string().trim().min(1).max(255)).min(1).max(5000),
-  /** Dossier d'origine quand `source = nas`. */
+  /** Dossier du NAS : si renseigné, le listing est fait **côté serveur** (§4.1). */
   chemin: z.string().trim().max(500).optional(),
+  /** Noms de fichiers uniquement (les octets ne transitent pas par Vercel). */
+  pages: z.array(z.string().trim().min(1).max(255)).max(5000).default([]),
+  /** Brouillon (défaut), programmé ou publié directement (§5.1, étape 4). */
+  statut: z.enum(["draft", "scheduled", "published"]).default("draft"),
+  publish_at: z.string().datetime({ offset: true }).nullable().default(null),
 });
 
 /** Tri naturel : `page 2` avant `page 10` (§10.2). */
@@ -33,17 +38,22 @@ function naturalSort(names: string[]): string[] {
   return [...names].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
 }
 
-function pagePath(base: string | null, slug: string, numero: number, index: number, nom: string): string {
-  if (base) {
-    const safeName = encodeURIComponent(nom.replace(/[\\/]+/g, "_"));
-    return `${base}/${slug}/${numero}/${index + 1}-${safeName}`;
-  }
-  return demoPagePath(slug, numero, index);
-}
+type IndexedPage = {
+  chemin: string;
+  largeur: number;
+  hauteur: number;
+  bytes?: number;
+  hash?: string;
+};
 
 /**
- * POST /api/owner/import — import d'un chapitre (Gérant exclusif, §10).
- * Crée le chapitre en brouillon, l'index des pages et le job d'import.
+ * POST /api/owner/import — import d'un chapitre (Gérant exclusif, §5).
+ *
+ * Deux sources :
+ * - `chemin` renseigné : listing serveur via `GET /list` — largeurs, hauteurs,
+ *   poids et hash sont lus sur le NAS puis stockés en base (§5.2) ;
+ * - sinon : indexation des seuls noms, avec pages de démonstration si le NAS
+ *   n'est pas configuré (dégradé assumé pour remplir et tester le site).
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -73,6 +83,14 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
+  const nasPath = data.chemin?.trim().replace(/^\/+/, "").replace(/\/+$/, "") || "";
+  if (!nasPath && data.pages.length === 0) {
+    return jsonError("Sélectionnez un dossier NAS ou des pages.", "invalid_body", 400);
+  }
+  if (data.statut === "scheduled" && !data.publish_at) {
+    return jsonError("Une date de publication est requise.", "publish_at_required", 400);
+  }
+
   const series = await getSeriesById(data.series_id);
   if (!series) return jsonError("Série introuvable.", "not_found", 404);
 
@@ -92,25 +110,58 @@ export async function POST(request: Request) {
     );
   }
 
-  const nasBase = (
-    process.env.NAS_PAGE_BASE_URL ||
-    process.env.NAS_API_URL ||
-    ""
-  ).replace(/\/+$/, "");
-  // Sans NAS configuré, on indexe quand même le chapitre avec des pages de
-  // démonstration (dégradé assumé : permet de remplir et de tester le site).
-  // Dès que NAS_PAGE_BASE_URL est renseigné, les chemins pointent vers le NAS.
-  const storage: "nas" | "demo" = nasBase ? "nas" : "demo";
+  // ── Indexation des pages (§5.1, étape 3) ─────────────────────────────
+  let indexed: IndexedPage[];
+  let storage: "nas" | "demo";
 
-  const names = naturalSort(data.pages);
+  if (nasPath) {
+    let listing: { pages: NasPage[] };
+    try {
+      listing = await nasList(nasPath);
+    } catch (err) {
+      return jsonError(nasErrorMessage(err), "nas_error", 502);
+    }
+    if (listing.pages.length === 0) {
+      return jsonError(
+        "Aucune image détectée dans ce dossier (format attendu : 001.webp, 002.webp…).",
+        "empty_folder",
+        422,
+      );
+    }
+    indexed = listing.pages.map((page) => ({
+      chemin: page.path || `${nasPath}/${page.name}`,
+      largeur: page.width ?? 1200,
+      hauteur: page.height ?? 1800,
+      ...(page.bytes ? { bytes: page.bytes } : {}),
+      ...(page.hash ? { hash: page.hash } : {}),
+    }));
+    storage = "nas";
+  } else {
+    const names = naturalSort(data.pages);
+    indexed = names.map((name, index) => ({
+      chemin: demoPagePath(series.slug, data.numero, index),
+      largeur: 1200,
+      hauteur: 1800,
+      bytes: 0,
+      hash: `demo-${index}`,
+    }));
+    storage = "demo";
+  }
+
   const chapterId = rowId(`${series.id}-c${data.numero}`);
   const now = new Date().toISOString();
+  const publishAt =
+    data.statut === "scheduled"
+      ? new Date(data.publish_at!).toISOString()
+      : data.statut === "published"
+        ? now
+        : null;
 
   const job = await createImportJob({
-    type: data.source === "nas" ? "nas" : "upload",
+    type: data.source === "nas" || nasPath ? "nas" : "upload",
     statut: "cours",
     progression: 10,
-    message: `Indexation de ${names.length} pages…`,
+    message: `Indexation de ${indexed.length} pages…`,
     erreurs: [],
     created_by: user.id,
   });
@@ -122,10 +173,10 @@ export async function POST(request: Request) {
       numero: data.numero,
       volume: data.volume,
       titre: data.titre || `Chapitre ${data.numero}`,
-      statut: "draft",
-      publish_at: null,
+      statut: data.statut,
+      publish_at: publishAt,
       source: "nas",
-      nb_pages: names.length,
+      nb_pages: indexed.length,
       classification: data.classification || series.classification,
       vues: 0,
       created_by: user.id,
@@ -136,24 +187,37 @@ export async function POST(request: Request) {
       ...(chapter as unknown as Record<string, unknown>),
     });
 
-    for (let index = 0; index < names.length; index++) {
+    for (let index = 0; index < indexed.length; index++) {
+      const page = indexed[index];
       const pageId = rowId(chapterId, `p${index}`);
       await db.create(TABLES.pages, pageId, {
         id: pageId,
         chapter_id: chapterId,
         index,
-        chemin: pagePath(nasBase || null, series.slug, data.numero, index, names[index]),
-        largeur: 1200,
-        hauteur: 1800,
+        chemin: page.chemin,
+        largeur: page.largeur,
+        hauteur: page.hauteur,
+        bytes: page.bytes ?? 0,
+        hash: page.hash ?? "",
       });
     }
 
+    // ── Publication immédiate : staging → public + purge (§5.1, étape 5) ──
+    let nas: FileTransition | undefined;
+    if (data.statut === "published") {
+      nas = await transitionChapterFiles(chapter, "publish");
+    }
+
+    const warning = nas?.action === "error" ? nas.error : undefined;
     await updateImportJob(job.id, {
-      statut: "termine",
+      statut: warning ? "erreur" : "termine",
       progression: 100,
-      message: storage === "nas"
-        ? `Chapitre ${data.numero} créé en brouillon avec ${names.length} pages (NAS).`
-        : `Chapitre ${data.numero} créé en brouillon avec ${names.length} pages de démonstration — configurez NAS_PAGE_BASE_URL pour servir les scans réels.`,
+      message: warning
+        ? `Chapitre ${data.numero} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
+        : storage === "nas"
+          ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis ${nasPath}.`
+          : `Chapitre ${data.numero} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`,
+      ...(warning ? { erreurs: [warning] } : {}),
     });
 
     await audit({
@@ -164,16 +228,26 @@ export async function POST(request: Request) {
       apres: {
         series: series.titre,
         numero: data.numero,
-        pages: names.length,
+        pages: indexed.length,
         classification: chapter.classification,
         source: data.source,
+        statut: data.statut,
         storage,
+        ...(nasPath ? { nasPath } : {}),
+        ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
       },
       ip,
     });
 
     return Response.json(
-      { chapter, jobId: job.id, nbPages: names.length },
+      {
+        chapter,
+        jobId: job.id,
+        nbPages: indexed.length,
+        storage,
+        ...(nas ? { nas } : {}),
+        ...(warning ? { warning } : {}),
+      },
       { status: 201 },
     );
   } catch (err) {

@@ -168,7 +168,7 @@ async function continueBlock(userId: string) {
   const history = await listHistory(userId, 1);
   if (history.length === 0) return null;
   const entry = history[0];
-  const series = await getDb().get<Series>(TABLES.series, entry.series_id);
+  const series = await getSeriesById(entry.series_id);
   const chapters = await getDb().list<Chapter>(TABLES.chapters, {
     filters: [{ field: "id", op: "eq", value: entry.chapter_id }],
     limit: 1,
