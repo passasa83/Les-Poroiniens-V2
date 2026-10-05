@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Sommaire } from "../sommaire";
 
 export const metadata: Metadata = {
   title: "Mentions légales",
@@ -9,10 +10,19 @@ export const metadata: Metadata = {
 
 const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL;
 
+/** Sommaire ancré (§6.13) : chaque entrée pointe vers l'id de la section. */
+const SOMMAIRE = [
+  { id: "editeur", titre: "1. Éditeur du site" },
+  { id: "hebergement", titre: "2. Hébergement" },
+  { id: "propriete-intellectuelle", titre: "3. Propriété intellectuelle et contenus" },
+  { id: "responsabilite", titre: "4. Responsabilité" },
+  { id: "donnees-personnelles", titre: "5. Données personnelles" },
+];
+
 /** Champ non encore renseigné par le Gérant : visible dans le rendu. */
 function Todo({ children }: { children: string }) {
   return (
-    <span className="rounded bg-surface2 px-1.5 py-0.5 font-mono text-xs text-warn">
+    <span className="inline-block rounded border border-warn bg-surface px-1.5 py-0.5 font-mono text-xs text-warn">
       [à compléter : {children}]
     </span>
   );
@@ -42,8 +52,10 @@ export default function MentionsLegalesPage() {
         <p className="mt-2 text-xs text-muted">Dernière mise à jour : 4 octobre 2026.</p>
       </header>
 
+      <Sommaire entrees={SOMMAIRE} />
+
       <div className="mt-8 max-w-3xl space-y-6">
-        <section className="card p-6">
+        <section className="card p-6" id="editeur">
           <h2 className="section-title">1. Éditeur du site</h2>
           <dl className="mt-3 divide-y divide-line">
             <Row label="Dénomination">
@@ -84,7 +96,7 @@ export default function MentionsLegalesPage() {
           </dl>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="hebergement">
           <h2 className="section-title">2. Hébergement</h2>
           <dl className="mt-3 divide-y divide-line">
             <Row label="Hébergeur">
@@ -110,7 +122,7 @@ export default function MentionsLegalesPage() {
           </dl>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="propriete-intellectuelle">
           <h2 className="section-title">3. Propriété intellectuelle et contenus</h2>
           <div className="mt-3 space-y-3 text-sm text-muted">
             <p>
@@ -132,7 +144,7 @@ export default function MentionsLegalesPage() {
           </div>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="responsabilite">
           <h2 className="section-title">4. Responsabilité</h2>
           <div className="mt-3 space-y-3 text-sm text-muted">
             <p>
@@ -153,7 +165,7 @@ export default function MentionsLegalesPage() {
           </div>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="donnees-personnelles">
           <h2 className="section-title">5. Données personnelles</h2>
           <p className="mt-3 text-sm text-muted">
             Le détail des données collectées, des durées de conservation et de l&apos;exercice de

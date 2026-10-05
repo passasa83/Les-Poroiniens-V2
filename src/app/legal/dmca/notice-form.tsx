@@ -6,12 +6,16 @@ import { Button, Field, Input, Textarea } from "@/components/ui/kit";
 
 type Status = "idle" | "sending" | "sent" | "limited" | "invalid" | "error";
 
+type Recu = { reference: string; recuLe: string; message: string };
+
 /**
- * Formulaire de signalement (notice & takedown) → POST /api/legal/notice.
- * L'API répond de façon identique quel que soit le résultat du traitement.
+ * Formulaire de signalement (notice & takedown) → POST /api/reports (`type:
+ * "legal"`, accessible sans compte, §6.13). L'accusé de réception renvoie une
+ * référence de dépôt ; les autres réponses restent génériques.
  */
 export function NoticeForm() {
   const [status, setStatus] = useState<Status>("idle");
+  const [recu, setRecu] = useState<Recu | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -20,6 +24,7 @@ export function NoticeForm() {
     const form = event.currentTarget;
     const data = new FormData(form);
     const body = {
+      type: "legal",
       serie: String(data.get("serie") ?? ""),
       chapitre: String(data.get("chapitre") ?? ""),
       emplacement: String(data.get("emplacement") ?? ""),
@@ -30,15 +35,19 @@ export function NoticeForm() {
 
     setStatus("sending");
     try {
-      const res = await fetch("/api/legal/notice", {
+      const res = await fetch("/api/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      const json = (await res.json().catch(() => null)) as {
+        accusereception?: Recu;
+      } | null;
       if (res.status === 429) setStatus("limited");
       else if (res.status === 400) setStatus("invalid");
       else if (!res.ok) setStatus("error");
       else {
+        setRecu(json?.accusereception ?? null);
         setStatus("sent");
         form.reset();
       }
@@ -102,10 +111,26 @@ export function NoticeForm() {
       {status !== "idle" && <div className="divider my-4" />}
       <div aria-live="polite" className="space-y-3">
         {status === "sent" && (
-          <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg">
-            Votre signalement a bien été enregistré. Il sera examiné par l&apos;équipe et traité
-            dans les meilleurs délais.
-          </p>
+          <div role="status" className="rounded-xl border border-line border-l-4 border-l-ok bg-surface px-4 py-3 text-sm text-fg">
+            <p className="font-semibold">Accusé de réception de votre signalement</p>
+            <p className="mt-1 text-muted">
+              {recu?.message ??
+                "Votre signalement a bien été enregistré. Il sera examiné par l'équipe et traité dans les meilleurs délais."}
+            </p>
+            {recu && (
+              <p className="mt-2 text-xs text-muted">
+                Référence de dépôt :{" "}
+                <code className="text-fg">{recu.reference}</code>
+                {" — "}
+                reçu le{" "}
+                {new Date(recu.recuLe).toLocaleString("fr-FR", {
+                  dateStyle: "long",
+                  timeStyle: "short",
+                })}
+                . Conservez cette référence pour tout échange avec l&apos;équipe.
+              </p>
+            )}
+          </div>
         )}
         {status === "limited" && (
           <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-fg">

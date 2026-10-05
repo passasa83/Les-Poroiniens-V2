@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Sommaire } from "../sommaire";
 import { NoticeForm } from "./notice-form";
 
 export const metadata: Metadata = {
@@ -6,6 +7,14 @@ export const metadata: Metadata = {
   description:
     "Procédure de signalement et de retrait de contenu (notice & takedown) du site Les Poroiniens.",
 };
+
+/** Sommaire ancré (§6.13) : chaque entrée pointe vers l'id de la section. */
+const SOMMAIRE = [
+  { id: "contenu", titre: "Ce que doit contenir un signalement" },
+  { id: "formulaire", titre: "Formulaire de signalement" },
+  { id: "traitement", titre: "Traitement et délais" },
+  { id: "bon-a-savoir", titre: "Bon à savoir" },
+];
 
 const STEPS: Array<[string, string]> = [
   [
@@ -45,9 +54,11 @@ export default function DmcaPage() {
         <p className="mt-2 text-xs text-muted">Dernière mise à jour : 4 octobre 2026.</p>
       </header>
 
+      <Sommaire entrees={SOMMAIRE} />
+
       <div className="mt-8 grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="space-y-6">
-          <section className="card p-6">
+          <section className="card p-6" id="contenu">
             <h2 className="section-title">Ce que doit contenir un signalement</h2>
             <ol className="mt-4 space-y-4">
               {STEPS.map(([titre, texte], index) => (
@@ -64,7 +75,7 @@ export default function DmcaPage() {
             </ol>
           </section>
 
-          <section className="card p-6">
+          <section className="card p-6" id="formulaire">
             <h2 className="section-title">Formulaire de signalement</h2>
             <p className="mb-4 mt-2 text-sm text-muted">
               Les champs marqués comme facultatifs peuvent être laissés vides. Trois envois maximum
@@ -75,7 +86,7 @@ export default function DmcaPage() {
         </div>
 
         <aside className="space-y-6">
-          <section className="card p-6">
+          <section className="card p-6" id="traitement">
             <h2 className="section-title">Traitement</h2>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
               <li>
@@ -99,7 +110,7 @@ export default function DmcaPage() {
             </ul>
           </section>
 
-          <section className="card p-6">
+          <section className="card p-6" id="bon-a-savoir">
             <h2 className="section-title">Bon à savoir</h2>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
               <li>

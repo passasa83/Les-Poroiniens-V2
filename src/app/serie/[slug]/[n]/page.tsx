@@ -6,6 +6,7 @@ import { AdultGate } from "@/components/adult/adult-gate";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { Reader } from "@/components/reader/reader";
 import { SeriesGrid } from "@/components/series/series-card";
+import { ChapitreIndisponible } from "./chapitre-indisponible";
 import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getChapter, getReaderContext, recordView } from "@/lib/data/chapters";
 import { listHistory } from "@/lib/data/library";
@@ -121,6 +122,32 @@ export default async function ChapitrePage({ params }: { params: Params }) {
     href: chapterHref(series.slug, c.numero),
   }));
 
+  /* §6.12 « chapitre indisponible » : le chapitre existe mais aucune page ne
+     se charge → message précis + Réessayer / Signaler, sans le lecteur. */
+  const indisponible = !needsGate && context.pages.length === 0;
+
+  const navigation = (
+    <div className="container-site flex items-center justify-between gap-2">
+      {prevHref ? (
+        <Link href={prevHref} className="btn-secondary text-sm">
+          <ChevronLeft className="size-4" /> Chapitre précédent
+        </Link>
+      ) : (
+        <span className="btn-secondary text-sm opacity-50">Chapitre précédent</span>
+      )}
+      <Link href={`/serie/${series.slug}#chapitres`} className="btn-ghost text-sm">
+        Tous les chapitres
+      </Link>
+      {nextHref ? (
+        <Link href={nextHref} className="btn-primary text-sm">
+          Chapitre suivant <ChevronRight className="size-4" />
+        </Link>
+      ) : (
+        <span className="btn-primary text-sm opacity-50">Dernier chapitre</span>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6 py-4">
       {isAdult && <meta name="rating" content="adult" />}
@@ -139,7 +166,9 @@ export default async function ChapitrePage({ params }: { params: Params }) {
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
           {isAdult && <span className="badge bg-adult/15 text-adult">+18</span>}
-          <span>{context.pages.length} pages</span>
+          <span>
+            {indisponible ? "Pages indisponibles" : `${context.pages.length} pages`}
+          </span>
         </div>
       </div>
 
@@ -163,6 +192,24 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             </p>
           </div>
         </div>
+      ) : indisponible ? (
+        <>
+          <ChapitreIndisponible
+            chapterId={context.chapter.id}
+            chapterNumero={context.chapter.numero}
+            serieTitre={series.titre}
+          />
+          {navigation}
+
+          <div className="container-site">
+            <CommentsSection
+              targetType="chapter"
+              targetId={context.chapter.id}
+              canComment={Boolean(user)}
+              adultOnly={isAdult}
+            />
+          </div>
+        </>
       ) : (
         <>
           <div className="container-site">
@@ -187,25 +234,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             />
           </div>
 
-          <div className="container-site flex items-center justify-between gap-2">
-            {prevHref ? (
-              <Link href={prevHref} className="btn-secondary text-sm">
-                <ChevronLeft className="size-4" /> Chapitre précédent
-              </Link>
-            ) : (
-              <span className="btn-secondary text-sm opacity-50">Chapitre précédent</span>
-            )}
-            <Link href={`/serie/${series.slug}#chapitres`} className="btn-ghost text-sm">
-              Tous les chapitres
-            </Link>
-            {nextHref ? (
-              <Link href={nextHref} className="btn-primary text-sm">
-                Chapitre suivant <ChevronRight className="size-4" />
-              </Link>
-            ) : (
-              <span className="btn-primary text-sm opacity-50">Dernier chapitre</span>
-            )}
-          </div>
+          {navigation}
 
           {/* Fin de chapitre (§6.6) : suite de la lecture ou suggestions. */}
           {recommandees.length > 0 && (

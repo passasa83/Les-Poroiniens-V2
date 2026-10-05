@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Sommaire } from "../sommaire";
 
 export const metadata: Metadata = {
   title: "Politique de confidentialité",
@@ -7,6 +8,18 @@ export const metadata: Metadata = {
 };
 
 const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL;
+
+/** Sommaire ancré (§6.13) : chaque entrée pointe vers l'id de la section. */
+const SOMMAIRE = [
+  { id: "responsable", titre: "1. Responsable du traitement" },
+  { id: "cookies", titre: "2. Cookies et stockage local" },
+  { id: "donnees-conservation", titre: "3. Données collectées et conservation" },
+  { id: "finalites", titre: "4. Finalités et bases de traitement" },
+  { id: "destinataires", titre: "5. Destinataires" },
+  { id: "droits", titre: "6. Vos droits" },
+  { id: "securite", titre: "7. Sécurité et sous-traitance" },
+  { id: "evolution", titre: "8. Évolution de cette politique" },
+];
 
 const DATA_ROWS: Array<[string, string, string]> = [
   [
@@ -71,8 +84,10 @@ export default function ConfidentialitePage() {
         <p className="mt-2 text-xs text-muted">Dernière mise à jour : 4 octobre 2026.</p>
       </header>
 
+      <Sommaire entrees={SOMMAIRE} />
+
       <div className="mt-8 max-w-3xl space-y-6">
-        <section className="card p-6">
+        <section className="card p-6" id="responsable">
           <h2 className="section-title">1. Responsable du traitement</h2>
           <p className="mt-3 text-sm text-muted">
             Le responsable du traitement est l&apos;éditeur du site, dont l&apos;identité figure
@@ -102,7 +117,7 @@ export default function ConfidentialitePage() {
           </p>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="cookies">
           <h2 className="section-title">2. Cookies et stockage local</h2>
           <div className="mt-3 space-y-3 text-sm text-muted">
             <p>
@@ -133,7 +148,7 @@ export default function ConfidentialitePage() {
           </div>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="donnees-conservation">
           <h2 className="section-title">3. Données collectées et durées de conservation</h2>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
@@ -161,7 +176,7 @@ export default function ConfidentialitePage() {
           </p>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="finalites">
           <h2 className="section-title">4. Finalités et bases de traitement</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
             <li>
@@ -183,7 +198,7 @@ export default function ConfidentialitePage() {
           </ul>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="destinataires">
           <h2 className="section-title">5. Destinataires</h2>
           <div className="mt-3 space-y-3 text-sm text-muted">
             <p>
@@ -200,7 +215,7 @@ export default function ConfidentialitePage() {
           </div>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="droits">
           <h2 className="section-title">6. Vos droits</h2>
           <div className="mt-3 space-y-3 text-sm text-muted">
             <p>Vous disposez des droits suivants : </p>
@@ -229,7 +244,7 @@ export default function ConfidentialitePage() {
           </div>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="securite">
           <h2 className="section-title">7. Sécurité et sous-traitance</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
             <li>Connexion chiffrée (HTTPS) sur l&apos;ensemble du site.</li>
@@ -250,7 +265,7 @@ export default function ConfidentialitePage() {
           </ul>
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6" id="evolution">
           <h2 className="section-title">8. Évolution de cette politique</h2>
           <p className="mt-3 text-sm text-muted">
             Cette politique peut évoluer pour refléter des changements du site ou de la réglementation.
