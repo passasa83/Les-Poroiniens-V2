@@ -4,8 +4,11 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  CalendarDays,
+  ChartColumn,
   Download,
   Image as ImageIcon,
+  MonitorSmartphone,
   Plus,
   Settings,
   Shield,
@@ -17,12 +20,11 @@ import {
 import { Badge, Button, Field, Input, Select, Textarea } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import { ROLE_LABELS } from "@/lib/roles";
-import type { CurrentUser, Profile, UserPreferences } from "@/lib/types";
+import type { CurrentUser, Profile, SessionInfo, UserPreferences } from "@/lib/types";
+import type { SectionKey } from "./sections";
 
 const MAX_AVATAR_BYTES = 800 * 1024;
 const MAX_TAGS = 80;
-
-type TabKey = "profil" | "preferences" | "confidentialite" | "compte";
 
 type ApiReply = { error?: string; message?: string };
 
@@ -67,9 +69,32 @@ async function toWebpBlob(file: File): Promise<Blob> {
   throw new Error("size");
 }
 
-export function CompteClient({ user, profile }: { user: CurrentUser; profile: Profile }) {
+/** Date ISO → « 2 octobre 2026 à 14:05 » ; null si la date est illisible. */
+function horodatage(iso: string | null): string | null {
+  if (!iso) return null;
+  const temps = Date.parse(iso);
+  if (Number.isNaN(temps)) return null;
+  return new Date(temps).toLocaleString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function CompteClient({
+  user,
+  profile,
+  sessions,
+  section,
+}: {
+  user: CurrentUser;
+  profile: Profile;
+  sessions: SessionInfo[];
+  section: SectionKey;
+}) {
   const router = useRouter();
-  const [tab, setTab] = useState<TabKey>("profil");
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   // Profil
@@ -88,6 +113,10 @@ export function CompteClient({ user, profile }: { user: CurrentUser; profile: Pr
   // Compte
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Sessions
+  const [confirmSessions, setConfirmSessions] = useState(false);
+  const [revoking, setRevoking] = useState(false);
 
   function fail(text: string) {
     setNotice({ tone: "error", text });
@@ -183,46 +212,105 @@ export function CompteClient({ user, profile }: { user: CurrentUser; profile: Pr
     router.refresh();
   }
 
-  const tabs: Array<{ key: TabKey; label: string; icon: typeof User }> = [
+  /* ── Sessions (§6.8) ─────────────────────────────────────────────── */
+
+  /** Révoque une session : si c'est la nôtre, la page bascule sur /connexion. */
+  async function revokeOne(session: SessionInfo) {
+    const result = await apiJson<{ ok: boolean; courante?: boolean }>(
+      `/api/account/sessions/${encodeURIComponent(session.id)}`,
+      { method: "DELETE" },
+    );
+    if (!result.ok) return fail(result.error);
+    if (result.data.courante) {
+      router.push("/connexion");
+      router.refresh();
+      return;
+    }
+    setNotice({ tone: "ok", text: "Session révoquée : cet appareil est déconnecté." });
+    router.refresh();
+  }
+
+  /** Révoque toutes les sessions, la nôtre comprise → déconnexion complète. */
+  async function revokeEverywhere() {
+    setConfirmSessions(false);
+    setRevoking(true);
+    const result = await apiJson<{ ok: boolean }>("/api/account/sessions", {
+      method: "DELETE",
+    });
+    setRevoking(false);
+    if (!result.ok) return fail(result.error);
+    router.push("/connexion");
+    router.refresh();
+  }
+
+  const tabs: Array<{ key: SectionKey; label: string; icon: typeof User }> = [
     { key: "profil", label: "Profil", icon: User },
     { key: "preferences", label: "Préférences", icon: SlidersHorizontal },
     { key: "confidentialite", label: "Confidentialité", icon: Shield },
+    { key: "sessions", label: "Sessions", icon: MonitorSmartphone },
     { key: "compte", label: "Compte", icon: Settings },
   ];
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-fg">Mon compte</h1>
-          <p className="text-sm text-muted">
-            {user.email} ·{" "}
+      <header className="card flex flex-wrap items-center gap-5 p-6">
+        <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-surface2 text-base font-black text-primary">
+          {avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatar} alt={`Avatar de ${profile.pseudo}`} className="size-16 object-cover" />
+          ) : (
+            profile.pseudo.slice(0, 2).toUpperCase()
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-black tracking-tight text-fg">Mon compte</h1>
             <Badge tone={user.role === "membre" ? "neutral" : "primary"}>
               {ROLE_LABELS[user.role]}
             </Badge>
+          </div>
+          <p className="truncate text-sm font-semibold text-fg">{profile.pseudo}</p>
+          <p className="truncate text-sm text-muted">{user.email}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted">
+            <CalendarDays className="size-3.5" aria-hidden />
+            Inscrit le{" "}
+            {new Date(profile.date_inscription).toLocaleDateString("fr-FR", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
           </p>
+          {profile.bio && (
+            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm text-fg">{profile.bio}</p>
+          )}
         </div>
-        <Link href={`/profil/${encodeURIComponent(profile.pseudo)}`} className="btn-secondary text-sm">
-          Voir mon profil public
-        </Link>
+
+        <div className="flex flex-wrap gap-2">
+          <Link href="/statistiques" className="btn-secondary text-sm">
+            <ChartColumn className="size-4" aria-hidden />
+            Mes statistiques
+          </Link>
+          <Link
+            href={`/profil/${encodeURIComponent(profile.pseudo)}`}
+            className="btn-secondary text-sm"
+          >
+            Voir mon profil public
+          </Link>
+        </div>
       </header>
 
-      <nav role="tablist" aria-label="Sections du compte" className="flex flex-wrap gap-2">
+      <nav aria-label="Sections du compte" className="flex flex-wrap gap-2">
         {tabs.map(({ key, label, icon: Icon }) => (
-          <button
+          <Link
             key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => {
-              setTab(key);
-              setNotice(null);
-            }}
-            className={`btn text-sm ${tab === key ? "btn-primary" : "btn-ghost"}`}
+            href={`/compte?section=${key}`}
+            aria-current={section === key ? "page" : undefined}
+            className={`btn text-sm ${section === key ? "btn-primary" : "btn-ghost"}`}
           >
-            <Icon className="size-4" />
+            <Icon className="size-4" aria-hidden />
             {label}
-          </button>
+          </Link>
         ))}
       </nav>
 
@@ -240,37 +328,24 @@ export function CompteClient({ user, profile }: { user: CurrentUser; profile: Pr
       )}
 
       {/* ── Profil ─────────────────────────────────────────────────── */}
-      {tab === "profil" && (
+      {section === "profil" && (
         <section className="card space-y-5 p-6" aria-label="Profil">
-          <div className="flex items-center gap-4">
-            <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-surface2 text-lg font-bold text-primary">
-              {avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatar}
-                  alt={`Avatar de ${profile.pseudo}`}
-                  className="size-20 object-cover"
-                />
-              ) : (
-                profile.pseudo.slice(0, 2).toUpperCase()
-              )}
-            </div>
-            <div className="min-w-0 space-y-2">
-              <label className="btn-secondary cursor-pointer text-sm">
-                <ImageIcon className="size-4" />
-                {avatarBusy ? "Envoi…" : avatar ? "Changer l’avatar" : "Ajouter un avatar"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  disabled={avatarBusy}
-                  onChange={(e) => void pickAvatar(e)}
-                />
-              </label>
-              <p className="text-xs text-muted">
-                Redimensionné en WebP 256×256, 800 Ko maximum (§14.5).
-              </p>
-            </div>
+          <div className="space-y-2">
+            <label className="btn-secondary cursor-pointer text-sm">
+              <ImageIcon className="size-4" aria-hidden />
+              {avatarBusy ? "Envoi…" : avatar ? "Changer l’avatar" : "Ajouter un avatar"}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={avatarBusy}
+                onChange={(e) => void pickAvatar(e)}
+              />
+            </label>
+            <p className="text-xs text-muted">
+              L’avatar est affiché en tête de votre compte et sur votre profil public.
+              Redimensionné en WebP 256×256, 800 Ko maximum (§14.5).
+            </p>
           </div>
 
           <form onSubmit={saveProfile} className="space-y-4">
@@ -301,7 +376,7 @@ export function CompteClient({ user, profile }: { user: CurrentUser; profile: Pr
       )}
 
       {/* ── Préférences ────────────────────────────────────────────── */}
-      {tab === "preferences" && (
+      {section === "preferences" && (
         <section className="card space-y-5 p-6" aria-label="Préférences">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Thème" htmlFor="theme">
@@ -439,7 +514,7 @@ export function CompteClient({ user, profile }: { user: CurrentUser; profile: Pr
       )}
 
       {/* ── Confidentialité ────────────────────────────────────────── */}
-      {tab === "confidentialite" && (
+      {section === "confidentialite" && (
         <section className="card space-y-5 p-6" aria-label="Confidentialité">
           <p className="text-sm text-muted">
             Ces réglages décident de ce que les visiteurs voient sur votre{" "}
@@ -463,8 +538,111 @@ export function CompteClient({ user, profile }: { user: CurrentUser; profile: Pr
         </section>
       )}
 
+      {/* ── Sessions ───────────────────────────────────────────────── */}
+      {section === "sessions" && (
+        <section className="card space-y-5 p-6" aria-label="Sessions">
+          <div className="space-y-1">
+            <p className="section-title">Sessions de connexion</p>
+            <p className="text-sm text-muted">
+              Les appareils actuellement connectés à votre compte. Révoquer une session
+              déconnecte immédiatement l’appareil concerné.
+            </p>
+          </div>
+
+          {sessions.length === 0 ? (
+            <p className="rounded-xl border border-line bg-surface2 px-3 py-2 text-sm text-muted">
+              Aucune session active détectée pour ce compte.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {sessions.map((session) => {
+                const depuis = horodatage(session.creeeLe);
+                const expiration = horodatage(session.expireLe);
+                return (
+                  <li
+                    key={session.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface2 px-4 py-3"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
+                        <MonitorSmartphone className="size-4 shrink-0 text-muted" aria-hidden />
+                        <span className="truncate">{session.appareil}</span>
+                        {session.courante && <Badge tone="ok">Session actuelle</Badge>}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {session.fournisseur}
+                        {session.ip ? ` · ${session.ip}` : ""}
+                        {session.pays ? ` · ${session.pays}` : ""}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {depuis ? `Connecté depuis le ${depuis}` : "Date de connexion inconnue"}
+                        {expiration ? ` · expire le ${expiration}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      onClick={() => void revokeOne(session)}
+                    >
+                      {session.courante ? "Se déconnecter ici" : "Révoquer"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className="divider" />
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={() => setConfirmSessions(true)}
+              disabled={revoking}
+            >
+              Révoquer toutes les sessions
+            </button>
+            <p className="text-xs text-muted">
+              Vous serez déconnecté de tous les appareils, y compris de celui-ci.
+            </p>
+          </div>
+
+          <Modal
+            open={confirmSessions}
+            onClose={() => setConfirmSessions(false)}
+            title="Révoquer toutes les sessions"
+          >
+            <div className="space-y-4 text-sm">
+              <p className="text-muted">
+                Toutes les sessions seront détruites : vous devrez vous reconnecter sur chacun
+                de vos appareils, y compris celui-ci.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setConfirmSessions(false)}
+                  disabled={revoking}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="btn-danger"
+                  onClick={() => void revokeEverywhere()}
+                  disabled={revoking}
+                >
+                  {revoking ? "Révocation…" : "Tout révoquer et se déconnecter"}
+                </button>
+              </div>
+            </div>
+          </Modal>
+        </section>
+      )}
+
       {/* ── Compte ─────────────────────────────────────────────────── */}
-      {tab === "compte" && (
+      {section === "compte" && (
         <section className="card space-y-5 p-6" aria-label="Compte">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>

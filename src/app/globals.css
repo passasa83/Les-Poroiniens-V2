@@ -248,6 +248,32 @@
     background-size: 400% 100%;
     animation: lp-shimmer 1.4s ease infinite;
   }
+
+  /* Barres des graphiques de statistiques (§6.8) : elles montent depuis la
+     ligne de base au premier rendu. Aucune dépendance au JavaScript, et
+     l'animation est neutralisée si l'utilisateur réduit les animations. */
+  .chart-bar {
+    transform-box: fill-box;
+    transform-origin: bottom;
+    animation: lp-bar 320ms cubic-bezier(0, 0, 0, 1) both;
+  }
+}
+
+@keyframes lp-bar {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* §8.1 « prefers-reduced-motion » : les graphiques restent immobiles. */
+@media (prefers-reduced-motion: reduce) {
+  .chart-bar {
+    animation: none !important;
+    transform: none;
+  }
 }
 
 @keyframes lp-shimmer {

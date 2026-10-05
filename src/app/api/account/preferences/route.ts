@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
-import { updatePreferences } from "@/lib/data/users";
+import { getProfile, updatePreferences } from "@/lib/data/users";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import type { UserPreferences } from "@/lib/types";
+import { DEFAULT_PREFERENCES, type UserPreferences } from "@/lib/types";
 
 /**
  * PATCH /api/account/preferences — §14.4.
@@ -20,6 +20,28 @@ const PreferencesSchema = z.object({
   notifications: z.boolean().optional(),
   tagsMasques: z.array(z.string().max(60)).max(80).optional(),
 });
+
+/**
+ * GET /api/account/preferences — §6.8 « Réglages ».
+ * Renvoie les préférences du compte connecté, complétées par les valeurs par
+ * défaut (un compte créé avant l'ajout d'un champ n'a pas de trou dans la
+ * réponse). Lecture seule : 401 sans session.
+ */
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Authentification requise.", code: "unauthorized" },
+      { status: 401 },
+    );
+  }
+  const profile = await getProfile(user.id);
+  const preferences: UserPreferences = {
+    ...DEFAULT_PREFERENCES,
+    ...(profile?.preferences ?? {}),
+  };
+  return NextResponse.json({ ok: true, preferences });
+}
 
 export async function PATCH(request: Request) {
   const user = await getCurrentUser();

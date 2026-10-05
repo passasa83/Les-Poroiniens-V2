@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarDays, FileText, Layers, Lock, Settings } from "lucide-react";
+import { BookOpen, CalendarDays, ChartColumn, Clock3, FileText, Layers, Lock, Settings } from "lucide-react";
 import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { computeStats, libraryWithSeries } from "@/lib/data/library";
 import { getProfileByPseudo } from "@/lib/data/users";
+import { duree } from "@/lib/format";
 import { atLeast, ROLE_LABELS } from "@/lib/roles";
 import { Badge, EmptyState } from "@/components/ui/kit";
 import { SeriesGrid } from "@/components/series/series-card";
@@ -77,14 +78,24 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
               })}
             </span>
           </p>
-          {profile.bio && <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm text-fg">{profile.bio}</p>}
+          {profile.bio ? (
+            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm text-fg">{profile.bio}</p>
+          ) : (
+            <p className="mt-2 text-sm text-muted">Aucune biographie pour l’instant.</p>
+          )}
         </div>
 
         {estMoi && (
-          <Link href="/compte" className="btn-secondary text-sm">
-            <Settings className="size-4" />
-            Modifier mon profil
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/statistiques" className="btn-secondary text-sm">
+              <ChartColumn className="size-4" aria-hidden />
+              Mes statistiques
+            </Link>
+            <Link href="/compte" className="btn-secondary text-sm">
+              <Settings className="size-4" aria-hidden />
+              Modifier mon profil
+            </Link>
+          </div>
         )}
       </header>
 
@@ -133,9 +144,10 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
             {profile.pseudo} a choisi de rendre ses statistiques privées.
           </p>
         ) : stats ? (
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatCard icon={<BookOpen className="size-3.5" />} label="Chapitres lus" value={stats.chapitres_lus} />
             <StatCard icon={<FileText className="size-3.5" />} label="Pages lues" value={stats.pages_lues} />
+            <StatCard icon={<Clock3 className="size-3.5" />} label="Temps de lecture estimé" value={duree(stats.minutes_estimes)} />
             <StatCard icon={<Layers className="size-3.5" />} label="Séries terminées" value={stats.series_terminees} />
             <StatCard
               icon={<CalendarDays className="size-3.5" />}
@@ -166,7 +178,7 @@ function StatCard({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: number;
+  value: number | string;
 }) {
   return (
     <div className="card p-4">

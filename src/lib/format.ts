@@ -30,6 +30,16 @@ export function dateOrRelative(iso: string | null | undefined): string {
   return days >= 0 && days < 7 ? relativeTime(iso) || "" : date.toLocaleDateString("fr-FR");
 }
 
+/** Durée en minutes → « 45 min », « 2 h 30 » (§6.8, temps de lecture estimé). */
+export function duree(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) return "0 min";
+  const total = Math.round(minutes);
+  if (total < 60) return `${total} min`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m > 0 ? `${h} h ${m} min` : `${h} h`;
+}
+
 /** Synthèse d'un texte long pour les aperçus (synopsis du héros, §6.1). */
 export function plainText(raw: string | null | undefined, max = 180): string {
   const clean = (raw ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();

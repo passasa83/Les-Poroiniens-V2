@@ -98,6 +98,29 @@ export interface UserPreferences {
   tagsMasques: string[];
 }
 
+/**
+ * Session de connexion affichée dans « Mon compte › Sessions » (§6.8).
+ * Métadonnées affichables uniquement : jamais de jeton ni de secret.
+ */
+export interface SessionInfo {
+  /** Identifiant de la session, ou `courante` en mode démonstration. */
+  id: string;
+  /** Session de l'appareil en cours : sa révocation déconnecte l'utilisateur. */
+  courante: boolean;
+  /** Date ISO de création (null si le fournisseur ne la communique pas). */
+  creeeLe: string | null;
+  /** Date ISO d'expiration (null si inconnue). */
+  expireLe: string | null;
+  /** Appareil et navigateur, en toutes lettres. */
+  appareil: string;
+  /** Moyen de connexion : e-mail et mot de passe, compte tiers… */
+  fournisseur: string;
+  /** Adresse IP consignée à la création (null si absente). */
+  ip: string | null;
+  /** Pays déduit de l'IP (null si absent). */
+  pays: string | null;
+}
+
 export interface LibraryEntry {
   user_id: string;
   series_id: string;
