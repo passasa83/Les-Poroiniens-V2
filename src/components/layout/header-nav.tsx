@@ -22,7 +22,7 @@ const NAV: NavItem[] = [
   { href: "/nouveautes", label: "Nouveautés" },
   { href: "/catalogue?sort=popularite", label: "Populaires", match: "sort=popularite" },
   { href: "/catalogue", label: "Catalogue", bare: true },
-  { href: "/bibliotheque", label: "Favoris", member: true },
+  { href: "/bibliotheque?favoris=1", label: "Favoris", member: true },
   { href: "/aide", label: "Aide" },
 ];
 

@@ -262,7 +262,17 @@ async function continueBlock(userId: string) {
           <p className="text-sm text-muted">
             Chapitre {chapter.numero} — page {Math.max(entry.page, 1)}/{chapter.nb_pages}
           </p>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface2">
+          <div
+            className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface2"
+            role="progressbar"
+            aria-label={`Progression de lecture — ${series.titre}, chapitre ${chapter.numero}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.min(
+              100,
+              Math.round((Math.max(entry.page, 1) / Math.max(chapter.nb_pages, 1)) * 100),
+            )}
+          >
             <div
               className="h-full rounded-full bg-primary"
               style={{
