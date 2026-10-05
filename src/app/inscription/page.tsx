@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { InscriptionForm } from "./inscription-form";
+import { InscriptionForm } from "@/components/auth/inscription-form";
 
 export const metadata: Metadata = {
   title: "Inscription",
@@ -7,10 +7,12 @@ export const metadata: Metadata = {
 };
 
 export default function InscriptionPage() {
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || null;
+
   return (
     <div className="container-site py-10">
       <div className="mx-auto w-full max-w-md">
-        <InscriptionForm />
+        <InscriptionForm turnstileSiteKey={siteKey} />
       </div>
     </div>
   );

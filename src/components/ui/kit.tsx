@@ -52,14 +52,24 @@ export function Field({
   children: ReactNode;
   htmlFor?: string;
 }) {
+  /* Les identifiants `-hint` / `-error` permettent aux champs de déclarer
+     `aria-describedby` et d'annoncer l'aide et l'erreur au bon endroit (§8.1). */
   return (
     <div>
       <label className="label" htmlFor={htmlFor}>
         {label}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-xs text-muted">{hint}</p>}
-      {error && <p className="mt-1 text-xs text-adult">{error}</p>}
+      {hint && !error && (
+        <p className="mt-1 text-xs text-muted" id={htmlFor ? `${htmlFor}-hint` : undefined}>
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p className="mt-1 text-xs text-adult" id={htmlFor ? `${htmlFor}-error` : undefined}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }

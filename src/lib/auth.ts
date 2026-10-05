@@ -27,16 +27,24 @@ export function appwriteMode(): boolean {
   return Boolean(process.env.APPWRITE_API_KEY);
 }
 
-/** Poser la session (à appeler depuis une route ou une server action). */
+/**
+ * Pose la session (à appeler depuis une route ou une server action).
+ * `maxDays` nul → cookie de session : il disparaît à la fermeture du
+ * navigateur (« Se souvenir de moi » désactivé, §6.10).
+ */
 export async function setSessionCookie(sessionId: string, maxDays = SESSION_DAYS) {
   const store = await cookies();
-  store.set(SESSION_COOKIE, sessionId, {
+  const base = {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: maxDays * 86_400,
-  });
+  };
+  store.set(
+    SESSION_COOKIE,
+    sessionId,
+    maxDays > 0 ? { ...base, maxAge: maxDays * 86_400 } : base,
+  );
 }
 
 export async function clearSessionCookie() {
@@ -118,38 +126,96 @@ function toCurrentUser(profile: Profile, email: string): CurrentUser {
 
 /* ── Connexion / inscription ─────────────────────────────────────────── */
 
-export type AuthResult = { ok: true } | { ok: false; error: string };
+/** Champ fautif d'un refus : permet d'annoncer l'erreur au bon endroit. */
+export type AuthField = "pseudo" | "email" | "password" | "captcha";
 
-export async function login(email: string, password: string): Promise<AuthResult> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail || password.length < 6) {
-    return { ok: false, error: "Identifiants invalides." };
+export type AuthResult =
+  | { ok: true }
+  | { ok: false; error: string; field?: AuthField };
+
+/**
+ * Message d'échec unique (§14.2) : ni le pseudo, ni l'e-mail, ni l'existence
+ * d'un compte ne sont révélés. Identique que la saisie soit un identifiant
+ * inconnu ou un mot de passe erroné.
+ */
+const LOGIN_FAILED = "Identifiant ou mot de passe incorrect.";
+
+/**
+ * Résout un identifiant libre (e-mail **ou** pseudo, §6.10) en adresse e-mail.
+ * Retourne `null` quand rien ne correspond — sans distinguer la raison.
+ */
+async function resolveEmail(identifier: string): Promise<string | null> {
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) return identifier.toLowerCase();
+
+  const db = getDb();
+  const candidats = [...new Set([identifier, identifier.toLowerCase()])];
+  for (const pseudo of candidats) {
+    const { items } = await db.list<{ user_id: string }>(TABLES.profiles, {
+      filters: [{ field: "pseudo", op: "eq", value: pseudo }],
+      limit: 1,
+    });
+    const userId = items[0]?.user_id;
+    if (!userId) continue;
+    if (appwriteMode()) {
+      try {
+        const user = await users(adminClient()).get({ userId });
+        if (user.email) return user.email;
+      } catch {
+        return null;
+      }
+    } else {
+      const row = await db.get<Record<string, unknown>>(TABLES.users, userId);
+      if (row?.email) return String(row.email);
+    }
   }
+  return null;
+}
+
+/**
+ * Connexion par identifiant **ou** e-mail (§6.10).
+ * `remember` false → cookie de session (effacé à la fermeture du navigateur) ;
+ * `remember` true → cookie persistant de 30 jours.
+ */
+export async function login(
+  identifier: string,
+  password: string,
+  options: { remember?: boolean } = {},
+): Promise<AuthResult> {
+  const clean = identifier.trim();
+  if (!clean || password.length < 6) {
+    return { ok: false, error: LOGIN_FAILED };
+  }
+  const maxDays = options.remember === false ? 0 : SESSION_DAYS;
+
+  const email = await resolveEmail(clean);
+  if (!email) {
+    // Message unique : pas de distinction identifiant / mot de passe (§14.2)
+    return { ok: false, error: LOGIN_FAILED };
+  }
+
   if (appwriteMode()) {
     try {
-      const token = await createEmailSessionToken(cleanEmail, password);
+      const token = await createEmailSessionToken(email, password);
       if (!token) {
-        // Message unique : pas de distinction email / mot de passe (§14.2)
-        return { ok: false, error: "Identifiants invalides." };
+        return { ok: false, error: LOGIN_FAILED };
       }
-      await setSessionCookie(token);
+      await setSessionCookie(token, maxDays);
       return { ok: true };
     } catch {
-      // Message unique : pas de distinction email / mot de passe (§14.2)
-      return { ok: false, error: "Identifiants invalides." };
+      return { ok: false, error: LOGIN_FAILED };
     }
   }
   const db = getDb();
   const { items } = await db.list<Record<string, unknown>>(TABLES.users, {
-    filters: [{ field: "email", op: "eq", value: cleanEmail }],
+    filters: [{ field: "email", op: "eq", value: email }],
     limit: 1,
   });
   const user = items[0];
   if (!user || user.password !== password) {
-    return { ok: false, error: "Identifiants invalides." };
+    return { ok: false, error: LOGIN_FAILED };
   }
   const id = String(user.id);
-  await setSessionCookie(`${id}.${sign(id)}`);
+  await setSessionCookie(`${id}.${sign(id)}`, maxDays);
   return { ok: true };
 }
 
@@ -160,21 +226,42 @@ export async function register(input: {
 }): Promise<AuthResult> {
   const pseudo = input.pseudo.trim();
   const email = input.email.trim().toLowerCase();
-  if (pseudo.length < 3 || pseudo.length > 24) {
-    return { ok: false, error: "Le pseudo doit faire entre 3 et 24 caractères." };
+
+  /* Pseudo public (§6.10) : 6 à 20 caractères, lettres et chiffres seulement,
+     donc ni espace ni symbole. La longueur se compte en caractères Unicode. */
+  const longueur = [...pseudo].length;
+  if (longueur < 6 || longueur > 20) {
+    return {
+      ok: false,
+      error: "Le pseudo doit faire entre 6 et 20 caractères.",
+      field: "pseudo",
+    };
+  }
+  if (!/^[\p{L}\p{N}]+$/u.test(pseudo)) {
+    return {
+      ok: false,
+      error: "Le pseudo ne peut contenir ni espace ni symbole.",
+      field: "pseudo",
+    };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, error: "Adresse e-mail invalide." };
+    return { ok: false, error: "Adresse e-mail invalide.", field: "email" };
   }
   if (input.password.length < 8) {
-    return { ok: false, error: "Le mot de passe doit faire au moins 8 caractères." };
+    return {
+      ok: false,
+      error: "Le mot de passe doit faire au moins 8 caractères.",
+      field: "password",
+    };
   }
   const db = getDb();
   const { items } = await db.list<{ pseudo: string }>(TABLES.profiles, {
     filters: [{ field: "pseudo", op: "eq", value: pseudo }],
     limit: 1,
   });
-  if (items.length > 0) return { ok: false, error: "Ce pseudo est déjà pris." };
+  if (items.length > 0) {
+    return { ok: false, error: "Ce pseudo est déjà pris.", field: "pseudo" };
+  }
 
   if (appwriteMode()) {
     try {
@@ -198,7 +285,12 @@ export async function register(input: {
       await setSessionCookie(token);
       return { ok: true };
     } catch {
-      return { ok: false, error: "Impossible de créer le compte (adresse déjà utilisée ?)." };
+      // Message volontairement neutre : il ne confirme pas qu'un compte
+      // existe déjà avec cette adresse (§6.10 « pas d'énumération »).
+      return {
+        ok: false,
+        error: "Inscription impossible pour le moment. Réessayez plus tard.",
+      };
     }
   }
   const userId = `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

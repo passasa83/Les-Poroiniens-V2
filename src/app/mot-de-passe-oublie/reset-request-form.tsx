@@ -53,13 +53,6 @@ export function ResetRequestForm() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-black tracking-tight text-fg">Mot de passe oublié</h1>
-        <p className="text-sm text-muted">
-          La réinitialisation est <strong className="text-fg">manuelle</strong> au lancement du site.
-        </p>
-      </div>
-
       {message ? (
         <div className="card space-y-4 p-6 text-center">
           <p className="text-sm text-fg">{message}</p>

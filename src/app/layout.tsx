@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Poppins } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { CookieBanner } from "@/components/layout/cookie-banner";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
+import { AuthModal } from "@/components/auth/auth-modal";
+import { demoAccounts } from "@/lib/demo-accounts";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Les Poroiniens";
@@ -68,6 +71,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Espace réservé à la barre d'onglets mobile (hauteur + encoche) */}
         <div aria-hidden className="h-[calc(3.5rem+env(safe-area-inset-bottom))] md:hidden" />
         <CookieBanner />
+        {/* Modale d'authentification (§6.10) : connexion, inscription et
+            mot de passe oublié, accessibles depuis n'importe quelle page. */}
+        <Suspense fallback={null}>
+          <AuthModal
+            demoAccounts={demoAccounts()}
+            turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || null}
+          />
+        </Suspense>
       </body>
     </html>
   );

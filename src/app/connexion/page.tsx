@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { dataMode } from "@/lib/db";
-import { DEMO_ACCOUNTS } from "@/lib/db/seed";
-import { ConnexionForm, type DemoAccount } from "./connexion-form";
+import { demoAccounts } from "@/lib/demo-accounts";
+import { ConnexionForm } from "@/components/auth/connexion-form";
 
 export const metadata: Metadata = {
   title: "Connexion",
@@ -22,15 +21,11 @@ export default async function ConnexionPage({
   searchParams: Promise<{ next?: string | string[] }>;
 }) {
   const { next } = await searchParams;
-  const demoAccounts: DemoAccount[] =
-    dataMode() === "demo"
-      ? DEMO_ACCOUNTS.map(({ email, password, pseudo, role }) => ({ email, password, pseudo, role }))
-      : [];
 
   return (
     <div className="container-site py-10">
       <div className="mx-auto w-full max-w-md">
-        <ConnexionForm next={safeNext(next)} demoAccounts={demoAccounts} />
+        <ConnexionForm next={safeNext(next)} demoAccounts={demoAccounts()} />
       </div>
     </div>
   );

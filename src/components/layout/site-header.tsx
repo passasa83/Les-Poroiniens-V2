@@ -16,6 +16,7 @@ import { HeaderShell } from "./header-shell";
 import { Breadcrumbs, HeaderSearch, NavLinks } from "./header-nav";
 import { SiteThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
+import { AuthLink } from "@/components/auth/auth-link";
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
@@ -58,17 +59,21 @@ export async function SiteHeader() {
             </>
           ) : (
             <>
-              <Link href="/connexion" className="btn-ghost px-3 text-sm">
+              <AuthLink view="connexion" href="/connexion" className="btn-ghost px-3 text-sm">
                 <LogIn className="size-4" />
                 {/* `hidden` classique rendrait le lien sans nom accessible
                     sous lg (audit mobile) : le texte reste alors lu par les
                     lecteurs d'écran tout en restant masqué visuellement. */}
                 <span className="sr-only lg:not-sr-only">Connexion</span>
-              </Link>
+              </AuthLink>
               {registrationOpen && (
-                <Link href="/inscription" className="btn-primary hidden px-3 text-sm sm:inline-flex">
+                <AuthLink
+                  view="inscription"
+                  href="/inscription"
+                  className="btn-primary hidden px-3 text-sm sm:inline-flex"
+                >
                   Inscription
-                </Link>
+                </AuthLink>
               )}
             </>
           )}
