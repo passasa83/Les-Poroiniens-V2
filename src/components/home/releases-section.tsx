@@ -145,13 +145,14 @@ export function ReleasesSection({
                 width={600}
                 height={900}
                 loading="lazy"
+                decoding="async"
                 className="aspect-[2/3] w-full bg-surface2 object-cover transition-transform duration-300 group-hover:scale-[1.03]"
               />
             </Link>
             <div className="space-y-1.5 p-3">
               <Link
                 href={`/serie/${card.slug}`}
-                className="block truncate text-sm font-semibold text-fg hover:text-primary"
+                className="flex min-h-11 items-center truncate text-sm font-semibold text-fg hover:text-primary"
               >
                 {card.titre}
               </Link>

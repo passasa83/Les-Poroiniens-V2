@@ -786,6 +786,8 @@ export function ImportPanel({
                       <img
                         src={post.thumbnail}
                         alt=""
+                        width={40}
+                        height={40}
                         loading="lazy"
                         className="size-10 shrink-0 rounded-md border border-line object-cover"
                       />
@@ -975,6 +977,8 @@ function EntryList({ entries, onClear }: { entries: PageEntry[]; onClear: () => 
               key={entry.name}
               src={entry.preview ?? ""}
               alt={entry.name}
+              width={64}
+              height={96}
               loading="lazy"
               className="h-24 w-16 rounded-lg border border-line object-cover"
             />

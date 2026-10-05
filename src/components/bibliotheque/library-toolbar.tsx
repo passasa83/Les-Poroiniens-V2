@@ -61,7 +61,7 @@ export function LibraryToolbar({
             id="biblio-tri"
             value={tri}
             onChange={(event) => router.push(href({ tri: event.target.value as TriBiblio }))}
-            className="input h-10 min-h-10 w-auto cursor-pointer appearance-none pr-8 text-sm font-medium"
+            className="input h-11 min-h-11 w-auto cursor-pointer appearance-none pr-8 text-sm font-medium"
           >
             {TRIS_BIBLIO.map((option) => (
               <option key={option.value} value={option.value}>
@@ -79,7 +79,7 @@ export function LibraryToolbar({
               aria-current={vue === value ? "true" : undefined}
               title={label}
               className={clsx(
-                "inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium",
+                "inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium",
                 vue === value
                   ? "border-accent bg-accent/15 text-fg"
                   : "border-line bg-surface2 text-muted hover:text-fg",

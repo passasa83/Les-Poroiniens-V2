@@ -60,7 +60,7 @@ export function SortMenu() {
         id="catalogue-tri"
         value={sort}
         onChange={(event) => set({ sort: event.target.value })}
-        className="input h-10 min-h-10 w-auto cursor-pointer appearance-none pr-8 text-sm font-medium"
+        className="input h-11 min-h-11 w-auto cursor-pointer appearance-none pr-8 text-sm font-medium"
       >
         {SORTS.map((option) => (
           <option key={option.key} value={option.key}>
@@ -173,7 +173,7 @@ export function FilterDrawer({
         aria-expanded={open}
         aria-controls="catalogue-filtres"
         onClick={() => setOpen((value) => !value)}
-        className="btn-secondary h-10 min-h-10 text-sm"
+        className="btn-secondary text-sm"
       >
         <SlidersHorizontal aria-hidden className="size-4" />
         Filtrer
@@ -209,7 +209,7 @@ export function FilterDrawer({
                   setOpen(false);
                   triggerRef.current?.focus();
                 }}
-                className="inline-flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface2 hover:text-fg"
+                className="inline-flex size-11 items-center justify-center rounded-lg text-muted hover:bg-surface2 hover:text-fg"
               >
                 <X aria-hidden className="size-4" />
               </button>
@@ -268,7 +268,7 @@ export function FilterDrawer({
                   id="catalogue-langue"
                   value={langue}
                   onChange={(event) => set({ langue: event.target.value })}
-                  className="input h-10 min-h-10 w-full appearance-none text-sm"
+                  className="input h-11 min-h-11 w-full appearance-none text-sm"
                 >
                   <option value="">Toutes</option>
                   {langues.map((value) => (
@@ -286,7 +286,7 @@ export function FilterDrawer({
                 {adultAllowed ? (
                   <p className="text-sm text-muted">Contenu +18 affiché.</p>
                 ) : (
-                  <Link href={adultHref} className="btn-secondary h-9 min-h-9 text-sm">
+                  <Link href={adultHref} className="btn-secondary text-sm">
                     Afficher le contenu +18
                   </Link>
                 )}
@@ -310,7 +310,7 @@ export function FilterDrawer({
                     ...(keepQuery ? {} : { q: undefined }),
                   })
                 }
-                className="btn-secondary h-9 min-h-9 text-sm"
+                className="btn-secondary text-sm"
               >
                 Réinitialiser
               </button>

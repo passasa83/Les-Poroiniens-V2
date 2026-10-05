@@ -26,10 +26,14 @@ export async function SiteHeader() {
 
   return (
     <HeaderShell>
-      <div className="container-site flex h-16 items-center gap-2 md:h-[72px] md:gap-4">
+      {/* Barre flexible : au rendu normal rien ne se replie (mesuré 0 px de
+          débordement à 1024 / 1280 / 1440 px), mais avec le texte agrandi à
+          200 % (§8.1 / WCAG 1.4.4) les items passent à la ligne au lieu de
+          faire défiler horizontalement toute la page. */}
+      <div className="container-site flex min-h-16 flex-wrap items-center gap-2 md:min-h-[72px] md:gap-4">
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-2 font-black tracking-tight"
+          className="flex min-h-11 min-w-11 shrink-0 items-center gap-2 font-black tracking-tight"
         >
           <span className="grid size-8 place-items-center rounded-lg bg-accent text-sm text-primaryfg">
             LP
@@ -101,8 +105,11 @@ function MobileNav({ hasUser, canModerate }: { hasUser: boolean; canModerate: bo
   return (
     <div className="lg:hidden">
       <details className="group relative">
-        <summary className="btn-ghost list-none px-2 [&::-webkit-details-marker]:hidden">
-          <Menu className="size-5" aria-label="Ouvrir le menu" />
+        <summary
+          className="btn-ghost list-none px-2 [&::-webkit-details-marker]:hidden"
+          aria-label="Ouvrir le menu de navigation"
+        >
+          <Menu className="size-5" aria-hidden />
         </summary>
         <div className="absolute right-0 top-11 w-60 space-y-1 rounded-lg border border-line bg-surface p-3 shadow-xl">
           {/* La recherche de l'en-tête n'apparaît qu'à partir de lg : dans le
@@ -118,25 +125,25 @@ function MobileNav({ hasUser, canModerate }: { hasUser: boolean; canModerate: bo
           </form>
           <Link
             href="/nouveautes"
-            className="block rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+            className="flex min-h-11 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
           >
             Nouveautés
           </Link>
           <Link
             href="/catalogue?sort=popularite"
-            className="block rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+            className="flex min-h-11 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
           >
             Populaires
           </Link>
           <Link
             href="/catalogue"
-            className="block rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+            className="flex min-h-11 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
           >
             Catalogue
           </Link>
           <Link
             href="/aide"
-            className="block rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+            className="flex min-h-11 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
           >
             Aide
           </Link>
@@ -145,27 +152,27 @@ function MobileNav({ hasUser, canModerate }: { hasUser: boolean; canModerate: bo
             <>
               <Link
                 href="/bibliotheque"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+                className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
               >
                 <BookMarked className="size-4" /> Bibliothèque
               </Link>
               <Link
                 href="/historique"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+                className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
               >
                 <Clock className="size-4" /> Historique
               </Link>
               {canModerate && (
                 <Link
                   href="/moderation"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+                  className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
                 >
                   <Shield className="size-4" /> Modération
                 </Link>
               )}
               <Link
                 href="/compte"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
+                className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-muted hover:bg-surface2 hover:text-fg"
               >
                 <UserIcon className="size-4" /> Compte
               </Link>

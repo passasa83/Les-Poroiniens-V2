@@ -202,7 +202,7 @@ export function SearchBox({
             }}
             onBlur={() => setOpen(false)}
             onKeyDown={onKeyDown}
-            className="input w-full min-h-10 pl-9"
+            className="input w-full min-h-11 pl-9"
           />
         </div>
       </form>
@@ -264,6 +264,7 @@ export function SearchBox({
                     width={32}
                     height={48}
                     loading="lazy"
+                    decoding="async"
                     className="h-12 w-8 shrink-0 rounded border border-line object-cover"
                   />
                   <span className="min-w-0 flex-1">

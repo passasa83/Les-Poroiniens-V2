@@ -229,7 +229,7 @@ function SectionHeader({
         {icon}
         {title}
       </h2>
-      <Link href={href} className="link-muted text-sm">
+      <Link href={href} className="link-muted inline-flex min-h-11 items-center text-sm">
         Tout voir →
       </Link>
     </div>

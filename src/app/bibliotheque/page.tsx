@@ -171,6 +171,7 @@ function CarteBiblio({ row, vue }: { row: LibraryDashboardRow; vue: VueBiblio })
           width={600}
           height={900}
           loading="lazy"
+          decoding="async"
           className={
             vue === "grille"
               ? "aspect-[2/3] w-full rounded-lg bg-surface2 object-cover"

@@ -75,8 +75,8 @@ export function NavLinks({ hasUser }: { hasUser: boolean }) {
             aria-current={active ? "page" : undefined}
             className={
               active
-                ? "rounded-lg px-3 py-2 text-sm font-semibold text-fg underline decoration-2 underline-offset-[6px]"
-                : "rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-surface2 hover:text-fg"
+                ? "inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-fg underline decoration-2 underline-offset-[6px]"
+                : "inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-muted hover:bg-surface2 hover:text-fg"
             }
           >
             {item.label}
@@ -153,9 +153,12 @@ export function Breadcrumbs() {
 
   return (
     <nav aria-label="Fil d'Ariane" className="border-t border-line/60">
-      <ol className="container-site flex items-center gap-1.5 py-1.5 text-xs text-muted">
+      <ol className="container-site flex items-center gap-1.5 py-1 text-xs text-muted">
         <li>
-          <Link href="/" className="underline underline-offset-2 hover:text-fg">
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center underline underline-offset-2 hover:text-fg"
+          >
             Accueil
           </Link>
         </li>

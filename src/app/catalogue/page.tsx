@@ -87,7 +87,10 @@ export default async function CataloguePage({
   const gateOk = await adultGateAccepted();
   const adultParam = p.adult === "1";
   // Le contenu +18 n'apparaît qu'après validation du gate, ou sur demande
-  // explicite via ?adult=1 (auquel cas le gate s'affiche, §11).
+  // explicite via ?adult=1 (auquel cas le gate s'affiche, §11). Tant que le
+  // gate n'est pas validé, les cartes restent listées mais **floutées**
+  // (adultAllowed={gateOk}, §10 « couverture floutée tant que le gate n'est
+  // pas validé »).
   const includeAdult = gateOk || adultParam;
   const showGate = adultParam && !gateOk;
 
@@ -205,7 +208,7 @@ export default async function CataloguePage({
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <CatalogueTabs tabs={tabs} active={p.statut ?? ""} />
           <div className="flex shrink-0 items-center gap-2">
-            <Suspense fallback={<div className="h-10 w-32 animate-pulse rounded-lg bg-surface2" />}>
+            <Suspense fallback={<div className="h-11 w-32 animate-pulse rounded-lg bg-surface2" />}>
               <SortMenu />
               <FilterDrawer
                 genres={genres}
@@ -234,7 +237,7 @@ export default async function CataloguePage({
         />
       ) : (
         <>
-          <CatalogueGrid series={result.items} adultAllowed={includeAdult} />
+          <CatalogueGrid series={result.items} adultAllowed={gateOk} />
           <Pagination
             page={result.page}
             pageCount={result.pageCount}

@@ -27,7 +27,7 @@ export type UpdateCardData = {
 export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boolean }) {
   return (
     <li>
-      <Link href={`/serie/${item.slug}`} className="group block focus-visible:outline-none">
+      <Link href={`/serie/${item.slug}`} className="group block">
         <div className="relative overflow-hidden rounded-lg border border-line bg-surface2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -36,6 +36,7 @@ export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boole
             width={300}
             height={450}
             loading="lazy"
+            decoding="async"
             className="cover transition-transform duration-200 group-hover:scale-[1.03]"
           />
           {fresh && (

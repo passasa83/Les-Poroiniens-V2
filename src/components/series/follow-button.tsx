@@ -133,7 +133,7 @@ export function FollowButton({
               aria-pressed={entry.note === n}
               onClick={() => save({ note: entry.note === n ? null : n })}
               className={clsx(
-                "size-8 rounded-lg border text-xs font-semibold transition-colors",
+                "size-11 rounded-lg border text-xs font-semibold transition-colors",
                 entry.note === n
                   ? "border-primary bg-primary/20 text-fg"
                   : "border-line bg-surface2 text-muted hover:border-primary hover:text-fg",

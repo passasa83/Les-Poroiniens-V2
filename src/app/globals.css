@@ -163,12 +163,15 @@
   }
 
   /* ── Bouton (§7) : M = 44 px de haut, cible tactile ≥ 44 px ─────────── */
+  /* `min-w-11` complète la règle : un bouton réduit à une icône (thème,
+     réglages du lecteur, favori…) conserve une zone de clic de 44 px de
+     large comme de haut (§8.1). */
   .btn,
   .btn-primary,
   .btn-secondary,
   .btn-ghost,
   .btn-danger {
-    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-sm {
     @apply min-h-9 px-3 text-xs;
@@ -191,8 +194,10 @@
   }
 
   /* ── Champs (§7) ───────────────────────────────────────────────────── */
+  /* `focus:outline-none` est retiré : l'anneau `:focus-visible` de 2 px
+     (§8.1) doit rester visible sur les champs, au clavier comme au clic. */
   .input {
-    @apply w-full min-h-11 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-accent focus:outline-none;
+    @apply w-full min-h-11 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-accent;
   }
   .label {
     @apply mb-1.5 block text-sm font-medium text-muted;
@@ -207,8 +212,10 @@
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
+  /* Cible tactile ≥ 44 px (§8.1) : les chips servent d'onglets et de filtres
+     au doigt, elles ne peuvent pas rester à 36 px. */
   .chip {
-    @apply inline-flex min-h-9 cursor-pointer items-center rounded-full border border-line px-3 py-1 text-xs font-medium text-muted hover:border-accent hover:text-fg;
+    @apply inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line px-3 text-xs font-medium text-muted hover:border-accent hover:text-fg;
   }
   .chip-active {
     @apply border-accent bg-accent/15 text-fg;

@@ -16,8 +16,8 @@ export default function CatalogueLoading() {
           <div className="h-11 w-24 animate-pulse rounded-t-lg bg-surface2" />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <div className="h-10 w-32 animate-pulse rounded-lg bg-surface2" />
-          <div className="h-10 w-28 animate-pulse rounded-lg bg-surface2" />
+          <div className="h-11 w-32 animate-pulse rounded-lg bg-surface2" />
+          <div className="h-11 w-28 animate-pulse rounded-lg bg-surface2" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">

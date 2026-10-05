@@ -110,6 +110,10 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
                 width={1280}
                 height={720}
                 loading={i === 0 ? "eager" : "lazy"}
+                /* LCP de l'accueil (§8.2) : la première diapositive est
+                   prioritaire, les suivantes sont différées. */
+                fetchPriority={i === 0 ? "high" : "auto"}
+                decoding={i === 0 ? "sync" : "async"}
                 className="absolute inset-0 size-full object-cover object-top"
               />
               {/* Voile dégradé : le texte reste lisible sur n'importe quelle image */}
@@ -117,7 +121,7 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
               <div className="absolute inset-0 bg-gradient-to-r from-bg/90 via-bg/40 to-transparent" />
 
               <div className="absolute inset-0 flex items-end">
-                <div className="container-site w-full pb-6 sm:pb-8">
+                <div className="container-site w-full pb-14 sm:pb-16">
                   <div className="max-w-2xl space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="primary">{s.typeLabel}</Badge>
@@ -186,7 +190,7 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
           {!reduced && (
             <button
               type="button"
-              className="grid h-11 w-8 place-items-center text-muted hover:text-fg"
+              className="grid h-11 w-11 place-items-center text-muted hover:text-fg"
               aria-pressed={!auto}
               aria-label={auto ? "Mettre le défilement automatique en pause" : "Reprendre le défilement automatique"}
               title={auto ? "Pause" : "Lecture"}
@@ -200,7 +204,7 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
               <button
                 key={s.id}
                 type="button"
-                className="grid h-11 w-6 place-items-center"
+                className="grid h-11 w-11 place-items-center"
                 aria-label={`${i + 1} sur ${total} : ${s.titre}`}
                 aria-current={i === index}
                 onClick={() => setIndex(i)}

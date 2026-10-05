@@ -53,6 +53,7 @@ export function RankList({
               width={48}
               height={72}
               loading="lazy"
+              decoding="async"
               className="h-16 w-11 shrink-0 rounded-lg bg-surface2 object-cover"
             />
             <div className="min-w-0 flex-1">

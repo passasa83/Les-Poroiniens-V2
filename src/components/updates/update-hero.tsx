@@ -27,7 +27,7 @@ export function UpdateHeroCard({ hero }: { hero: UpdateHeroData }) {
   return (
     <Link
       href={`/serie/${hero.slug}`}
-      className="group grid overflow-hidden rounded-2xl border border-line bg-surface focus-visible:outline-none sm:grid-cols-2"
+      className="group grid overflow-hidden rounded-2xl border border-line bg-surface sm:grid-cols-2"
     >
       <div className="flex flex-col justify-between gap-4 p-5">
         <div className="space-y-2.5">
@@ -66,6 +66,11 @@ export function UpdateHeroCard({ hero }: { hero: UpdateHeroData }) {
         <img
           src={hero.visuel}
           alt=""
+          width={1600}
+          height={900}
+          loading="eager"
+          fetchPriority="high"
+          decoding="sync"
           className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]"
         />
         <div

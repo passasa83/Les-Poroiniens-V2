@@ -57,7 +57,7 @@ export function UpdatesSidebar({
                 rel="noopener noreferrer nofollow"
                 aria-label={`Nous rejoindre sur ${label}`}
                 title={label}
-                className="grid size-10 place-items-center rounded-full border border-line text-muted transition-colors hover:border-accent hover:text-fg"
+                className="grid size-11 place-items-center rounded-full border border-line text-muted transition-colors hover:border-accent hover:text-fg"
               >
                 <Icon className="size-5" aria-hidden />
               </a>
@@ -77,7 +77,10 @@ export function UpdatesSidebar({
         <section>
           <div className="flex items-center justify-between">
             <h2 className="section-title">Les plus lus</h2>
-            <Link href="/catalogue?sort=popularite" className="link-muted text-sm">
+            <Link
+              href="/catalogue?sort=popularite"
+              className="link-muted inline-flex min-h-11 items-center text-sm"
+            >
               Voir tout →
             </Link>
           </div>

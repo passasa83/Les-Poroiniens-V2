@@ -165,7 +165,7 @@ export function ConnexionForm({
             <button
               type="button"
               onClick={() => setReveal((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted hover:text-fg"
+              className="absolute right-1 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-lg text-muted hover:text-fg"
               aria-label={reveal ? "Masquer le mot de passe" : "Afficher le mot de passe"}
             >
               {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -209,13 +209,13 @@ export function ConnexionForm({
             <button
               type="button"
               onClick={() => onSwitch("oublie")}
-              className="link-muted inline-flex items-center gap-1.5"
+              className="link-muted inline-flex min-h-11 items-center gap-1.5"
             >
               <KeyRound className="size-3.5" />
               Mot de passe oublié ?
             </button>
           ) : (
-            <Link href="/mot-de-passe-oublie" className="link-muted inline-flex items-center gap-1.5">
+            <Link href="/mot-de-passe-oublie" className="link-muted inline-flex min-h-11 items-center gap-1.5">
               <KeyRound className="size-3.5" />
               Mot de passe oublié ?
             </Link>
@@ -224,12 +224,12 @@ export function ConnexionForm({
             <button
               type="button"
               onClick={() => onSwitch("inscription")}
-              className="link-muted font-semibold"
+              className="link-muted inline-flex min-h-11 items-center font-semibold"
             >
               Créer un compte
             </button>
           ) : (
-            <Link href="/inscription" className="link-muted font-semibold">
+            <Link href="/inscription" className="link-muted inline-flex min-h-11 items-center font-semibold">
               Créer un compte
             </Link>
           )}

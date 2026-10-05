@@ -123,6 +123,7 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
                       width={48}
                       height={72}
                       loading="lazy"
+                      decoding="async"
                       className="h-[72px] w-12 shrink-0 rounded-lg object-cover"
                     />
                   ) : (

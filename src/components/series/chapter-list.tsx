@@ -93,7 +93,7 @@ export function ChapterList({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Rechercher un chapitre"
             aria-label="Rechercher un chapitre"
-            className="input w-full min-h-10 pl-9"
+            className="input w-full min-h-11 pl-9"
           />
         </div>
         <Link href={orderHref} className="btn-ghost shrink-0 text-sm">
@@ -114,13 +114,16 @@ export function ChapterList({
             const lu = overrides[chapter.id] ?? chapter.lu;
             return (
               <li key={chapter.id}>
-                <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface2">
+                <div className="flex items-center gap-3 px-4 transition-colors hover:bg-surface2">
                   <span className="w-14 shrink-0 text-sm font-bold text-primary">
                     Ch. {chapter.numero}
                   </span>
                   <Link
                     href={chapter.href}
-                    className="min-w-0 flex-1 truncate text-sm text-fg hover:text-primary"
+                    /* py-3 reporté sur le lien : la zone de clic occupe toute
+                       la hauteur de la ligne (44 px, §8.1) sans changer la
+                       hauteur de la rangée. */
+                    className="min-w-0 flex-1 truncate py-3 text-sm text-fg hover:text-primary"
                   >
                     {chapter.titre || `Chapitre ${chapter.numero}`}
                     {chapter.volume !== null && (

@@ -54,6 +54,8 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
             <img
               src={profile.avatar}
               alt={`Avatar de ${profile.pseudo}`}
+              width={80}
+              height={80}
               className="size-20 object-cover"
             />
           ) : (

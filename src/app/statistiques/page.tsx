@@ -549,6 +549,7 @@ export default async function StatistiquesPage({
                     width={64}
                     height={96}
                     loading="lazy"
+                    decoding="async"
                     className="h-24 w-16 rounded-lg object-cover"
                   />
                   <span className="min-w-0">

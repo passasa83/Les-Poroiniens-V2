@@ -146,6 +146,10 @@ export default async function NouveautesPage({
           <img
             src={hero.visuel}
             alt=""
+            width={1600}
+            height={900}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full scale-110 object-cover object-top opacity-25 blur-2xl"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-bg/70 to-bg" />

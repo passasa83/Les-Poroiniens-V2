@@ -190,7 +190,12 @@ export function ReaderTopBar({
           >
             {fullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
           </button>
-          <button type="button" className="btn-ghost px-2 text-xs" onClick={onReport}>
+          <button
+            type="button"
+            className="btn-ghost px-2 text-xs"
+            aria-label="Signaler une erreur"
+            onClick={onReport}
+          >
             <Flag className="size-4" />
             <span className="hidden sm:inline">Signaler</span>
           </button>

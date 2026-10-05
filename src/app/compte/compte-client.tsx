@@ -257,7 +257,13 @@ export function CompteClient({
         <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-surface2 text-base font-black text-primary">
           {avatar ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatar} alt={`Avatar de ${profile.pseudo}`} className="size-16 object-cover" />
+            <img
+              src={avatar}
+              alt={`Avatar de ${profile.pseudo}`}
+              width={64}
+              height={64}
+              className="size-16 object-cover"
+            />
           ) : (
             profile.pseudo.slice(0, 2).toUpperCase()
           )}

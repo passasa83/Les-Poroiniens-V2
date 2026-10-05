@@ -187,6 +187,10 @@ export default async function SeriePage({
             <img
               src={series.banniere ?? series.couverture}
               alt=""
+              width={1600}
+              height={900}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full scale-110 object-cover blur-2xl brightness-[.45] saturate-150"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-surface/95 via-surface/85 to-surface/60" />
@@ -201,6 +205,8 @@ export default async function SeriePage({
                 width={600}
                 height={900}
                 loading="eager"
+                fetchPriority="high"
+                decoding="sync"
                 className="aspect-[2/3] w-full rounded-xl border border-line object-cover shadow-lg"
               />
               {isAdult && (
@@ -306,7 +312,7 @@ export default async function SeriePage({
                 href={`/serie/${series.slug}?onglet=${tab.id}${asc ? "&ordre=asc" : ""}#contenu`}
                 aria-current={onglet === tab.id ? "page" : undefined}
                 className={clsx(
-                  "border-b-2 px-4 py-2 text-sm transition-colors",
+                  "inline-flex min-h-11 items-center border-b-2 px-4 text-sm transition-colors",
                   onglet === tab.id
                     ? "border-primary font-semibold text-fg"
                     : "border-transparent text-muted hover:text-fg",

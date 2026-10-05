@@ -125,7 +125,7 @@ export default async function RecherchePage({
             Suggestions populaires
           </h2>
           {suggestions.length > 0 ? (
-            <CatalogueGrid series={suggestions} adultAllowed={includeAdult} />
+            <CatalogueGrid series={suggestions} adultAllowed={gateOk} />
           ) : (
             <EmptyState
               title="Aucune suggestion"
@@ -268,7 +268,7 @@ export default async function RecherchePage({
         />
       ) : (
         <>
-          <CatalogueGrid series={result.items} adultAllowed={includeAdult} />
+          <CatalogueGrid series={result.items} adultAllowed={gateOk} />
           <Pagination
             page={result.page}
             pageCount={result.pageCount}
