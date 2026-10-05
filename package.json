@@ -11,7 +11,8 @@
     "appwrite:setup": "tsx scripts/appwrite-setup.mts",
     "appwrite:seed": "node scripts/post-cron.mjs seed",
     "appwrite:revalidate": "node scripts/post-cron.mjs revalidate",
-    "appwrite:diag": "tsx scripts/appwrite-diag.mts"
+    "appwrite:diag": "tsx scripts/appwrite-diag.mts",
+    "import:ancien": "tsx scripts/import-ancien.mts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
