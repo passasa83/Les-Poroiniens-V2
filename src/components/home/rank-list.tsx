@@ -14,9 +14,12 @@ const number = new Intl.NumberFormat("fr-FR");
 export function RankList({
   series,
   adultAllowed = false,
+  /** 2 colonnes sur l'accueil, 1 dans la colonne latérale des nouveautés (§6.2). */
+  columns = 2,
 }: {
   series: Series[];
   adultAllowed?: boolean;
+  columns?: 1 | 2;
 }) {
   const rows = series
     .filter((s) => adultAllowed || s.classification !== "adult")
@@ -25,7 +28,9 @@ export function RankList({
   if (rows.length === 0) return null;
 
   return (
-    <ol className="grid gap-2 sm:grid-cols-2">
+    /* `grid-cols-1` = minmax(0, 1fr) : sans contrainte, la piste en auto prend
+       la largeur max-content et le classement déborde de sa colonne (§6.2). */
+    <ol className={clsx("grid grid-cols-1 gap-2", columns === 2 && "sm:grid-cols-2")}>
       {rows.map((s, i) => (
         <li key={s.id}>
           <Link

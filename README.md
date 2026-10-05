@@ -192,7 +192,7 @@ les pages sont servies par le CDN tiers, aucun stockage ni transfet par Vercel.
 ## Contenu
 
 **Le site en production est volontairement vide** (remise à zéro du
-04/10/2026) : 0 série, 0 chapitre, 0 commentaire, seul le compte Gérant
+05/10/2026) : 0 série, 0 chapitre, 0 commentaire, seul le compte Gérant
 subsiste. Les tables Appwrite sont conservées (structure prête à l'emploi).
 
 Pour (re)remplir le site :

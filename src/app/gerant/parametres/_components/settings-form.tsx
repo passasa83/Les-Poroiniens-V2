@@ -24,6 +24,7 @@ type SettingsValues = {
   social_x: string;
   social_youtube: string;
   adresses_secours: string;
+  nouveautes_serie: string;
 };
 
 type UserLite = { userId: string; pseudo: string; role: Role };
@@ -268,6 +269,23 @@ export function SettingsForm({
               maxLength={1000}
               rows={3}
               placeholder={"https://secours.poroiniens.fr\nhttps://les-poroiniens.example"}
+            />
+          </Field>
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <h2 className="section-title">Page Nouveautés</h2>
+          <Field
+            label="Série à la une"
+            htmlFor="st-nouveautes"
+            hint="Slug de la série mise en avant sur /nouveautés (visible dans son adresse : /serie/…). Vide = le dernier chapitre publié."
+          >
+            <Input
+              id="st-nouveautes"
+              value={values.nouveautes_serie}
+              onChange={(e) => set("nouveautes_serie", e.target.value)}
+              maxLength={120}
+              placeholder="nuits-blanches-a-tokyo"
             />
           </Field>
         </Card>

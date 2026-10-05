@@ -19,7 +19,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/catalogue?sort=nouveautes", label: "Nouveautés", match: "sort=nouveautes" },
+  { href: "/nouveautes", label: "Nouveautés" },
   { href: "/catalogue?sort=popularite", label: "Populaires", match: "sort=popularite" },
   { href: "/catalogue", label: "Catalogue", bare: true },
   { href: "/bibliotheque", label: "Favoris", member: true },
@@ -142,6 +142,7 @@ export function HeaderSearch() {
 /* ── Fil d'Ariane sous la barre, sur les pages de liste (DA §5.1) ─────── */
 
 const CRUMBS: Array<{ test: (path: string, search: string) => boolean; label: string }> = [
+  { test: (p) => p === "/nouveautes", label: "Nouveautés" },
   { test: (p, s) => p === "/catalogue" && s.includes("sort=nouveautes"), label: "Nouveautés" },
   { test: (p, s) => p === "/catalogue" && s.includes("sort=popularite"), label: "Populaires" },
   { test: (p) => p === "/catalogue", label: "Catalogue" },

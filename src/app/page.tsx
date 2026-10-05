@@ -89,6 +89,12 @@ export default async function HomePage() {
 
   return (
     <div className="container-site space-y-12 py-6">
+      {/* Le héros et les sections portent des h2 : la page a besoin d'un h1,
+          même invisible, pour la hiérarchie des titres et le référencement. */}
+      <h1 className="sr-only">
+        Les Poroiniens — dernières sorties, nouveautés et classement des scans
+      </h1>
+
       {announcement && (
         <div className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-fg">
           {announcement}

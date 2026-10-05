@@ -24,6 +24,8 @@ const settingsInput = z.object({
   social_youtube: z.string().trim().max(300).optional(),
   /** Une adresse de secours par ligne (§5.4). */
   adresses_secours: z.string().max(1000).optional(),
+  /** Slug de la série mise en avant sur /nouveautés (§6.2), vide = dernier chapitre publié. */
+  nouveautes_serie: z.string().trim().max(120).optional(),
 });
 
 /**
@@ -71,6 +73,7 @@ export async function GET() {
       social_x: settings.social_x ?? "",
       social_youtube: settings.social_youtube ?? "",
       adresses_secours: settings.adresses_secours ?? "",
+      nouveautes_serie: settings.nouveautes_serie ?? "",
     },
     secrets: Object.fromEntries(
       Object.entries(secrets).map(([key, value]) => [
@@ -125,6 +128,9 @@ export async function PATCH(request: Request) {
   if (incoming.social_youtube !== undefined) toStore.social_youtube = incoming.social_youtube;
   if (incoming.adresses_secours !== undefined) {
     toStore.adresses_secours = incoming.adresses_secours;
+  }
+  if (incoming.nouveautes_serie !== undefined) {
+    toStore.nouveautes_serie = incoming.nouveautes_serie;
   }
 
   for (const [cle, valeur] of Object.entries(toStore)) {

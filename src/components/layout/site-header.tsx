@@ -106,7 +106,7 @@ function MobileNav({ hasUser, canModerate }: { hasUser: boolean; canModerate: bo
             />
           </form>
           <Link
-            href="/catalogue?sort=nouveautes"
+            href="/nouveautes"
             className="block rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface2 hover:text-fg"
           >
             Nouveautés

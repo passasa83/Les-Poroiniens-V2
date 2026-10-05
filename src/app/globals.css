@@ -52,7 +52,7 @@
   --on-accent: #ffffff;
   --ok: #147a4f;
   --warn: #b45309;
-  --adult: #c4162e;
+  --adult: #b8122a; /* +18 en fond translucide : 4,7:1 sur --surface (AA §3.3) */
   --on-adult: #ffffff;
   --shadow: 0 18px 40px -28px rgb(20 22 31 / 0.35);
 

@@ -149,6 +149,67 @@ export interface ReleaseItem extends Chapter {
 }
 
 /**
+ * « Nouveautés » (§6.2) : chapitres publiés sur les `days` derniers jours
+ * (7 au maximum), du plus récent au plus ancien, avec leur série.
+ * Le découpage « Dernières 24 h / Hier / … » est calculé ensuite côté page.
+ */
+export async function listUpdates(
+  opts: {
+    days?: number;
+    type?: SeriesType | "";
+    includeAdult?: boolean;
+    limit?: number;
+  } = {},
+): Promise<ReleaseItem[]> {
+  const days = Math.min(Math.max(opts.days ?? 7, 1), 7);
+  const limit = Math.min(Math.max(opts.limit ?? 300, 1), 400);
+  const key = `updates:${days}:${opts.type ?? "all"}:${opts.includeAdult ? "adult" : "safe"}`;
+
+  return cached(key, 60_000, async () => {
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    const filters = [
+      { field: "statut", op: "eq" as const, value: "published" },
+      { field: "publish_at", op: "gte" as const, value: since },
+      ...(!opts.includeAdult
+        ? [{ field: "classification", op: "eq" as const, value: "all" }]
+        : []),
+      ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+    ];
+
+    const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+      filters,
+      order: { field: "publish_at", dir: "desc" },
+      limit,
+    });
+
+    const now = Date.now();
+    const out: ReleaseItem[] = [];
+    for (const chapter of items) {
+      const publishAt = chapter.publish_at ? Date.parse(chapter.publish_at) : NaN;
+      if (Number.isNaN(publishAt) || publishAt > now) continue; // planifié / horodatage absurde
+      const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
+      if (series && (opts.includeAdult || series.classification !== "adult")) {
+        out.push({ ...chapter, series: mapSeries(series) });
+      }
+    }
+    return out;
+  });
+}
+
+/** Dernier chapitre publié d'une série (carte héros des nouveautés, §6.2). */
+export async function latestPublishedChapter(seriesId: string): Promise<Chapter | null> {
+  const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+    filters: [
+      { field: "series_id", op: "eq", value: seriesId },
+      { field: "statut", op: "eq", value: "published" },
+    ],
+    order: { field: "publish_at", dir: "desc" },
+    limit: 1,
+  });
+  return items[0] ?? null;
+}
+
+/**
  * « Dernières sorties » (§6.1) : chapitres publiés les plus récents, avec leur
  * série, filtrables par format (manga / manhwa / manhua) via la colonne
  * dénormalisée `series_type`, paginés côté serveur.
@@ -219,6 +280,7 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
       });
   invalidate("recent-chapters:");
   invalidate("releases:");
+  invalidate("updates:");
   invalidate("series:");
   return updated;
 }

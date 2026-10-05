@@ -283,9 +283,17 @@ function build(): DemoDatabase {
 
     for (let n = 1; n <= nbChapters; n++) {
       const chapterId = rowId(`${seriesId}-c${n}`);
-      // les derniers chapitres des 3 premières séries sont très récents
-      const ageDays = n === nbChapters && si < 3 ? si : nbChapters - n + 3;
-      const published = iso(-ageDays * DAY - n * 3600_000);
+      /* Cadence des publications : les cinq derniers chapitres des trois
+         premières séries s'étagent sur les ~60 premières heures, pour que la
+         page Nouveautés (§6.2) affiche ses sections « Dernières 24 h »,
+         « Hier » et « Il y a 2 jours » sur le jeu de démonstration. Les
+         autres chapitres suivent l'ancienne cadence (rang + 3 jours). */
+      const rang = nbChapters - n; // 0 = chapitre le plus récent
+      const heuresRecent = si < 3 && rang <= 4 ? 3 + si * 3 + rang * 12 : null;
+      const published =
+        heuresRecent !== null
+          ? iso(-heuresRecent * 3600_000)
+          : iso(-(rang + 3) * DAY - n * 3600_000);
       const nbPages = 16 + ((n + si) % 7);
       const chapter = {
         id: chapterId,

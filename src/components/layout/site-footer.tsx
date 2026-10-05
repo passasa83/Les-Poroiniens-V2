@@ -19,7 +19,7 @@ export function SiteFooter() {
               </Link>
             </li>
             <li>
-              <Link className="link-muted" href="/catalogue?sort=nouveautes">
+              <Link className="link-muted" href="/nouveautes">
                 Dernières sorties
               </Link>
             </li>

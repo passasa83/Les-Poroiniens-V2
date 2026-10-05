@@ -13,6 +13,7 @@ const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").re
 const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }> = [
   { path: "/", changeFrequency: "daily", priority: 1 },
   { path: "/catalogue", changeFrequency: "daily", priority: 0.9 },
+  { path: "/nouveautes", changeFrequency: "daily", priority: 0.8 },
   { path: "/recherche", changeFrequency: "weekly", priority: 0.5 },
   { path: "/aide", changeFrequency: "monthly", priority: 0.4 },
   { path: "/legal/mentions", changeFrequency: "yearly", priority: 0.2 },
