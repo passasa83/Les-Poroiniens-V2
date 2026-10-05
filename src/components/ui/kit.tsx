@@ -87,12 +87,16 @@ export function Badge({
   children: ReactNode;
   className?: string;
 }) {
+  /* Teinte de fond à 5 % : le texte coloré doit rester lisible (AA ≥ 4,5:1)
+     sur --surface (clair comme sombre). À 15 %, le fond teinté rapprochait
+     trop les tons clairs (« warn », « accent ») de leur propre texte :
+     minimum mesuré 4,08:1. À 5 %, le minimum remonte à 4,68:1 (§3.3 / §6.7). */
   const tones = {
     neutral: "bg-surface2 text-muted",
-    primary: "bg-primary/15 text-primary",
-    adult: "bg-adult/15 text-adult",
-    ok: "bg-ok/15 text-ok",
-    warn: "bg-warn/15 text-warn",
+    primary: "bg-primary/5 text-primary",
+    adult: "bg-adult/5 text-adult",
+    ok: "bg-ok/5 text-ok",
+    warn: "bg-warn/5 text-warn",
   };
   return <span className={clsx("badge", tones[tone], className)}>{children}</span>;
 }

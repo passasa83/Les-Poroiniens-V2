@@ -1,5 +1,6 @@
 import "server-only";
 import { getDb, rowId, TABLES } from "@/lib/db";
+import { getChapterById, listChapters } from "@/lib/data/chapters";
 import { mapSeries } from "@/lib/data/series";
 import type { HistoryEntry, LibraryEntry, LibraryStatus, Series } from "@/lib/types";
 
@@ -197,4 +198,96 @@ export async function libraryWithSeries(
     out.push({ ...entry, series: row ? mapSeries(row) : null });
   }
   return out;
+}
+
+/* ── Tableau de bord de la bibliothèque (§6.7) ───────────────────────────── */
+
+export interface LibraryDashboardRow {
+  entry: LibraryEntry;
+  series: Series | null;
+  /** Chapitres publiés de la série. */
+  totalChapitres: number;
+  /** Premier numéro publié (cible du bouton « Lire » d'une série commencée à rien). */
+  premierNumero: number | null;
+  /** Dernier chapitre atteint et page : même reprise que la fiche (§6.5). */
+  reprise: { numero: number; page: number } | null;
+  /** Date ISO de la dernière lecture, `null` si la série n'a jamais été ouverte. */
+  derniereLecture: string | null;
+  /** Publication la plus récente de la série → tri « nouveautés » (§6.7). */
+  derniereSortie: string | null;
+  /** Chapitres parus après la dernière lecture → badge « +N non lus ». */
+  nonLus: number;
+  /** Progression en pourcentage (0 à 100), arrondie à l'unité. */
+  progression: number;
+}
+
+/**
+ * Ligne de la bibliothèque enrichie pour la page §6.7 : progression, dernier
+ * chapitre lu et chapitres non lus.
+ *
+ * Lecture séquentielle assumée (le lecteur reprend toujours sur le dernier
+ * chapitre atteint) : la progression suit le numéro de reprise et les
+ * chapitres parus ensuite constituent les non-lus. Aucune écriture.
+ */
+export async function libraryDashboard(userId: string): Promise<LibraryDashboardRow[]> {
+  const [entries, history] = await Promise.all([listLibrary(userId), listHistory(userId, 1000)]);
+
+  // Dernière lecture par série (le plus récent `read_at` l'emporte).
+  const dernieresLectures = new Map<string, HistoryEntry>();
+  for (const h of history) {
+    const courante = dernieresLectures.get(h.series_id);
+    if (!courante || h.read_at > courante.read_at) dernieresLectures.set(h.series_id, h);
+  }
+
+  const rows: LibraryDashboardRow[] = [];
+  for (const entry of entries) {
+    const [row, chapters] = await Promise.all([
+      getDb().get<Series>(TABLES.series, entry.series_id),
+      listChapters(entry.series_id, { publishedOnly: true }),
+    ]);
+    const series = row ? mapSeries(row) : null;
+    const byId = new Map(chapters.map((c) => [c.id, c]));
+    const numeros = chapters.map((c) => c.numero);
+    const total = chapters.length;
+    const premierNumero = total > 0 ? Math.min(...numeros) : null;
+    // Dernière parution (§6.7 « nouveautés ») : publication la plus récente.
+    const derniereSortie = chapters.reduce<string | null>((latest, c) => {
+      const date = c.publish_at ?? c.created_at;
+      return latest === null || date > latest ? date : latest;
+    }, null);
+
+    // Reprise : historique d'abord, sinon la progression déjà en biblio.
+    const lecture = dernieresLectures.get(entry.series_id) ?? null;
+    let reprise: { numero: number; page: number } | null = null;
+    let derniereLecture: string | null = null;
+    if (lecture) {
+      const chapitre = byId.get(lecture.chapter_id) ?? (await getChapterById(lecture.chapter_id));
+      if (chapitre) reprise = { numero: chapitre.numero, page: Math.max(lecture.page, 1) };
+      derniereLecture = lecture.read_at;
+    }
+    if (!reprise && entry.last_chapter_id) {
+      const chapitre = byId.get(entry.last_chapter_id) ?? (await getChapterById(entry.last_chapter_id));
+      if (chapitre) {
+        reprise = { numero: chapitre.numero, page: Math.max(entry.last_page, 1) };
+        derniereLecture = entry.updated_at;
+      }
+    }
+
+    const atteint = reprise?.numero ?? 0;
+    // Progression : part des chapitres publiés atteints (numéro ≤ reprise),
+    // cohérente avec le badge « +N non lus » qui compte les suivants.
+    const nonLus = reprise ? chapters.filter((c) => c.numero > atteint).length : total;
+    rows.push({
+      entry,
+      series,
+      totalChapitres: total,
+      premierNumero,
+      reprise,
+      derniereLecture,
+      derniereSortie,
+      nonLus,
+      progression: total > 0 ? Math.round(((total - nonLus) / total) * 100) : 0,
+    });
+  }
+  return rows;
 }
