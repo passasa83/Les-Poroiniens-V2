@@ -101,6 +101,9 @@ const TABLES: Table[] = [
       { key: "nbVotes", type: "integer", def: 0 },
       { key: "vues", type: "integer", def: 0 },
       { key: "populaire", type: "integer", def: 0 },
+      // Compteur dénormalisé (§6.3) : alimenté à la création/suppression d'un
+      // chapitre, il permet de filtrer « One-shot » sans jointure.
+      { key: "nb_chapitres", type: "integer", def: 0 },
       { key: "created_at", ...DATE },
       { key: "updated_at", ...DATE },
     ],

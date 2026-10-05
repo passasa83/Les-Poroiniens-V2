@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { atLeast, can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
-import { getChapterById, saveChapter } from "@/lib/data/chapters";
+import { getChapterById, refreshSeriesChapterCount, saveChapter } from "@/lib/data/chapters";
 import { purgeImageErrors } from "@/lib/data/image-errors";
 import { getDb, TABLES } from "@/lib/db";
 import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
@@ -202,6 +202,7 @@ export async function DELETE(
   });
   for (const page of pages) await db.remove(TABLES.pages, page.id);
   await db.remove(TABLES.chapters, id);
+  await refreshSeriesChapterCount(existing.series_id);
   await purgeImageErrors(id);
 
   await audit({

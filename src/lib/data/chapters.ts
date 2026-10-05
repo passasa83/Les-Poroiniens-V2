@@ -282,7 +282,36 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
   invalidate("releases:");
   invalidate("updates:");
   invalidate("series:");
+
+  /* Compteur dénormalisé de la série (§6.3 « One-shot ») : recalculé au vol —
+     et non incrémenté — pour ne jamais dériver d'une écriture ratée. */
+  const movedSeries =
+    data.series_id !== undefined && data.series_id !== existing?.series_id;
+  if (!existing || movedSeries) {
+    await refreshSeriesChapterCount(updated.series_id);
+    if (movedSeries && existing?.series_id) await refreshSeriesChapterCount(existing.series_id);
+  }
   return updated;
+}
+
+/**
+ * Recalcule `series.nb_chapitres` (colonne dénormalisée, §6.3). Le compteur
+ * alimente le filtre « One-shot » : recalcé sur un échantillon limité, il
+ * complète à la volée une ligne héritée qui en manque (graines anciennes).
+ */
+export async function refreshSeriesChapterCount(seriesId?: string | null): Promise<void> {
+  if (!seriesId) return;
+  try {
+    const db = getDb();
+    const { total } = await db.list(TABLES.chapters, {
+      filters: [{ field: "series_id", op: "eq", value: seriesId }],
+      limit: 1,
+    });
+    await db.update(TABLES.series, seriesId, { nb_chapitres: total });
+    invalidate("series:");
+  } catch {
+    /* un souci de compteur ne doit pas faire échouer une écriture de chapitre. */
+  }
 }
 
 export async function recordView(chapter: Chapter): Promise<void> {

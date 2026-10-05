@@ -23,12 +23,19 @@ export type SeriesSort =
 
 export interface SeriesFilters {
   q?: string;
+  /** Genre unique **ou** liste séparée par des virgules (filtre multiple, §6.3) :
+   *  chaque valeur devient un critère `genres contains` (ET). */
   genre?: string;
   tag?: string;
   statut?: SeriesStatus | "";
   type?: SeriesType | "";
   annee?: number | "";
+  langue?: string;
   classification?: "all" | "adult" | "";
+  /** Onglet « One-shot » (§6.3) : œuvre d'une seule publication. */
+  oneShot?: boolean;
+  /** Onglets exclusifs : écarte les one-shots des listes « En cours »/« Terminés ». */
+  excludeOneShot?: boolean;
   sort?: SeriesSort;
   page?: number;
   perPage?: number;
@@ -56,11 +63,22 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
   const key = `series:${JSON.stringify({ ...f, page, perPage })}`;
   return cached(key, 30_000, async () => {
     const filters = [];
-    if (f.genre) filters.push({ field: "genres", op: "contains" as const, value: f.genre });
+    /* Genre multiple (§6.3) : « a,b » = série possédant a **et** b. */
+    for (const g of (f.genre ?? "").split(",").map((v) => v.trim()).filter(Boolean)) {
+      filters.push({ field: "genres", op: "contains" as const, value: g });
+    }
     if (f.tag) filters.push({ field: "tags", op: "contains" as const, value: f.tag });
     if (f.statut) filters.push({ field: "statut", op: "eq" as const, value: f.statut });
     if (f.type) filters.push({ field: "type", op: "eq" as const, value: f.type });
     if (f.annee) filters.push({ field: "annee", op: "eq" as const, value: f.annee });
+    if (f.langue) filters.push({ field: "langue", op: "eq" as const, value: f.langue });
+    /* Onglets de statut exclusifs (§6.3) : une publication unique appartient
+       à l'onglet « One-shot », pas aux listes « En cours »/« Terminés ». */
+    if (f.oneShot) {
+      filters.push({ field: "nb_chapitres", op: "eq" as const, value: 1 });
+    } else if (f.excludeOneShot) {
+      filters.push({ field: "nb_chapitres", op: "neq" as const, value: 1 });
+    }
     if (!f.includeAdult) {
       filters.push({ field: "classification", op: "eq" as const, value: "all" });
     } else if (f.classification === "adult") {

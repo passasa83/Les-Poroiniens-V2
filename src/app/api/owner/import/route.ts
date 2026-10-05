@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit, createImportJob, updateImportJob } from "@/lib/data/moderation";
+import { refreshSeriesChapterCount } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
 import { getDb, rowId, TABLES } from "@/lib/db";
 import { demoPagePath } from "@/lib/db/seed";
@@ -222,6 +223,7 @@ export async function POST(request: Request) {
     await db.create<Chapter>(TABLES.chapters, chapterId, {
       ...(chapter as unknown as Record<string, unknown>),
     });
+    await refreshSeriesChapterCount(data.series_id);
 
     for (let index = 0; index < indexed.length; index++) {
       const page = indexed[index];

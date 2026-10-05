@@ -30,6 +30,8 @@ export interface Series {
   nbVotes: number;
   vues: number;
   populaire: number;
+  /** Nombre de chapitres (dénormalisé, §6.3 « One-shot »). */
+  nb_chapitres: number;
   created_at: string;
   updated_at: string;
 }

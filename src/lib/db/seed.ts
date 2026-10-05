@@ -276,6 +276,7 @@ function build(): DemoDatabase {
       nbVotes: 40 + si * 61,
       vues: 12_000 + si * 3_457,
       populaire: 100 - si * 7,
+      nb_chapitres: nbChapters,
       created_at: iso(-(400 - si * 10) * DAY),
       updated_at: iso(updatedOffset),
     };
