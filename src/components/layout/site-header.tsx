@@ -89,14 +89,17 @@ async function getSetting(cle: string): Promise<string | undefined> {
 }
 
 function MobileNav({ hasUser, canModerate }: { hasUser: boolean; canModerate: boolean }) {
+  // Menu mobile visible dès que la barre de nav est masquée (lg).
   return (
-    <div className="md:hidden">
+    <div className="lg:hidden">
       <details className="group relative">
         <summary className="btn-ghost list-none px-2 [&::-webkit-details-marker]:hidden">
           <Menu className="size-5" aria-label="Ouvrir le menu" />
         </summary>
         <div className="absolute right-0 top-11 w-60 space-y-1 rounded-lg border border-line bg-surface p-3 shadow-xl">
-          <form action="/recherche" method="get" className="sm:hidden">
+          {/* La recherche de l'en-tête n'apparaît qu'à partir de lg : dans le
+              menu, elle reste proposée en dessous. */}
+          <form action="/recherche" method="get" className="lg:hidden">
             <input
               type="search"
               name="q"

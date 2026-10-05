@@ -62,8 +62,10 @@ function isActive(item: NavItem, path: string, search: string | null): boolean {
 export function NavLinks({ hasUser }: { hasUser: boolean }) {
   const { path, search } = useRoute();
 
+  // lg plutôt que md : en dessous de 1024 px, logo + nav + recherche + groupe
+  // de droite dépassent la fenêtre (mesuré : largeur minimale 1106 px).
   return (
-    <nav className="hidden items-center gap-0.5 md:flex" aria-label="Navigation principale">
+    <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Navigation principale">
       {NAV.filter((item) => !item.member || hasUser).map((item) => {
         const active = isActive(item, path, search);
         return (
@@ -119,8 +121,15 @@ export function HeaderSearch() {
     }
   }
 
+  // lg + flex-1/max-w-72 : le champ prend l'espace restant (plafonné à 288 px)
+  // au lieu d'en imposer 288 px à toutes les fenêtres moyennes.
   return (
-    <form action="/recherche" method="get" onSubmit={onSubmit} className="hidden sm:block">
+    <form
+      action="/recherche"
+      method="get"
+      onSubmit={onSubmit}
+      className="hidden min-w-0 max-w-72 flex-1 lg:block"
+    >
       <div className="relative w-full">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
@@ -132,7 +141,7 @@ export function HeaderSearch() {
           name="q"
           placeholder="Rechercher par titre ou auteur"
           aria-label="Rechercher par titre ou auteur"
-          className="input w-full min-h-10 pl-9 sm:w-56 lg:w-72"
+          className="input w-full min-h-10 pl-9"
         />
       </div>
     </form>
