@@ -217,6 +217,26 @@ NAS et Cloudflare ne sont pas fournies (aucune n'existe côté responsable).
   couvertures tierces `file.garden`. **Import différé** : en attente du dépôt
   complet de l'ancien site (fichiers et dossiers ignorés par git).
 
+## Migration de l'ancien corpus
+
+L'ancien site (Cloudflare Pages + Functions, D1/KV/R2) a été livré en copie complète
+(`C:\Users\test\Documents\Ancien Poroiniens\Complet`). Décisions arrêtées avant import :
+
+1. **Import sans NAS** : seuls les chapitres **ImgChest** (~379 groupes, résolution sans clé)
+   et les couvertures `file.garden` / ImgChest seront importés. Les 3 844 chapitres qui
+   pointent vers `img.lesporoiniens.org` (HTTP 530) restent hors périmètre tant que le NAS
+   n'est pas relevé ; à ce moment-là, poser `IMG_BASE_URL` sur Vercel.
+2. **Comptes : repartir de zéro** — les hashs bcrypt de la D1 ne sont pas réutilisables dans
+   Appwrite Auth. Aucun import de comptes, aucune réinitialisation forcée. Le pipeline
+   likes/commentaires de l'ancien (KV, sans cron de production) n'est pas migré non plus.
+3. **Timing : après la Phase 6** des finitions DA (§11.1) — l'import se fera sur une chaîne
+   de recettes stable.
+
+**Points d'attention relevés dans la copie** : credentials SSH en clair dans
+`start_le_wrangler.txt` (gitignoré, à supprimer de la copie), JavaScript d'administration
+absent, `npm run generate:all` cassé (chemins racine vs `scripts/`), `EVENT_NOEL.json`
+manquant mais référencé, `.wrangler/state/` contenant les données de dev réelles.
+
 ## Contenu
 
 **Le site en production est volontairement vide** (remise à zéro du
