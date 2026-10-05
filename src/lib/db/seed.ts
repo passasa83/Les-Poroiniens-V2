@@ -277,6 +277,9 @@ function build(): DemoDatabase {
       vues: 12_000 + si * 3_457,
       populaire: 100 - si * 7,
       nb_chapitres: nbChapters,
+      // recherche plein texte (§6.4) : copies concaténées des colonnes array
+      recherche_alt: (s.alt ?? []).join(" "),
+      recherche_auteurs: s.auteurs.join(" "),
       created_at: iso(-(400 - si * 10) * DAY),
       updated_at: iso(updatedOffset),
     };

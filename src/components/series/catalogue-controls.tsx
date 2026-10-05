@@ -87,6 +87,7 @@ export function FilterDrawer({
   total,
   adultAllowed,
   adultHref,
+  keepQuery = false,
 }: {
   genres: string[];
   years: number[];
@@ -94,6 +95,8 @@ export function FilterDrawer({
   total: number;
   adultAllowed: boolean;
   adultHref: string;
+  /** Sur /recherche : « Réinitialiser » retire les filtres sans le mot-clé. */
+  keepQuery?: boolean;
 }) {
   const { sp, set } = useCatalogueUrl();
   const [open, setOpen] = useState(false);
@@ -304,7 +307,7 @@ export function FilterDrawer({
                     annee: undefined,
                     langue: undefined,
                     tag: undefined,
-                    q: undefined,
+                    ...(keepQuery ? {} : { q: undefined }),
                   })
                 }
                 className="btn-secondary h-9 min-h-9 text-sm"

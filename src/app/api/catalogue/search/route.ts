@@ -1,7 +1,8 @@
-import { getCurrentUser } from "@/lib/auth";
+import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { atLeast } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { listSeries } from "@/lib/data/series";
+import type { SeriesStatus, SeriesType } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,12 +12,16 @@ export type SeriesSearchResult = {
   slug: string;
   titre: string;
   couverture: string;
+  type: SeriesType;
+  statut: SeriesStatus;
+  classification: "all" | "adult";
 };
 
 /**
- * GET /api/catalogue/search?q= — recherche publique légère (max 10).
- * Utilisée notamment par les sélecteurs du back-office. Le contenu +18
- * n'est renvoyé qu'aux comptes admin+ (§11.2).
+ * GET /api/catalogue/search?q= — recherche publique légère (max 10), alimentée
+ * par le champ instantané (§6.4). Utilisée aussi par les sélecteurs du
+ * back-office. Le contenu +18 n'est renvoyé qu'aux comptes admin+ ou après
+ * validation du gate adulte (§11.2).
  */
 export async function GET(request: Request) {
   const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
@@ -31,7 +36,7 @@ export async function GET(request: Request) {
   }
 
   const user = await getCurrentUser();
-  const includeAdult = atLeast(user?.role, "admin");
+  const includeAdult = atLeast(user?.role, "admin") || (await adultGateAccepted());
 
   const { items } = await listSeries({
     q,
@@ -46,6 +51,9 @@ export async function GET(request: Request) {
     slug: s.slug,
     titre: s.titre,
     couverture: s.couverture,
+    type: s.type,
+    statut: s.statut,
+    classification: s.classification,
   }));
 
   return Response.json(results);

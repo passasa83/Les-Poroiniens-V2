@@ -32,6 +32,10 @@ export interface Series {
   populaire: number;
   /** Nombre de chapitres (dénormalisé, §6.3 « One-shot »). */
   nb_chapitres: number;
+  /** Texte de recherche concaténé (§6.4) : titres alternatifs et auteurs,
+   *  indexés en fulltext car `Query.search()` refuse les colonnes array. */
+  recherche_alt?: string;
+  recherche_auteurs?: string;
   created_at: string;
   updated_at: string;
 }

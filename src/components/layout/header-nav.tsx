@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { SearchBox } from "@/components/search/search-box";
 
 /* ── Liens de la barre supérieure (DA §5.1) ───────────────────────────── */
 
@@ -113,38 +113,15 @@ export function HeaderSearch() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    const value = inputRef.current?.value.trim();
-    if (!value) {
-      event.preventDefault();
-      inputRef.current?.focus();
-    }
-  }
-
   // lg + flex-1/max-w-72 : le champ prend l'espace restant (plafonné à 288 px)
-  // au lieu d'en imposer 288 px à toutes les fenêtres moyennes.
+  // au lieu d'en imposer 288 px à toutes les fenêtres moyennes. Résultats
+  // instantanés + historique local (§6.4) : champ partagé avec la page
+  // Recherche.
   return (
-    <form
-      action="/recherche"
-      method="get"
-      onSubmit={onSubmit}
+    <SearchBox
       className="hidden min-w-0 max-w-72 flex-1 lg:block"
-    >
-      <div className="relative w-full">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-          aria-hidden
-        />
-        <input
-          ref={inputRef}
-          type="search"
-          name="q"
-          placeholder="Rechercher par titre ou auteur"
-          aria-label="Rechercher par titre ou auteur"
-          className="input w-full min-h-10 pl-9"
-        />
-      </div>
-    </form>
+      inputRef={inputRef}
+    />
   );
 }
 

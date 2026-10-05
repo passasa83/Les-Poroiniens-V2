@@ -104,6 +104,11 @@ const TABLES: Table[] = [
       // Compteur dénormalisé (§6.3) : alimenté à la création/suppression d'un
       // chapitre, il permet de filtrer « One-shot » sans jointure.
       { key: "nb_chapitres", type: "integer", def: 0 },
+      // Texte de recherche concaténé (§6.4) : `Query.search()` refuse les
+      // colonnes array (`titresAlt`, `auteurs`), on indexe donc leur copie
+      // en chaîne dans un index fulltext dédié.
+      { key: "recherche_alt", type: "varchar", size: 512 },
+      { key: "recherche_auteurs", type: "varchar", size: 512 },
       { key: "created_at", ...DATE },
       { key: "updated_at", ...DATE },
     ],
@@ -113,6 +118,8 @@ const TABLES: Table[] = [
       // `Query.search()` exige un index fulltext : un index unique ne suffit
       // pas, d'où cet index dédié pour la recherche par slug.
       { key: "idx_slug_ft", type: "fulltext", columns: ["slug"] },
+      { key: "idx_alt_ft", type: "fulltext", columns: ["recherche_alt"] },
+      { key: "idx_auteurs_ft", type: "fulltext", columns: ["recherche_auteurs"] },
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_type", type: "key", columns: ["type"] },
       { key: "idx_class", type: "key", columns: ["classification"] },

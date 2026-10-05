@@ -93,15 +93,94 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
       offset: (page - 1) * perPage,
     });
 
+    const visible = (rows: Series[]) =>
+      (f.includeAdult ? rows : rows.filter((s) => s.classification !== "adult")).map(mapSeries);
+
+    /* Tolérance aux fautes (§6.4) : le plein texte Appwrite est strict (mots
+       entiers, accents normalisés). S'il ne renvoie rien, on note en mémoire
+       le jeu filtré complet (≤ 1000 lignes) sur les titre/alternatifs/auteurs. */
+    if (f.q && total === 0) {
+      const pool = await getDb().list<Series>(TABLES.series, {
+        filters,
+        order: sort,
+        limit: 1000,
+      });
+      const scored = pool.items
+        .map((s) => ({ s, score: fuzzyScore(f.q!, s) }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || b.s.populaire - a.s.populaire);
+      const slice = scored
+        .slice((page - 1) * perPage, (page - 1) * perPage + perPage)
+        .map((x) => x.s);
+      return {
+        items: visible(slice),
+        total: scored.length,
+        page,
+        pageCount: Math.max(1, Math.ceil(scored.length / perPage)),
+      };
+    }
+
     return {
-      items: (f.includeAdult ? items : items.filter((s) => s.classification !== "adult")).map(
-        mapSeries,
-      ),
+      items: visible(items),
       total,
       page,
       pageCount: Math.max(1, Math.ceil(total / perPage)),
     };
   });
+}
+
+/* ── Tolérance aux fautes (§6.4) ─────────────────────────────────────── */
+
+/** Déaccentue et minuscule : « Élite » ≈ « elite ». */
+const stripAccents = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function bigrams(value: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < value.length - 1; i++) out.push(value.slice(i, i + 2));
+  return out;
+}
+
+/** Similarité de Dice sur bigrammes : 1 = identique, 0 = sans rapport. */
+function dice(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const A = bigrams(a);
+  const B = new Set(bigrams(b));
+  if (!A.length || !B.size) return 0;
+  let hits = 0;
+  for (const g of A) if (B.has(g)) hits++;
+  return (2 * hits) / (A.length + B.size);
+}
+
+/**
+ * Score d'une série pour une requête : 0 = écarte, 1 = correspondance exacte
+ * (contiguë). Le score moyen des mots de la requête doit atteindre 0,6.
+ */
+export function fuzzyScore(query: string, serie: Series): number {
+  const needle = stripAccents(query).trim();
+  if (needle.length < 2) return 0;
+  const fields = [
+    stripAccents(serie.titre),
+    stripAccents(serie.slug),
+    ...(serie.titresAlt ?? []).map(stripAccents),
+    ...(serie.auteurs ?? []).map(stripAccents),
+  ];
+  const haystack = fields.join(" ");
+  if (haystack.includes(needle)) return 1;
+  const tokens = needle.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return 0;
+  let total = 0;
+  for (const token of tokens) {
+    let best = 0;
+    for (const field of fields) {
+      best = Math.max(best, dice(token, field));
+      for (const word of field.split(/\s+/)) best = Math.max(best, dice(token, word));
+    }
+    total += best;
+  }
+  const score = total / tokens.length;
+  return score >= 0.6 ? score : 0;
 }
 
 export async function getSeriesBySlug(slug: string): Promise<Series | null> {
@@ -205,6 +284,12 @@ export async function saveSeries(series: Partial<Series> & { id: string }): Prom
     data.couverture = storeCover(data.couverture);
   }
   const existing = await db.get<Series>(TABLES.series, id);
+  /* Recherche plein texte (§6.4) : les colonnes array ne sont pas indexables,
+     on alimente la copie concaténée à chaque écriture. */
+  const altText = data.titresAlt ?? existing?.titresAlt ?? [];
+  const authorText = data.auteurs ?? existing?.auteurs ?? [];
+  data.recherche_alt = altText.join(" ");
+  data.recherche_auteurs = authorText.join(" ");
   const updated = existing
     ? await db.update<Series>(TABLES.series, id, {
         ...(data as Record<string, unknown>),

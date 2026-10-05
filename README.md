@@ -67,9 +67,9 @@ Pour brancher Appwrite :
    supplémentaire.
 4. Après le 1er déploiement, corriger `NEXT_PUBLIC_SITE_URL` si l'URL diffère,
    puis **Redeploy**.
-5. Recette : accueil, nouveautés, catalogue, fiche série, lecteur, connexion au
-   compte Gérant (identifiants non publiés, voir « Comptes » plus bas), accès
-   `/gerant`.
+5. Recette : accueil, nouveautés, catalogue, recherche, fiche série, lecteur,
+   connexion au compte Gérant (identifiants non publiés, voir « Comptes » plus
+   bas), accès `/gerant`.
 
 Notes :
 
