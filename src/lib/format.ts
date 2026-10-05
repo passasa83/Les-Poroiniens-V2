@@ -21,6 +21,15 @@ export function relativeTime(iso: string | null | undefined): string {
   return `il y a ${years} an${years > 1 ? "s" : ""}`;
 }
 
+/** Date courte : relatif sous 7 jours, date complète au-delà (§6.5). */
+export function dateOrRelative(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const days = (Date.now() - date.getTime()) / 86_400_000;
+  return days >= 0 && days < 7 ? relativeTime(iso) || "" : date.toLocaleDateString("fr-FR");
+}
+
 /** Synthèse d'un texte long pour les aperçus (synopsis du héros, §6.1). */
 export function plainText(raw: string | null | undefined, max = 180): string {
   const clean = (raw ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();

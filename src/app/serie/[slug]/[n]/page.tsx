@@ -29,15 +29,23 @@ function chapterHref(slug: string, numero: number): string {
   return `/serie/${slug}/chapitre-${numero}`;
 }
 
+/** Ressource absente : `notFound()` est lancé dans une réponse streamée
+ *  (loading.tsx) et laisse un statut 200 — on exclut donc la page des
+ *  index (atténuation officielle Next, §11.2 « pas d'indexation parasite »). */
+const INCOUVERT: Metadata = {
+  title: "Chapitre introuvable",
+  robots: { index: false, follow: false },
+};
+
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { slug, n } = await params;
   const numero = parseNumero(n);
   const series = await getSeriesBySlug(slug);
-  if (!series || !numero) return { title: "Chapitre introuvable" };
+  if (!series || !numero) return INCOUVERT;
 
   const chapter = await getChapter(series.id, numero);
   // Chapitre inexistant : on renvoie le même titre que la page 404.
-  if (!chapter) return { title: "Chapitre introuvable" };
+  if (!chapter) return INCOUVERT;
 
   const isAdult = series.classification === "adult" || chapter.classification === "adult";
   const title = `${series.titre} — Chapitre ${numero}`;
