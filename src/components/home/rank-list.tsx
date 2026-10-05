@@ -1,5 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
+import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
 import { SERIES_TYPE_LABELS, type Series } from "@/lib/types";
 
@@ -58,12 +59,19 @@ export function RankList({
               <p className="truncate text-sm font-semibold text-fg group-hover:text-primary">
                 {s.titre}
               </p>
+              {/* §6.1 « genre » + §6.2 « auteur en gris » : les deux sur une ligne tronquée. */}
               <p className="meta flex items-center gap-1.5">
-                {SERIES_TYPE_LABELS[s.type]}
+                <span className="truncate">
+                  {s.auteurs[0] ? `${s.auteurs[0]} · ` : ""}
+                  {SERIES_TYPE_LABELS[s.type]}
+                </span>
                 {s.classification === "adult" && <Badge tone="adult">+18</Badge>}
               </p>
             </div>
-            <span className="meta shrink-0 tabular-nums">{number.format(s.vues)} vues</span>
+            <span className="meta inline-flex shrink-0 items-center gap-1 tabular-nums">
+              <Eye className="size-3" aria-hidden />
+              {number.format(s.vues)} vues
+            </span>
           </Link>
         </li>
       ))}

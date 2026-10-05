@@ -206,6 +206,10 @@ Pour (re)remplir le site :
   remplissable et testable de bout en bout.
 - **`npm run appwrite:seed`** : recopie le jeu de démonstration (10 séries) —
   à éviter si l'on veut garder un site vide.
+  L'insertion prend environ cinq minutes : le client HTTP expire au bout de
+  300 s (`UND_ERR_HEADERS_TIMEOUT`) alors que le serveur continue d'écrire.
+  **Relancer alors la commande** jusqu'à ce que le récapitulatif s'affiche :
+  elle est idempotente, les lignes déjà présentes sont simplement ignorées.
 
 ## Comptes
 

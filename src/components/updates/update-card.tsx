@@ -39,7 +39,7 @@ export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boole
             className="cover transition-transform duration-200 group-hover:scale-[1.03]"
           />
           {fresh && (
-            <span className="absolute left-0 top-0 inline-flex items-center gap-1 rounded-bl-lg rounded-tr-lg bg-accent px-2 py-1 text-[11px] font-semibold text-white">
+            <span className="absolute left-0 top-0 inline-flex items-center gap-1 rounded-tl-lg bg-accent px-2 py-1 text-[11px] font-semibold text-white">
               <Clock className="size-3" aria-hidden />
               24 h
             </span>
