@@ -1,39 +1,84 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Flag, ImageOff, Loader2 } from "lucide-react";
+import clsx from "clsx";
+import { ChevronLeft, ChevronRight, Flag, ImageOff } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal } from "@/components/ui/modal";
-import { ReaderControls, type ReaderMode, type ReaderSens } from "./reader-controls";
+import { ChapterLike } from "./chapter-like";
+import { ReaderBottomBar, ReaderTopBar, useReaderChrome } from "./reader-chrome";
+import { ReportDialog } from "./reader-report";
+import {
+  READER_MODES,
+  ReaderSettings,
+  type ReaderFit,
+  type ReaderMode,
+  type ReaderSens,
+  type ReaderTheme,
+} from "./reader-settings";
 
+/* ── Clés de stockage local (§6.6 « réglages mémorisés ») ───────────── */
+/** Mode : global, le même pour toutes les séries. */
 const MODE_KEY = "lp-reader-mode";
-const SENS_KEY = "lp-reader-sens";
+/** Sens : mémorisé par série (prioritaire sur la préférence du compte). */
+const SENS_KEY = "lp-reader-sens:";
+const FIT_KEY = "lp-reader-fit";
+const WIDTH_KEY = "lp-reader-width";
+const MAXW_KEY = "lp-reader-maxw";
+const THEME_KEY = "lp-reader-theme";
+const BRIGHT_KEY = "lp-reader-brightness";
+const SOLO_KEY = "lp-reader-first-solo";
+/** Progression des visiteurs : reprise sans compte. */
+const progressKey = (chapterId: string) => `lp-progress:${chapterId}`;
 
-const REPORT_REASONS: Array<{ value: string; label: string }> = [
-  { value: "page_manquante", label: "Page manquante" },
-  { value: "mauvaise_qualite", label: "Mauvaise qualité" },
-  { value: "mauvais_ordre", label: "Mauvais ordre" },
-  { value: "autre", label: "Autre" },
-];
+const FITS: ReaderFit[] = ["auto", "largeur", "hauteur", "perso"];
+const THEMES: ReaderTheme[] = ["site", "clair", "noir"];
 
 export type ReaderPage = { index: number; url: string; largeur?: number; hauteur?: number };
 
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
+const store = {
+  get(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* stockage indisponible : réglages non mémorisés */
+    }
+  },
+};
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 /**
- * Lecteur de scans (§6.4) : vertical / page / double page, sens gauche-droite
- * ou droite-gauche, plein écran, raccourcis clavier, swipe tactile,
- * progression sauvegardée par lots et signalement de problème.
+ * Lecteur de scans (§6.6) : chrome immersif auto-masquable (barre haute avec
+ * sélecteur de chapitre, barre inférieure avec progression), modes webtoon /
+ * page / double page, sens mémorisé par série, ajustement, thème et
+ * luminosité, zones tactiles, molette, raccourcis clavier, plein écran,
+ * progression (compte ou local), signalement et écran de fin dédié.
  */
 export function Reader({
   pages,
   chapterId,
   chapterNumero,
+  serieId,
+  serieSlug,
   serieTitre,
+  chapitres,
   initialMode,
   initialSens,
   initialPage = 1,
   canProgress = false,
+  canSync = false,
+  initialLikes = 0,
   prevHref = null,
   nextHref = null,
   nextChapterId = null,
@@ -41,11 +86,18 @@ export function Reader({
   pages: ReaderPage[];
   chapterId: string;
   chapterNumero: number;
+  serieId: string;
+  serieSlug: string;
   serieTitre: string;
+  /** Chapitres de la série, pour le sélecteur de la barre haute. */
+  chapitres: Array<{ numero: number; href: string }>;
   initialMode?: ReaderMode;
   initialSens?: ReaderSens;
   initialPage?: number;
   canProgress?: boolean;
+  /** Envoi des préférences au compte (fire-and-forget, debouncé). */
+  canSync?: boolean;
+  initialLikes?: number;
   prevHref?: string | null;
   nextHref?: string | null;
   /** Sert au préchargement de la première page du chapitre suivant (§7.2). */
@@ -56,18 +108,30 @@ export function Reader({
 
   const [mode, setMode] = useState<ReaderMode>(initialMode ?? "vertical");
   const [sens, setSens] = useState<ReaderSens>(initialSens ?? "rtl");
+  const [fit, setFit] = useState<ReaderFit>("auto");
   const [width, setWidth] = useState(100);
+  const [maxw, setMaxw] = useState(900);
+  const [theme, setTheme] = useState<ReaderTheme>("site");
+  const [brightness, setBrightness] = useState(1);
+  const [firstSolo, setFirstSolo] = useState(false);
   const [page, setPage] = useState(() => clamp(initialPage - 1, 0, lastIndex));
   const [fullscreen, setFullscreen] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportPage, setReportPage] = useState<number | null>(null);
+  /** État post-hydration : les préférences et la reprise sont lues en différé. */
+  const [hydrated, setHydrated] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const pagesRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef(page);
+  const modeRef = useRef(mode);
+  const sensRef = useRef(sens);
+  const resumeDoneRef = useRef(false);
   const lastSentRef = useRef(0);
   const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const throttleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prefsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Pages dont le chargement a échec après reprise (§9.1), envoyées par lots. */
   const failedRef = useRef<Set<number>>(new Set());
   const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,50 +139,163 @@ export function Reader({
   useEffect(() => {
     pageRef.current = page;
   }, [page]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    sensRef.current = sens;
+  }, [sens]);
+
+  /* ── Chrome immersif : visible au mouvement, masqué en lecture ─────── */
+  const { hidden: chromeHidden, inView, reveal, hide } = useReaderChrome(
+    containerRef,
+    settingsOpen,
+  );
+
+  useEffect(() => {
+    // Le site entier bascule en immersion tant que le lecteur est à l'écran :
+    // l'en-tête du site se masque (motif de `layout/header-shell.tsx`).
+    document.body.dataset.readerImmersive = inView ? "on" : "off";
+    return () => {
+      delete document.body.dataset.readerImmersive;
+    };
+  }, [inView]);
 
   /* ── Préférences mémorisées côté client (après hydration) ─────────── */
   useEffect(() => {
     // différé d'un tick : un setState synchrone dans un effet provoquerait
     // un rendu en cascade au montage
     const timer = window.setTimeout(() => {
-    try {
-        const savedMode = localStorage.getItem(MODE_KEY);
+      let resumeIndex = -1;
+      try {
+        const savedMode = store.get(MODE_KEY);
         if (savedMode === "vertical" || savedMode === "single" || savedMode === "double") {
           setMode(savedMode);
         }
-        const savedSens = localStorage.getItem(SENS_KEY);
+        // Sens : local par série > préférence du compte > défaut
+        const savedSens = store.get(SENS_KEY + serieId);
         if (savedSens === "ltr" || savedSens === "rtl") setSens(savedSens);
+
+        const savedFit = store.get(FIT_KEY);
+        if (savedFit && FITS.includes(savedFit as ReaderFit)) setFit(savedFit as ReaderFit);
+
+        const savedWidth = Number(store.get(WIDTH_KEY));
+        if (savedWidth >= 50 && savedWidth <= 100) setWidth(savedWidth);
+
+        const savedMaxw = Number(store.get(MAXW_KEY));
+        if (savedMaxw >= 320 && savedMaxw <= 1600) setMaxw(savedMaxw);
+
+        const savedTheme = store.get(THEME_KEY);
+        if (savedTheme && THEMES.includes(savedTheme as ReaderTheme)) {
+          setTheme(savedTheme as ReaderTheme);
+        }
+
+        const savedBrightness = Number(store.get(BRIGHT_KEY));
+        if (savedBrightness >= 0.6 && savedBrightness <= 1.3) setBrightness(savedBrightness);
+
+        const savedSolo = store.get(SOLO_KEY);
+        if (savedSolo === "1" || savedSolo === "0") setFirstSolo(savedSolo === "1");
+
+        // Reprise : l'historique du compte l'emporte, sinon la progression locale
+        resumeIndex = clamp(initialPage - 1, 0, lastIndex);
+        if (initialPage <= 1) {
+          const local = Number(store.get(progressKey(chapterId)));
+          if (Number.isFinite(local) && local >= 1) resumeIndex = clamp(local - 1, 0, lastIndex);
+        }
       } catch {
         /* stockage indisponible : on garde les préférences du profil */
       }
+      if (resumeIndex > 0) setPage(resumeIndex);
+      setHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
+  }, [serieId, chapterId, initialPage, lastIndex]);
+
+  /* ── Défilement vers une page (le mode réduit supprime l’animation) ── */
+  const scrollToPage = useCallback((index: number, behavior: ScrollBehavior = "smooth") => {
+    const el = containerRef.current?.querySelector(`#reader-page-${index}`);
+    const reduce = prefersReducedMotion();
+    el?.scrollIntoView({ behavior: reduce ? "auto" : behavior, block: "start" });
   }, []);
 
-  const changeMode = useCallback((next: ReaderMode) => {
-    setMode(next);
-    try {
-      localStorage.setItem(MODE_KEY, next);
-    } catch {
-      /* ignoré */
-    }
+  /* ── Reprise à la page exacte (§6.6) ───────────────────────────────── */
+  useEffect(() => {
+    if (!hydrated || resumeDoneRef.current || page <= 0) return;
+    resumeDoneRef.current = true;
+    if (mode !== "vertical") return; // en mode page, la bonne planche est déjà affichée
+    scrollToPage(page, "auto");
+    const timer = window.setTimeout(reveal, 400);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, page, mode, scrollToPage, reveal]);
+
+  /* ── Préférences : local + compte ──────────────────────────────────── */
+  const syncPrefs = useCallback(() => {
+    if (!canSync) return;
+    if (prefsTimer.current) clearTimeout(prefsTimer.current);
+    // Fire-and-forget : la synchro n'est jamais bloquante.
+    prefsTimer.current = setTimeout(() => {
+      void fetch("/api/account/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode_lecture: modeRef.current,
+          sens_lecture: sensRef.current,
+        }),
+        keepalive: true,
+      }).catch(() => undefined);
+    }, 800);
+  }, [canSync]);
+
+  const changeMode = useCallback(
+    (next: ReaderMode) => {
+      setMode(next);
+      store.set(MODE_KEY, next);
+      syncPrefs();
+    },
+    [syncPrefs],
+  );
+
+  const changeSens = useCallback(
+    (next: ReaderSens) => {
+      setSens(next);
+      store.set(SENS_KEY + serieId, next);
+      syncPrefs();
+    },
+    [serieId, syncPrefs],
+  );
+
+  const changeFit = useCallback((next: ReaderFit) => {
+    setFit(next);
+    store.set(FIT_KEY, next);
+  }, []);
+  const changeWidth = useCallback((next: number) => {
+    setWidth(next);
+    store.set(WIDTH_KEY, String(next));
+  }, []);
+  const changeMaxw = useCallback((next: number) => {
+    setMaxw(next);
+    store.set(MAXW_KEY, String(next));
+  }, []);
+  const changeTheme = useCallback((next: ReaderTheme) => {
+    setTheme(next);
+    store.set(THEME_KEY, next);
+  }, []);
+  const changeBrightness = useCallback((next: number) => {
+    setBrightness(next);
+    store.set(BRIGHT_KEY, String(next));
+  }, []);
+  const changeFirstSolo = useCallback((next: boolean) => {
+    setFirstSolo(next);
+    store.set(SOLO_KEY, next ? "1" : "0");
   }, []);
 
-  const changeSens = useCallback((next: ReaderSens) => {
-    setSens(next);
-    try {
-      localStorage.setItem(SENS_KEY, next);
-    } catch {
-      /* ignoré */
-    }
-  }, []);
+  const cycleMode = useCallback(() => {
+    const index = READER_MODES.findIndex((m) => m.key === modeRef.current);
+    const next = READER_MODES[(index + 1) % READER_MODES.length].key;
+    changeMode(next);
+  }, [changeMode]);
 
   /* ── Navigation ───────────────────────────────────────────────────── */
-
-  const scrollToPage = useCallback((index: number) => {
-    const el = containerRef.current?.querySelector(`#reader-page-${index}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
 
   const goTo = useCallback(
     (target: number) => {
@@ -148,11 +325,38 @@ export function Reader({
     else void el.requestFullscreen?.().catch(() => undefined);
   }, []);
 
-  /* ── Raccourcis clavier ───────────────────────────────────────────── */
+  const toggleSettings = useCallback(() => {
+    setSettingsOpen((open) => !open);
+    reveal();
+  }, [reveal]);
+
+  const openReport = useCallback(
+    (index?: number | null) => {
+      setSettingsOpen(false);
+      setReportPage(typeof index === "number" ? index : null);
+      setReportOpen(true);
+    },
+    [],
+  );
+
+  /* ── Raccourcis clavier (§6.6) ─────────────────────────────────────── */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // Échap : tiroir > modale > plein écran
+      if (event.key === "Escape") {
+        if (settingsOpen) {
+          event.preventDefault();
+          setSettingsOpen(false);
+          return;
+        }
+        if (reportOpen) return; // la modale se ferme elle-même
+        if (document.fullscreenElement) void document.exitFullscreen();
+        return;
+      }
+
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const forward: 1 | -1 = sens === "rtl" ? -1 : 1;
       const backward: 1 | -1 = sens === "rtl" ? 1 : -1;
@@ -183,14 +387,21 @@ export function Reader({
           event.preventDefault();
           toggleFullscreen();
           break;
-        case "Escape":
-          if (document.fullscreenElement) void document.exitFullscreen();
+        case "m":
+        case "M":
+          event.preventDefault();
+          toggleSettings();
+          break;
+        case "d":
+        case "D":
+          event.preventDefault();
+          cycleMode();
           break;
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [sens, step, toggleFullscreen]);
+  }, [sens, step, toggleFullscreen, toggleSettings, cycleMode, settingsOpen, reportOpen]);
 
   /* ── Plein écran ──────────────────────────────────────────────────── */
   useEffect(() => {
@@ -198,6 +409,35 @@ export function Reader({
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+
+  /* ── Molette : une page par cran, débouncée à 250 ms (§6.6) ───────── */
+  useEffect(() => {
+    const el = pagesRef.current;
+    if (!el || mode === "vertical") return;
+    let locked = false;
+    let lockTimer: number | null = null;
+
+    function onWheel(event: WheelEvent) {
+      if (Math.abs(event.deltaY) < 8) return;
+      const index = pageRef.current;
+      // Aux extrémités, on laisse défiler normalement (fin de chapitre, commentaires).
+      if (event.deltaY > 0 ? index >= lastIndex : index <= 0) return;
+      event.preventDefault();
+      if (locked) return;
+      locked = true;
+      lockTimer = window.setTimeout(() => {
+        locked = false;
+        lockTimer = null;
+      }, 250);
+      step(event.deltaY > 0 ? 1 : -1);
+    }
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (lockTimer !== null) window.clearTimeout(lockTimer);
+    };
+  }, [mode, step, lastIndex]);
 
   /* ── Suivi du scroll en mode vertical ─────────────────────────────── */
   useEffect(() => {
@@ -281,6 +521,21 @@ export function Reader({
     return () => window.removeEventListener("pagehide", onHide);
   }, [canProgress, send]);
 
+  /* ── Progression locale des visiteurs (§6.6 « reprise ») ───────────── */
+  const saveLocalProgress = useCallback(() => {
+    store.set(progressKey(chapterId), String(pageRef.current + 1));
+  }, [chapterId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(saveLocalProgress, 2000);
+    return () => window.clearTimeout(timer);
+  }, [page, saveLocalProgress]);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", saveLocalProgress);
+    return () => window.removeEventListener("pagehide", saveLocalProgress);
+  }, [saveLocalProgress]);
+
   /* ── Échecs de chargement : remontée groupée (§9.1) ─────────────────── */
   const flushFailures = useCallback(async () => {
     const indexes = [...failedRef.current];
@@ -307,14 +562,10 @@ export function Reader({
     [flushFailures],
   );
 
-  const openReport = useCallback((index?: number | null) => {
-    setReportPage(typeof index === "number" ? index : null);
-    setReportOpen(true);
-  }, []);
-
   useEffect(
     () => () => {
       if (failTimer.current) clearTimeout(failTimer.current);
+      if (prefsTimer.current) clearTimeout(prefsTimer.current);
     },
     [],
   );
@@ -342,170 +593,259 @@ export function Reader({
   /* ── Rendu ────────────────────────────────────────────────────────── */
   const isLast = page >= lastIndex;
   const showEnd = mode === "vertical" || isLast;
-  const widthStyle = useMemo(() => ({ width: `${clamp(width, 50, 100)}%` }), [width]);
-  /** Page paysage : en double page elle s'affiche seule (§7.2). */
-  const soloSpread = useMemo(() => isLandscape(pages[page]), [pages, page]);
+  /** Une planche paysage s'affiche seule ; la première page aussi si demandé (§6.6). */
+  const soloSpread = useMemo(
+    () => isLandscape(pages[page]) || (firstSolo && page === 0),
+    [pages, page, firstSolo],
+  );
+  /** Ajustement « hauteur » : une planche tient dans la fenêtre (page / double). */
+  const fitHeight = fit === "hauteur" && mode !== "vertical";
+
+  const contentStyle = useMemo<React.CSSProperties>(() => {
+    if (fit === "perso") {
+      return { width: "100%", maxWidth: `${clamp(maxw, 320, 2000)}px` };
+    }
+    if (fit === "largeur") return { width: `${clamp(width, 50, 100)}%` };
+    return { width: "100%" };
+  }, [fit, maxw, width]);
+
+  const zoneStyle = useMemo<React.CSSProperties>(() => {
+    const style: React.CSSProperties = {};
+    if (fitHeight) style.height = "calc(100dvh - 11rem)";
+    if (brightness !== 1) style.filter = `brightness(${brightness})`;
+    return style;
+  }, [fitHeight, brightness]);
+
+  const imageClass = fitHeight ? "h-full w-full object-contain select-none" : "w-full select-none";
 
   return (
     <div
-      ref={containerRef}
-      className="relative -mx-4 overflow-x-clip bg-bg"
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
+      data-theme={theme === "site" ? undefined : theme === "clair" ? "light" : "dark"}
+      data-reader-theme={theme}
+      className="relative -mx-4"
     >
-      <ReaderControls
-        mode={mode}
-        onMode={changeMode}
-        sens={sens}
-        onSens={changeSens}
-        width={width}
-        onWidth={setWidth}
-        page={page}
-        total={total}
-        onSeek={goTo}
+      <ReaderTopBar
+        hidden={chromeHidden}
+        serieHref={`/serie/${serieSlug}`}
+        serieTitre={serieTitre}
+        chapitres={chapitres}
+        courant={`/serie/${serieSlug}/chapitre-${chapterNumero}`}
+        settingsOpen={settingsOpen}
+        onSettings={toggleSettings}
+        onReport={() => openReport(null)}
         fullscreen={fullscreen}
         onFullscreen={toggleFullscreen}
-        panelOpen={panelOpen}
-        onPanel={() => setPanelOpen((v) => !v)}
-        onReport={() => openReport(null)}
       />
 
-      <div className="flex justify-center py-4">
-        {mode === "vertical" && (
-          <div className="space-y-2" style={widthStyle}>
-            {pages.map((item, index) => (
-              <ReaderImage
-                key={`${index}:${item.url}`}
-                page={item}
-                index={index}
-                chapterNumero={chapterNumero}
-                eager={index === 0}
-                onFailed={onPageFailed}
-                onReport={openReport}
-              />
-            ))}
-          </div>
-        )}
+      <div
+        ref={containerRef}
+        className="relative overflow-x-clip bg-bg"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        data-chapter-id={chapterId}
+      >
+        <div
+          ref={pagesRef}
+          className={clsx("relative flex items-center justify-center py-4")}
+          style={zoneStyle}
+        >
+          {mode === "vertical" && (
+            <div className="space-y-2" style={contentStyle}>
+              {pages.map((item, index) => (
+                <ReaderImage
+                  key={`${index}:${item.url}`}
+                  page={item}
+                  index={index}
+                  chapterNumero={chapterNumero}
+                  eager={index === 0}
+                  onFailed={onPageFailed}
+                  onReport={openReport}
+                  imageClass={imageClass}
+                />
+              ))}
+            </div>
+          )}
 
-        {mode === "single" && pages[page] && (
-          <div className="w-full" style={widthStyle}>
-            <ReaderImage
-              key={`${page}:${pages[page].url}`}
-              page={pages[page]}
-              index={page}
-              chapterNumero={chapterNumero}
-              eager
-              onFailed={onPageFailed}
-              onReport={openReport}
-            />
-            <Prefetch pages={pages} from={page + 1} />
-          </div>
-        )}
-
-        {mode === "double" && (
-          <div
-            className={soloSpread ? "w-full" : "flex w-full items-start justify-center gap-1"}
-            style={widthStyle}
-          >
-            {soloSpread ? (
+          {mode === "single" && pages[page] && (
+            <div className={clsx("w-full", fitHeight && "h-full")} style={contentStyle}>
               <ReaderImage
-                key={`${page}:${pages[page]?.url ?? ""}`}
+                key={`${page}:${pages[page].url}`}
                 page={pages[page]}
                 index={page}
                 chapterNumero={chapterNumero}
                 eager
                 onFailed={onPageFailed}
                 onReport={openReport}
+                imageClass={imageClass}
               />
-            ) : (
-              <>
-                <div className="w-1/2">
-                  {pages[sens === "rtl" ? page + 1 : page] && (
-                    <ReaderImage
-                      key={`${sens === "rtl" ? page + 1 : page}:${
-                        pages[sens === "rtl" ? page + 1 : page].url
-                      }`}
-                      page={pages[sens === "rtl" ? page + 1 : page]}
-                      index={sens === "rtl" ? page + 1 : page}
-                      chapterNumero={chapterNumero}
-                      eager={page <= 2}
-                      onFailed={onPageFailed}
-                      onReport={openReport}
-                    />
-                  )}
-                </div>
-                <div className="w-1/2">
-                  {pages[sens === "rtl" ? page : page + 1] && (
-                    <ReaderImage
-                      key={`${sens === "rtl" ? page : page + 1}:${
-                        pages[sens === "rtl" ? page : page + 1].url
-                      }`}
-                      page={pages[sens === "rtl" ? page : page + 1]}
-                      index={sens === "rtl" ? page : page + 1}
-                      chapterNumero={chapterNumero}
-                      eager={page <= 2}
-                      onFailed={onPageFailed}
-                      onReport={openReport}
-                    />
-                  )}
-                </div>
-                <Prefetch pages={pages} from={page + 2} />
-              </>
-            )}
-          </div>
+              <Prefetch pages={pages} from={page + 1} />
+            </div>
+          )}
+
+          {mode === "double" && (
+            <div
+              className={clsx(
+                soloSpread ? "w-full" : "flex w-full items-start justify-center gap-1",
+                fitHeight && "h-full items-stretch",
+              )}
+              style={contentStyle}
+            >
+              {soloSpread ? (
+                <ReaderImage
+                  key={`${page}:${pages[page]?.url ?? ""}`}
+                  page={pages[page]}
+                  index={page}
+                  chapterNumero={chapterNumero}
+                  eager
+                  onFailed={onPageFailed}
+                  onReport={openReport}
+                  imageClass={imageClass}
+                />
+              ) : (
+                <>
+                  <div className={clsx("w-1/2", fitHeight && "h-full")}>
+                    {pages[sens === "rtl" ? page + 1 : page] && (
+                      <ReaderImage
+                        key={`${sens === "rtl" ? page + 1 : page}:${
+                          pages[sens === "rtl" ? page + 1 : page].url
+                        }`}
+                        page={pages[sens === "rtl" ? page + 1 : page]}
+                        index={sens === "rtl" ? page + 1 : page}
+                        chapterNumero={chapterNumero}
+                        eager={page <= 2}
+                        onFailed={onPageFailed}
+                        onReport={openReport}
+                        imageClass={imageClass}
+                      />
+                    )}
+                  </div>
+                  <div className={clsx("w-1/2", fitHeight && "h-full")}>
+                    {pages[sens === "rtl" ? page : page + 1] && (
+                      <ReaderImage
+                        key={`${sens === "rtl" ? page : page + 1}:${
+                          pages[sens === "rtl" ? page : page + 1].url
+                        }`}
+                        page={pages[sens === "rtl" ? page : page + 1]}
+                        index={sens === "rtl" ? page : page + 1}
+                        chapterNumero={chapterNumero}
+                        eager={page <= 2}
+                        onFailed={onPageFailed}
+                        onReport={openReport}
+                        imageClass={imageClass}
+                      />
+                    )}
+                  </div>
+                  <Prefetch pages={pages} from={page + 2} />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Zones tactiles gauche / centre / droite (§6.6) : ignorées en webtoon. */}
+          {mode !== "vertical" && (
+            <TouchZones
+              sens={sens}
+              onPrev={() => step(-1)}
+              onNext={() => step(1)}
+              onToggleChrome={() => (chromeHidden ? reveal() : hide())}
+            />
+          )}
+        </div>
+
+        <NextChapterPrefetch chapterId={nextChapterId} active={isLast} />
+
+        <div className="flex items-center justify-between gap-2 px-3 pb-3">
+          <NavButton
+            href={page > 0 ? null : prevHref}
+            onClick={() => step(-1)}
+            label={page > 0 ? "Page précédente" : "Chapitre précédent"}
+            icon={<ChevronLeft className="size-4" />}
+            disabled={page <= 0 && !prevHref}
+          />
+          <span className="text-xs tabular-nums text-muted">
+            Page {page + 1} / {total}
+          </span>
+          <NavButton
+            href={isLast ? nextHref : null}
+            onClick={() => step(1)}
+            label={isLast ? "Chapitre suivant" : "Page suivante"}
+            icon={<ChevronRight className="size-4" />}
+            disabled={!isLast ? false : nextHref === null}
+            align="right"
+          />
+        </div>
+
+        {showEnd && (
+          <section
+            className="border-t border-line bg-surface px-4 py-6 text-center"
+            aria-labelledby="reader-fin-titre"
+          >
+            <p className="section-title" id="reader-fin-titre">
+              Chapitre terminé
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {serieTitre} — chapitre {chapterNumero}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              {nextHref ? (
+                <Link href={nextHref} className="btn-primary">
+                  Chapitre suivant <ChevronRight className="size-4" />
+                </Link>
+              ) : (
+                <span className="btn-primary opacity-50" aria-disabled="true">
+                  Dernier chapitre
+                </span>
+              )}
+              {prevHref ? (
+                <Link href={prevHref} className="btn-secondary">
+                  <ChevronLeft className="size-4" /> Chapitre précédent
+                </Link>
+              ) : (
+                <span className="btn-secondary opacity-50" aria-disabled="true">
+                  Chapitre précédent
+                </span>
+              )}
+              <a href="#commentaires" className="btn-ghost">
+                Commentaires du chapitre
+              </a>
+              <ChapterLike chapterId={chapterId} initialLikes={initialLikes} />
+              <button type="button" className="btn-ghost" onClick={() => openReport(null)}>
+                <Flag className="size-4" /> Signaler un problème
+              </button>
+            </div>
+          </section>
         )}
       </div>
 
-      <NextChapterPrefetch chapterId={nextChapterId} active={isLast} />
+      <ReaderBottomBar
+        hidden={chromeHidden}
+        page={page}
+        total={total}
+        onSeek={goTo}
+        prevHref={prevHref}
+        nextHref={nextHref}
+      />
 
-      <div className="flex items-center justify-between gap-2 px-3 pb-3">
-        <NavButton
-          href={page > 0 ? null : prevHref}
-          onClick={() => step(-1)}
-          label={page > 0 ? "Page précédente" : "Chapitre précédent"}
-          icon={<ChevronLeft className="size-4" />}
-          disabled={page <= 0 && !prevHref}
-        />
-        <span className="text-xs tabular-nums text-muted">
-          Page {page + 1} / {total}
-        </span>
-        <NavButton
-          href={isLast ? nextHref : null}
-          onClick={() => step(1)}
-          label={isLast ? "Chapitre suivant" : "Page suivante"}
-          icon={<ChevronRight className="size-4" />}
-          disabled={!isLast ? false : nextHref === null}
-          align="right"
-        />
-      </div>
-
-      {showEnd && (
-        <section className="border-t border-line bg-surface px-4 py-6 text-center">
-          <p className="section-title">Chapitre terminé</p>
-          <p className="mt-1 text-sm text-muted">
-            {serieTitre} — chapitre {chapterNumero}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-            {prevHref ? (
-              <Link href={prevHref} className="btn-secondary">
-                <ChevronLeft className="size-4" /> Chapitre précédent
-              </Link>
-            ) : (
-              <span className="btn-secondary opacity-50">Chapitre précédent</span>
-            )}
-            <a href="#commentaires" className="btn-ghost">
-              Commentaires du chapitre
-            </a>
-            {nextHref ? (
-              <Link href={nextHref} className="btn-primary">
-                Chapitre suivant <ChevronRight className="size-4" />
-              </Link>
-            ) : (
-              <span className="btn-primary opacity-50">Dernier chapitre</span>
-            )}
-          </div>
-        </section>
-      )}
+      <ReaderSettings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        mode={mode}
+        onMode={changeMode}
+        sens={sens}
+        onSens={changeSens}
+        fit={fit}
+        onFit={changeFit}
+        width={width}
+        onWidth={changeWidth}
+        maxw={maxw}
+        onMaxw={changeMaxw}
+        theme={theme}
+        onTheme={changeTheme}
+        brightness={brightness}
+        onBrightness={changeBrightness}
+        firstSolo={firstSolo}
+        onFirstSolo={changeFirstSolo}
+      />
 
       <ReportDialog
         key={`report-${reportPage ?? "manual"}`}
@@ -515,6 +855,64 @@ export function Reader({
         chapterNumero={chapterNumero}
         page={reportPage}
       />
+    </div>
+  );
+}
+
+/**
+ * Zones tactiles gauche / centre / droite (§6.6) : les côtés tournent les
+ * pages (sens inversé en lecture droite-à-gauche), le centre montre ou masque
+ * les commandes. Cibles de 44 px minimum, étiquetées pour le clavier.
+ */
+function TouchZones({
+  sens,
+  onPrev,
+  onNext,
+  onToggleChrome,
+}: {
+  sens: ReaderSens;
+  onPrev: () => void;
+  onNext: () => void;
+  onToggleChrome: () => void;
+}) {
+  const leftIsNext = sens === "rtl";
+  const zone =
+    "group pointer-events-auto flex min-h-11 flex-1 items-center justify-center text-fg";
+  const icon =
+    "size-8 opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-100 motion-reduce:transition-none";
+
+  return (
+    <div className="absolute inset-0 z-20 flex" role="group" aria-label="Zones tactiles de lecture">
+      <button
+        type="button"
+        className={zone}
+        onClick={leftIsNext ? onNext : onPrev}
+        aria-label={leftIsNext ? "Zone gauche : page suivante" : "Zone gauche : page précédente"}
+      >
+        {leftIsNext ? (
+          <ChevronRight className={icon} aria-hidden="true" />
+        ) : (
+          <ChevronLeft className={icon} aria-hidden="true" />
+        )}
+      </button>
+      <button
+        type="button"
+        className={zone}
+        onClick={onToggleChrome}
+        aria-label="Zone centre : afficher ou masquer les commandes"
+      />
+      <button
+        type="button"
+        className={zone}
+        onClick={leftIsNext ? onPrev : onNext}
+        aria-label={leftIsNext ? "Zone droite : page précédente" : "Zone droite : page suivante"}
+      >
+        {leftIsNext ? (
+          <ChevronLeft className={icon} aria-hidden="true" />
+        ) : (
+          <ChevronRight className={icon} aria-hidden="true" />
+        )}
+      </button>
     </div>
   );
 }
@@ -553,6 +951,7 @@ function ReaderImage({
   eager,
   onFailed,
   onReport,
+  imageClass = "w-full select-none",
 }: {
   page: ReaderPage;
   index: number;
@@ -560,6 +959,7 @@ function ReaderImage({
   eager: boolean;
   onFailed: (index: number) => void;
   onReport: (index: number) => void;
+  imageClass?: string;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -603,7 +1003,7 @@ function ReaderImage({
             ? { aspectRatio: `${page.largeur} / ${page.hauteur}` }
             : { minHeight: "50vh" }
         }
-        className="flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-surface2 p-6 text-center"
+        className="relative z-30 flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line bg-surface2 p-6 text-center"
       >
         <ImageOff className="size-6 text-muted" />
         <p className="text-sm font-semibold text-fg">Page {index + 1} indisponible</p>
@@ -629,7 +1029,7 @@ function ReaderImage({
       fetchPriority={eager ? "high" : "auto"}
       decoding={eager ? undefined : "async"}
       onError={onError}
-      className="w-full select-none"
+      className={imageClass}
       draggable={false}
     />
   );
@@ -702,107 +1102,5 @@ function NavButton({
     <button type="button" className="btn-secondary text-sm" onClick={onClick} disabled={disabled}>
       {content}
     </button>
-  );
-}
-
-function ReportDialog({
-  open,
-  onClose,
-  chapterId,
-  chapterNumero,
-  page,
-}: {
-  open: boolean;
-  onClose: () => void;
-  chapterId: string;
-  chapterNumero: number;
-  page: number | null;
-}) {
-  // Signalement déclenché depuis une page en échec : le motif est pré-rempli
-  // à l'ouverture (le parent re-clé le composant quand `page` change).
-  const [raison, setRaison] = useState(
-    typeof page === "number" ? "page_manquante" : REPORT_REASONS[0].value,
-  );
-  const [details, setDetails] = useState(
-    typeof page === "number"
-      ? `Page ${page + 1} du chapitre ${chapterNumero} : impossible à charger malgré les reprises automatiques.`
-      : "",
-  );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "chapter", targetId: chapterId, raison, details }),
-      });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (res.status === 401) {
-        setError("Vous devez être connecté pour signaler un problème.");
-        return;
-      }
-      if (!res.ok) {
-        setError(data?.error ?? "Signalement impossible, réessayez.");
-        return;
-      }
-      setDetails("");
-      onClose();
-    } catch {
-      setError("Erreur réseau, réessayez.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Signaler un problème">
-      <div className="space-y-4 text-sm">
-        <p className="text-muted">
-          Ce problème sera transmis à l’équipe de modération.
-        </p>
-        <div className="space-y-2">
-          {REPORT_REASONS.map((r) => (
-            <label key={r.value} className="flex items-center gap-2 text-muted">
-              <input
-                type="radio"
-                name="reader-report-reason"
-                value={r.value}
-                checked={raison === r.value}
-                onChange={() => setRaison(r.value)}
-                className="accent-primary"
-              />
-              {r.label}
-            </label>
-          ))}
-        </div>
-        <div>
-          <label className="label" htmlFor="reader-report-details">
-            Détail (facultatif)
-          </label>
-          <textarea
-            id="reader-report-details"
-            className="input min-h-20 resize-y"
-            maxLength={2000}
-            value={details}
-            onChange={(e) => setDetails(e.target.value)}
-            placeholder="Ex. : la page 7 manque, les planches sont inversées…"
-          />
-        </div>
-        {error && <p className="text-xs text-adult">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>
-            Annuler
-          </button>
-          <button type="button" className="btn-danger" onClick={submit} disabled={busy}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Flag className="size-4" />}
-            Envoyer
-          </button>
-        </div>
-      </div>
-    </Modal>
   );
 }

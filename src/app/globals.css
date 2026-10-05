@@ -286,3 +286,14 @@
   background: var(--accent);
   cursor: pointer;
 }
+
+/* Thème « noir » du lecteur (§6.6) : appliqué au seul lecteur, après les
+   thèmes du site pour l'emporter sur eux. */
+[data-reader-theme="noir"] {
+  --bg: #000000;
+  --header: #0a0a0b;
+  --surface: #101012;
+  --surface-2: #17171a;
+  --border: #2a2a30;
+  --line: var(--border);
+}

@@ -5,12 +5,19 @@ import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { AdultGate } from "@/components/adult/adult-gate";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { Reader } from "@/components/reader/reader";
+import { SeriesGrid } from "@/components/series/series-card";
 import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getChapter, getReaderContext, recordView } from "@/lib/data/chapters";
 import { listHistory } from "@/lib/data/library";
-import { getSeriesBySlug } from "@/lib/data/series";
+import {
+  activeRecommendations,
+  getSeriesById,
+  getSeriesBySlug,
+  similarSeries,
+} from "@/lib/data/series";
 import { publishDueChaptersOnDemand } from "@/lib/publishing";
 import { can } from "@/lib/roles";
+import type { Series } from "@/lib/types";
 
 type Params = Promise<{ slug: string; n: string }>;
 
@@ -102,6 +109,18 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   const prevHref = context.prev ? chapterHref(series.slug, context.prev.numero) : null;
   const nextHref = context.next ? chapterHref(series.slug, context.next.numero) : null;
 
+  /* Fin de chapitre (§6.6) : recommandations éditoriales « end_chapter »,
+     repli sur les séries similaires (jamais bloquant). */
+  const adultOk = !isAdult || gateOk;
+  const recommandees = needsGate
+    ? []
+    : await endOfChapterRecommendations(series, adultOk);
+
+  const chapitres = context.chapters.map((c) => ({
+    numero: c.numero,
+    href: chapterHref(series.slug, c.numero),
+  }));
+
   return (
     <div className="space-y-6 py-4">
       {isAdult && <meta name="rating" content="adult" />}
@@ -148,14 +167,20 @@ export default async function ChapitrePage({ params }: { params: Params }) {
         <>
           <div className="container-site">
             <Reader
+              key={context.chapter.id}
               pages={context.pages}
               chapterId={context.chapter.id}
               chapterNumero={context.chapter.numero}
+              serieId={series.id}
+              serieSlug={series.slug}
               serieTitre={series.titre}
+              chapitres={chapitres}
               initialMode={user?.preferences.mode_lecture}
               initialSens={user?.preferences.sens_lecture}
               initialPage={initialPage}
               canProgress={Boolean(user) && !context.preview}
+              canSync={Boolean(user) && !context.preview}
+              initialLikes={context.chapter.likes ?? 0}
               prevHref={prevHref}
               nextHref={nextHref}
               nextChapterId={context.next?.id ?? null}
@@ -182,6 +207,18 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             )}
           </div>
 
+          {/* Fin de chapitre (§6.6) : suite de la lecture ou suggestions. */}
+          {recommandees.length > 0 && (
+            <section className="container-site" aria-labelledby="recommandees-titre">
+              <h2 className="section-title" id="recommandees-titre">
+                Séries recommandées
+              </h2>
+              <div className="mt-4">
+                <SeriesGrid series={recommandees} adultAllowed={adultOk} />
+              </div>
+            </section>
+          )}
+
           <div className="container-site">
             <CommentsSection
               targetType="chapter"
@@ -194,4 +231,49 @@ export default async function ChapitrePage({ params }: { params: Params }) {
       )}
     </div>
   );
+}
+
+/**
+ * Séries proposées en fin de chapitre (§6.6) : recommandations éditoriales
+ * placées en « end_chapter », sinon repli sur les séries similaires de la
+ * série en cours. Quatre suggestions au maximum, jamais la série elle-même.
+ */
+async function endOfChapterRecommendations(
+  series: Series,
+  adultOk: boolean,
+): Promise<Series[]> {
+  const out: Series[] = [];
+  const seen = new Set<string>([series.id]);
+
+  try {
+    const recos = await activeRecommendations("end_chapter");
+    for (const reco of recos) {
+      if (out.length >= 4) break;
+      if (seen.has(reco.series_id)) continue;
+      const target = await getSeriesById(reco.series_id);
+      if (!target || seen.has(target.id)) continue;
+      if (target.classification === "adult" && !adultOk) continue;
+      seen.add(target.id);
+      out.push(target);
+    }
+  } catch {
+    /* recommandations facultatives */
+  }
+
+  if (out.length === 0) {
+    try {
+      const similaires = await similarSeries(series, 4);
+      for (const s of similaires) {
+        if (out.length >= 4) break;
+        if (seen.has(s.id)) continue;
+        if (s.classification === "adult" && !adultOk) continue;
+        seen.add(s.id);
+        out.push(s);
+      }
+    } catch {
+      /* pas de suggestion plutôt qu'une erreur */
+    }
+  }
+
+  return out;
 }

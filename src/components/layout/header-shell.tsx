@@ -9,6 +9,20 @@ import { useEffect, useState, type ReactNode } from "react";
  */
 export function HeaderShell({ children }: { children: ReactNode }) {
   const [hidden, setHidden] = useState(false);
+  /** Immersion du lecteur (§6.6) : le lecteur masque l'en-tête du site. */
+  const [immersive, setImmersive] = useState(false);
+
+  useEffect(() => {
+    const read = () => setImmersive(document.body.dataset.readerImmersive === "on");
+    read();
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(read);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-reader-immersive"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let anchor = window.scrollY;
@@ -43,8 +57,8 @@ export function HeaderShell({ children }: { children: ReactNode }) {
 
   return (
     <header
-      data-hidden={hidden ? "true" : "false"}
-      className="sticky top-0 z-40 border-b border-line bg-header/95 backdrop-blur transition-transform duration-200 data-[hidden=true]:-translate-y-full"
+      data-hidden={hidden || immersive ? "true" : "false"}
+      className="sticky top-0 z-40 border-b border-line bg-header/95 backdrop-blur transition-transform duration-200 motion-reduce:transition-none data-[hidden=true]:-translate-y-full"
     >
       {children}
     </header>
