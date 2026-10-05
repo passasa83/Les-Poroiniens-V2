@@ -190,6 +190,33 @@ les pages sont servies par le CDN tiers, aucun stockage ni transfet par Vercel.
 - La CSP du site autorise déjà `img-src https:` : les images `cdn.imgchest.com`
   s'affichent sans réglage supplémentaire.
 
+### Mode « sans NAS ni Cloudflare » (retenu)
+
+Décision : le site fonctionne **uniquement avec ImgChest** tant que les clés
+NAS et Cloudflare ne sont pas fournies (aucune n'existe côté responsable).
+
+- **Variables volontairement vides** : `IMG_BASE_URL` (alias `CDN_BASE_URL`),
+  `NAS_API_BASE` / `NAS_API_*`, `IMG_SIGNING_SECRET`, `CF_API_TOKEN` /
+  `CF_ZONE_ID`. Aucune n'est bloquante : import NAS refusé avec message
+  explicite (`nasConfigured()` faux), purge Cloudflare `skipped: true`,
+  aperçus signés repliés sur `AUTH_SECRET`, publication des URL externes sans
+  déplacement de fichier.
+- **Règle d'écriture** : ne jamais enregistrer de chemin NAS relatif dans
+  `series.couverture` ni dans les pages d'un chapitre tant que `IMG_BASE_URL`
+  est vide — sinon `/api/image` répond `502 NAS_NOT_CONFIGURED` (couverture
+  cassée, page du lecteur « indisponible »). Seules des **URLs complètes** ou
+  les chemins de démonstration `/api/img/…` sont acceptés.
+- **Lecture sans clé** : l'API ImgChest est publique (`GET /p/<id>` et
+  `GET /api/posts?username=…`) ; `IMG_CHEST_API_KEY` reste facultative — au
+  passage, `IMGCHEST_API_KEY` figurant dans le `.dev.vars` de l'ancien site
+  n'était jamais lue par son code.
+- **État de l'ancien corpus (05/10/2026)** : `data/series/*.json` =
+  335 séries et 4 223 chapitres, dont **3 844 hébergés sur le NAS hors ligne**
+  (`img.lesporoiniens.org` et `api-img.lesporoiniens.org` renvoient 530).
+  Restent récupérables sans clé : 336 albums ImgChest (~379 chapitres) et les
+  couvertures tierces `file.garden`. **Import différé** : en attente du dépôt
+  complet de l'ancien site (fichiers et dossiers ignorés par git).
+
 ## Contenu
 
 **Le site en production est volontairement vide** (remise à zéro du
