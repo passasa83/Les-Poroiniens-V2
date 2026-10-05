@@ -60,6 +60,7 @@ export const TABLES = {
   notifications: "notifications",
   audit: "audit_log",
   settings: "site_settings",
+  annonces: "annonces",
   importJobs: "import_jobs",
   imageErrors: "image_errors",
   users: "users", // démo uniquement (Appwrite Auth gère les comptes réels)

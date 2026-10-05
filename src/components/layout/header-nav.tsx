@@ -133,6 +133,8 @@ const CRUMBS: Array<{ test: (path: string, search: string) => boolean; label: st
   { test: (p, s) => p === "/catalogue" && s.includes("sort=popularite"), label: "Populaires" },
   { test: (p) => p === "/catalogue", label: "Catalogue" },
   { test: (p) => p === "/recherche", label: "Recherche" },
+  { test: (p) => p.startsWith("/classement"), label: "Classement" },
+  { test: (p) => p.startsWith("/annonces"), label: "Annonces" },
   { test: (p) => p.startsWith("/bibliotheque"), label: "Bibliothèque" },
   { test: (p) => p.startsWith("/historique"), label: "Historique" },
   { test: (p) => p.startsWith("/statistiques"), label: "Statistiques" },

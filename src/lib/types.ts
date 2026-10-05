@@ -217,6 +217,25 @@ export interface SiteSetting {
   valeur: string;
 }
 
+/**
+ * Annonce de l'équipe (§6.11) : liste datée sur /annonces, page de détail et
+ * dernière annonce en valeur sur l'accueil. `slug` identifie la page publique,
+ * `date` est la date de publication (ISO), `extrait` le chapeau affiché en
+ * liste et sur l'accueil, `contenu` le corps du texte (paragraphes séparés
+ * par une ligne vide).
+ */
+export interface Annonce {
+  id: string;
+  slug: string;
+  titre: string;
+  extrait: string;
+  contenu: string;
+  auteur: string;
+  date: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Utilisateur connecté tel que renvoyé par getCurrentUser(). */
 export interface CurrentUser {
   id: string;

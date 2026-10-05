@@ -26,6 +26,8 @@ const settingsInput = z.object({
   adresses_secours: z.string().max(1000).optional(),
   /** Slug de la série mise en avant sur /nouveautés (§6.2), vide = dernier chapitre publié. */
   nouveautes_serie: z.string().trim().max(120).optional(),
+  /** Bandeau compact de la dernière annonce sur l'accueil (§6.11). */
+  annonce_bandeau: z.boolean().optional(),
 });
 
 /**
@@ -74,6 +76,7 @@ export async function GET() {
       social_youtube: settings.social_youtube ?? "",
       adresses_secours: settings.adresses_secours ?? "",
       nouveautes_serie: settings.nouveautes_serie ?? "",
+      annonce_bandeau: settings.annonce_bandeau === "1",
     },
     secrets: Object.fromEntries(
       Object.entries(secrets).map(([key, value]) => [
@@ -131,6 +134,9 @@ export async function PATCH(request: Request) {
   }
   if (incoming.nouveautes_serie !== undefined) {
     toStore.nouveautes_serie = incoming.nouveautes_serie;
+  }
+  if (incoming.annonce_bandeau !== undefined) {
+    toStore.annonce_bandeau = incoming.annonce_bandeau ? "1" : "0";
   }
 
   for (const [cle, valeur] of Object.entries(toStore)) {

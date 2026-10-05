@@ -24,6 +24,16 @@ export function SiteFooter() {
               </Link>
             </li>
             <li>
+              <Link className="link-muted" href="/classement">
+                Classement
+              </Link>
+            </li>
+            <li>
+              <Link className="link-muted" href="/annonces">
+                Annonces
+              </Link>
+            </li>
+            <li>
               <Link className="link-muted" href="/recherche">
                 Recherche
               </Link>

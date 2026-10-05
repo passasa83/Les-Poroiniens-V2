@@ -75,6 +75,7 @@ export default async function GerantParametresPage() {
     social_youtube: settings.social_youtube ?? "",
     adresses_secours: settings.adresses_secours ?? "",
     nouveautes_serie: settings.nouveautes_serie ?? "",
+    annonce_bandeau: settings.annonce_bandeau === "1",
   };
 
   const users = profileRes.items.map((p) => ({

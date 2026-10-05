@@ -10,26 +10,28 @@ import {
   popularSeries,
   similarSeries,
 } from "@/lib/data/series";
+import { dateAnnonce, dateIsoAnnonce, derniereAnnonce } from "@/lib/data/annonces";
 import { listHistory, listLibrary } from "@/lib/data/library";
 import { getSettings } from "@/lib/data/moderation";
 import { dataMode } from "@/lib/db";
 import { SeriesGrid } from "@/components/series/series-card";
-import { EmptyState } from "@/components/ui/kit";
+import { Badge, EmptyState } from "@/components/ui/kit";
 import { Hero, type HeroSlide } from "@/components/home/hero";
 import { ReleasesSection } from "@/components/home/releases-section";
 import { RankList } from "@/components/home/rank-list";
 import { plainText } from "@/lib/format";
 import type { ReleaseItem } from "@/lib/data/chapters";
 import type { ReleaseDto } from "@/lib/dto";
-import { SERIES_TYPE_LABELS, type Chapter, type Series } from "@/lib/types";
+import { SERIES_TYPE_LABELS, type Annonce, type Chapter, type Series } from "@/lib/types";
 
 /** Sections facultatives : masquées quand elles n'ont rien à montrer (§3.5). */
 export default async function HomePage() {
-  const [user, adult, recos, settings] = await Promise.all([
+  const [user, adult, recos, settings, annonce] = await Promise.all([
     getCurrentUser(),
     adultGateAccepted(),
     activeRecommendations("home"),
     getSettings().catch(() => ({}) as Record<string, string>),
+    derniereAnnonce().catch(() => null),
   ]);
 
   const [popular, releases, nouveautes, library] = await Promise.all([
@@ -100,6 +102,10 @@ export default async function HomePage() {
           {announcement}
         </div>
       )}
+
+      {/* Dernière annonce de l'équipe (§6.11) : carte, ou bandeau si le
+          Gérant a basculé le réglage « bandeau » (annonce_bandeau). */}
+      {annonce && <AnnonceALaUne annonce={annonce} bandeau={settings.annonce_bandeau === "1"} />}
 
       {!adult && (
         <div className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted">
@@ -227,6 +233,62 @@ function SectionHeader({
         Tout voir →
       </Link>
     </div>
+  );
+}
+
+/**
+ * Dernière annonce mise en avant sur l'accueil (§6.11). Le Gérant choisit la
+ * présentation : carte détaillée par défaut, bandeau compact quand la clé
+ * `annonce_bandeau` vaut « 1 ». Le bloc n'apparaît que si une annonce existe.
+ */
+function AnnonceALaUne({ annonce, bandeau }: { annonce: Annonce; bandeau: boolean }) {
+  const href = `/annonces/${annonce.slug}`;
+  const date = dateAnnonce(annonce.date);
+  const iso = dateIsoAnnonce(annonce.date);
+
+  if (bandeau) {
+    return (
+      <section
+        aria-label="Annonce à la une"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line bg-surface px-4 py-2"
+      >
+        <Badge tone="primary">Annonce</Badge>
+        <time dateTime={iso} className="meta">
+          {date}
+        </time>
+        <Link
+          href={href}
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-primary underline underline-offset-4 hover:text-fg"
+        >
+          {annonce.titre}
+          <ArrowRight className="size-4" aria-hidden />
+          <span className="sr-only">— lire l&apos;annonce du {date}</span>
+        </Link>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Annonce à la une" className="card space-y-2 p-4 sm:p-5">
+      <p className="meta flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Badge tone="primary">Annonce</Badge>
+        <time dateTime={iso} className="font-semibold text-fg">
+          {date}
+        </time>
+        {annonce.auteur && <span>Par {annonce.auteur}</span>}
+      </p>
+      <h2 className="text-lg font-bold tracking-tight text-fg">
+        <Link href={href} className="hover:text-primary">
+          {annonce.titre}
+        </Link>
+      </h2>
+      {annonce.extrait && <p className="text-sm text-muted">{annonce.extrait}</p>}
+      <Link href={href} className="btn-secondary mt-1">
+        Lire l&apos;annonce
+        <ArrowRight className="size-4" aria-hidden />
+        <span className="sr-only"> du {date}</span>
+      </Link>
+    </section>
   );
 }
 

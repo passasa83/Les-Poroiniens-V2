@@ -381,6 +381,26 @@ const TABLES: Table[] = [
     indexes: [{ key: "idx_cle", type: "unique", columns: ["cle"] }],
   },
   {
+    // Annonces de l'équipe (§6.11) : liste datée + page de détail, dernière
+    // annonce mise en avant sur l'accueil. Table créée uniquement si besoin.
+    id: "annonces",
+    name: "Annonces",
+    columns: [
+      { key: "slug", type: "varchar", size: 128 },
+      { key: "titre", type: "varchar", size: 255 },
+      { key: "extrait", type: "varchar", size: 500 },
+      { key: "contenu", type: "longtext" },
+      { key: "auteur", type: "varchar", size: 64, def: "L'équipe" },
+      { key: "date", ...DATE },
+      { key: "created_at", ...DATE },
+      { key: "updated_at", ...DATE },
+    ],
+    indexes: [
+      { key: "idx_slug", type: "unique", columns: ["slug"] },
+      { key: "idx_date", type: "key", columns: ["date"], orders: ["desc"] },
+    ],
+  },
+  {
     id: "import_jobs",
     name: "Jobs d'import",
     columns: [

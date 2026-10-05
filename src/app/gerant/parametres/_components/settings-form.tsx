@@ -25,6 +25,7 @@ type SettingsValues = {
   social_youtube: string;
   adresses_secours: string;
   nouveautes_serie: string;
+  annonce_bandeau: boolean;
 };
 
 type UserLite = { userId: string; pseudo: string; role: Role };
@@ -197,7 +198,21 @@ export function SettingsForm({
               />
               Mode maintenance
             </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
+              <input
+                type="checkbox"
+                checked={values.annonce_bandeau}
+                onChange={(e) => set("annonce_bandeau", e.target.checked)}
+                className="size-4 accent-[var(--primary)]"
+              />
+              Dernière annonce en bandeau sur l&apos;accueil
+            </label>
           </div>
+          <p className="text-xs text-muted">
+            La dernière annonce publiée (§6.11) s&apos;affiche sur l&apos;accueil : en bandeau
+            compact si cette case est cochée, sinon en carte avec titre, date et extrait. Décochez
+            pour n&apos;afficher que la bannière d&apos;annonce ci-dessus.
+          </p>
         </Card>
 
         <Card className="space-y-4 p-5">

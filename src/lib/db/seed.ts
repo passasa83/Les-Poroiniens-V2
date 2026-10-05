@@ -446,6 +446,50 @@ function build(): DemoDatabase {
     created_at: iso(-20 * 3600_000),
   });
 
+  // ── Annonces de l'équipe (§6.11) ─────────────────────────────────────
+  for (const a of [
+    {
+      slug: "ouverture-de-la-saison-automne",
+      titre: "Ouverture de la saison d’automne",
+      extrait:
+        "La nouvelle saison démarre avec douze séries en cours de publication et un calendrier de sorties mis à jour chaque semaine.",
+      contenu:
+        "La nouvelle saison d’automne démarre sur Les Poroiniens. Douze séries sont actuellement en cours de publication, avec des mises à jour chaque semaine.\n\nLe calendrier des sorties est consultable depuis la page Nouveautés, et le classement de la semaine vous permet de suivre les séries les plus actives.\n\nMerci pour votre fidélité et bonne lecture !",
+      jours: 6,
+    },
+    {
+      slug: "maintenance-planifiee",
+      titre: "Maintenance planifiée du site",
+      extrait:
+        "Une interruption d’une heure est prévue dimanche matin pour migrer le stockage des scans. Les pages en cours de lecture restent accessibles.",
+      contenu:
+        "Une maintenance est prévue dimanche matin entre 4 h et 5 h. Le site sera temporairement inaccessible le temps de la migration du stockage des scans.\n\nLes chapitres déjà téléchargés restent disponibles hors ligne dans votre navigateur, et la lecture reprendra automatiquement à la fin de l’intervention.\n\nSi le site reste inaccessible après 5 h, consultez la page « Adresse de secours ».",
+      jours: 24,
+    },
+    {
+      slug: "classement-et-annonces",
+      titre: "Le classement et les annonces sont en ligne",
+      extrait:
+        "Découvrez le classement des séries actives (jour, semaine, mois, tout temps) et la nouvelle page des annonces de l’équipe.",
+      contenu:
+        "Deux nouveautés arrivent aujourd’hui : la page Classement et la page Annonces.\n\nLe classement s’adapte à la période choisie (jour, semaine, mois ou tout temps) et se filtre par format (manga, manhwa, manhua). Les annonces, elles, sont datées et archivées : vous retrouvez ici toutes les communications de l’équipe.",
+      jours: 45,
+    },
+  ]) {
+    const date = iso(-a.jours * DAY);
+    db[TABLES.annonces].set(a.slug, {
+      id: a.slug,
+      slug: a.slug,
+      titre: a.titre,
+      extrait: a.extrait,
+      contenu: a.contenu,
+      auteur: "L’équipe",
+      date,
+      created_at: date,
+      updated_at: date,
+    });
+  }
+
   // ── Paramètres du site ───────────────────────────────────────────────
   for (const [cle, valeur] of [
     ["site_name", "Les Poroiniens"],
