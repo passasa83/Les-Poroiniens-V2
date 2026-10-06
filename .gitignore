@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# documentation de référence — reste en local (décision du 06/10/2026)
+/captures/
