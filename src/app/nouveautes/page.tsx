@@ -102,7 +102,6 @@ export default async function NouveautesPage({
           series.banniere || series.couverture || `/api/img/cover/${series.slug}`,
         label: fresh ? "Dernières 24 h" : "À la une",
         numero: chapter.numero,
-        vues: chapter.vues,
         isAdult: series.classification === "adult",
         fresh,
       };
@@ -116,7 +115,6 @@ export default async function NouveautesPage({
     type: item.series.type,
     isAdult: item.series.classification === "adult",
     numero: item.numero,
-    vues: item.vues,
     lu: readIds.has(item.id),
   });
 

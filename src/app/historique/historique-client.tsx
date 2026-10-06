@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Trash2, X } from "lucide-react";
+import { Play, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 
@@ -115,33 +115,35 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
             <ul className="mt-3 space-y-2">
               {entries.map((entry) => (
                 <li key={entry.key} className="card flex items-center gap-3 p-3">
-                  {entry.couverture ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={entry.couverture}
-                      alt=""
-                      width={48}
-                      height={72}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-[72px] w-12 shrink-0 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="grid h-[72px] w-12 shrink-0 place-items-center rounded-lg bg-surface2 text-xs text-muted">
-                      ?
-                    </div>
-                  )}
+                  {/* §12.6 : couverture et titre mènent à la fiche série ; la
+                      reprise de lecture est un bouton explicite à part. */}
+                  <Link
+                    href={entry.slug ? `/serie/${entry.slug}` : "/catalogue"}
+                    className="shrink-0"
+                    aria-label={`Voir la fiche de ${entry.titre}`}
+                  >
+                    {entry.couverture ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={entry.couverture}
+                        alt=""
+                        width={48}
+                        height={72}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-[72px] w-12 shrink-0 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-[72px] w-12 shrink-0 place-items-center rounded-lg bg-surface2 text-xs text-muted">
+                        ?
+                      </div>
+                    )}
+                  </Link>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
-                        href={
-                          entry.slug
-                            ? entry.numero !== null
-                              ? `/serie/${entry.slug}/chapitre-${entry.numero}`
-                              : `/serie/${entry.slug}`
-                            : "/catalogue"
-                        }
+                        href={entry.slug ? `/serie/${entry.slug}` : "/catalogue"}
                         className="truncate font-semibold text-fg hover:text-primary"
                       >
                         {entry.titre}
@@ -158,15 +160,27 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => void removeEntry(entry)}
-                    disabled={busyKey === entry.key}
-                    aria-label={`Supprimer « ${entry.titre} » de l'historique`}
-                    className="btn-ghost shrink-0 px-2 text-adult"
-                  >
-                    <X className="size-4" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {entry.numero !== null && entry.slug && (
+                      <Link
+                        href={`/serie/${entry.slug}/chapitre-${entry.numero}`}
+                        className="btn-ghost text-sm"
+                        aria-label={`Reprendre ${entry.titre} au chapitre ${entry.numero}, page ${Math.max(entry.page, 1)}`}
+                      >
+                        <Play aria-hidden className="size-4" />
+                        Reprendre
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void removeEntry(entry)}
+                      disabled={busyKey === entry.key}
+                      aria-label={`Supprimer « ${entry.titre} » de l'historique`}
+                      className="btn-ghost shrink-0 px-2 text-adult"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

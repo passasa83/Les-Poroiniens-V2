@@ -166,36 +166,98 @@ export function Rating({ value, count }: { value: number; count?: number }) {
   );
 }
 
+/**
+ * Pagination classique (§12.8) : `←` · numéros de page · `→`, rendue en vrais
+ * liens serveur (`?page=N`) : utilisable au clavier, lisible sans JavaScript et
+ * combinée aux filtres / tris déjà actifs (`searchParams`, `?sort=`, `?adult=`,
+ * `?statut=`…). Le numéro courant porte `aria-current="page"`, chaque cible fait
+ * au moins 44 px et les sauts de fenêtre sont des `…` masqués aux lecteurs
+ * d'écran. La page 1 est liée sans paramètre (URL canonique).
+ */
 export function Pagination({
   page,
   pageCount,
   basePath,
   searchParams,
+  className = "mt-8",
 }: {
   page: number;
   pageCount: number;
   basePath: string;
   searchParams?: Record<string, string>;
+  /** Espacement au-dessus (une instance peut être posée au-dessus des résultats). */
+  className?: string;
 }) {
-  if (pageCount <= 1) return null;
+  if (!Number.isFinite(pageCount) || pageCount <= 1) return null;
+
+  /* `?page=` saisi à la main hors bornes : on annonce la dernière page réelle. */
+  const total = Math.trunc(pageCount);
+  const courante = Math.min(Math.max(Math.trunc(page) || 1, 1), total);
+
   const href = (p: number) => {
-    const params = new URLSearchParams({ ...(searchParams ?? {}), page: String(p) });
-    return `${basePath}?${params.toString()}`;
+    const params = new URLSearchParams({ ...(searchParams ?? {}) });
+    if (p > 1) params.set("page", String(p));
+    else params.delete("page");
+    const qs = params.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
   };
+
+  /* Fenêtre de numéros : 1, dernière, ± 1 autour de la courante, `…` entre.
+     Sept pages au maximum : en deçà, tous les numéros sont montrés. */
+  const triees =
+    total <= 7
+      ? Array.from({ length: total }, (_, i) => i + 1)
+      : [...new Set<number>([1, total, courante - 1, courante, courante + 1])]
+          .filter((n) => n >= 1 && n <= total)
+          .sort((a, b) => a - b);
+  const numeros: Array<number | "gap"> = [];
+  let precedent = 0;
+  for (const n of triees) {
+    if (n - precedent > 1) numeros.push("gap");
+    numeros.push(n);
+    precedent = n;
+  }
+
+  const cible = "chip min-w-11 justify-center";
+
   return (
-    <nav className="mt-8 flex items-center justify-center gap-2" aria-label="Pagination">
-      {page > 1 && (
-        <a className="btn-secondary" href={href(page - 1)}>
-          ← Précédent
+    <nav className={clsx("flex flex-wrap items-center justify-center gap-1.5", className)} aria-label="Pagination">
+      {courante > 1 ? (
+        <a className={cible} href={href(courante - 1)} rel="prev" aria-label="Page précédente">
+          <span aria-hidden>←</span>
         </a>
+      ) : (
+        <span className={clsx(cible, "cursor-default opacity-40")} aria-hidden="true">
+          ←
+        </span>
       )}
-      <span className="px-3 text-sm text-muted">
-        Page {page} / {pageCount}
-      </span>
-      {page < pageCount && (
-        <a className="btn-secondary" href={href(page + 1)}>
-          Suivant →
+
+      {numeros.map((item, index) =>
+        item === "gap" ? (
+          <span key={`saut-${index}`} className="px-1 text-sm text-muted" aria-hidden="true">
+            …
+          </span>
+        ) : (
+          <a
+            key={item}
+            className={item === courante ? clsx(cible, "chip-active") : cible}
+            href={href(item)}
+            aria-label={`Page ${item}`}
+            aria-current={item === courante ? "page" : undefined}
+          >
+            {item}
+          </a>
+        ),
+      )}
+
+      {courante < total ? (
+        <a className={cible} href={href(courante + 1)} rel="next" aria-label="Page suivante">
+          <span aria-hidden>→</span>
         </a>
+      ) : (
+        <span className={clsx(cible, "cursor-default opacity-40")} aria-hidden="true">
+          →
+        </span>
       )}
     </nav>
   );

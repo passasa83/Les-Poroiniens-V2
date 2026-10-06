@@ -4,8 +4,6 @@ import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
 import { SERIES_TYPE_LABELS, type SeriesType } from "@/lib/types";
 
-const number = new Intl.NumberFormat("fr-FR");
-
 export type UpdateCardData = {
   slug: string;
   titre: string;
@@ -13,7 +11,6 @@ export type UpdateCardData = {
   type: SeriesType;
   isAdult: boolean;
   numero: number;
-  vues: number;
   /** Chapitre déjà ouvert par le membre connecté (§6.2 : indicateur « lu »). */
   lu: boolean;
 };
@@ -21,8 +18,9 @@ export type UpdateCardData = {
 /**
  * Carte de nouveauté (§6.2) : couverture 2:3, étiquette rouge « 24 h » collée
  * au coin supérieur gauche sur les sorties du jour, titre sur une ligne puis
- * chapitre en gras et vues en gris. Carte entière cliquable → fiche série
- * (décision : un seul comportement de clic, titre compris).
+ * chapitre en gras et format en gris. Carte entière cliquable → fiche série
+ * (décision §12.6 : un seul comportement de clic, titre compris). Le compteur
+ * de vues, réservé à la fiche série (§12.3), n'est pas affiché.
  */
 export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boolean }) {
   return (
@@ -56,8 +54,6 @@ export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boole
         </p>
         <p className={clsx("meta truncate", item.lu && "opacity-70")}>
           <span className="font-semibold text-fg/85">Ch. {item.numero}</span>
-          {" · "}
-          {number.format(item.vues)} vues
           {" · "}
           {SERIES_TYPE_LABELS[item.type]}
           {item.isAdult && (

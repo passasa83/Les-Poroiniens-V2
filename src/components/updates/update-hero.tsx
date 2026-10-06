@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { Clock, Eye } from "lucide-react";
+import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
-
-const number = new Intl.NumberFormat("fr-FR");
 
 export type UpdateHeroData = {
   slug: string;
@@ -12,7 +10,6 @@ export type UpdateHeroData = {
   visuel: string;
   label: string;
   numero: number;
-  vues: number;
   isAdult: boolean;
   /** Sortie dans les dernières 24 h : l'étiquette peut annoncer « Dernières 24 h ». */
   fresh: boolean;
@@ -20,8 +17,9 @@ export type UpdateHeroData = {
 
 /**
  * Carte héros « Nouveautés » (§6.2) : coins très arrondis, contour fin,
- * panneau --surface à gauche (étiquette, titre, auteur, chapitre, vues) et
- * visuel paysage à droite, fondu vers le panneau.
+ * panneau --surface à gauche (étiquette, titre, auteur, chapitre) et visuel
+ * paysage à droite, fondu vers le panneau. Le compteur de vues est réservé à la
+ * fiche série (§12.3), il n'apparaît pas ici.
  */
 export function UpdateHeroCard({ hero }: { hero: UpdateHeroData }) {
   return (
@@ -53,12 +51,8 @@ export function UpdateHeroCard({ hero }: { hero: UpdateHeroData }) {
           </h2>
           {hero.auteur && <p className="meta">{hero.auteur}</p>}
         </div>
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <p className="text-sm">
           <span className="font-semibold text-fg">Ch. {hero.numero}</span>
-          <span className="meta inline-flex items-center gap-1 tabular-nums">
-            <Eye className="size-3.5" aria-hidden />
-            {number.format(hero.vues)} vues
-          </span>
         </p>
       </div>
       <div className="relative min-h-36 overflow-hidden sm:min-h-48">

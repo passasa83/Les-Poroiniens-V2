@@ -237,6 +237,14 @@ export default async function CataloguePage({
         />
       ) : (
         <>
+          {/* §12.8 : pagination en numéros, visible avant **et** après les résultats. */}
+          <Pagination
+            page={result.page}
+            pageCount={result.pageCount}
+            basePath="/catalogue"
+            searchParams={keep}
+            className="mt-6"
+          />
           <CatalogueGrid series={result.items} adultAllowed={gateOk} />
           <Pagination
             page={result.page}

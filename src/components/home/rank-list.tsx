@@ -1,16 +1,14 @@
 import Link from "next/link";
 import clsx from "clsx";
-import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
 import { SERIES_TYPE_LABELS, type Series } from "@/lib/types";
-
-const number = new Intl.NumberFormat("fr-FR");
 
 /**
  * « Populaire » (§6.1) : classement 1 à 10.
  * Le comptage par jour n'existe pas en base (les vues sont un cumul), le titre
  * reste donc « Les plus lues » plutôt qu'une promesse non tenable de « lectures
- * du jour ».
+ * du jour ». Le compteur de vues n'apparaît pas ici : il est réservé à la fiche
+ * série (§12.3).
  */
 export function RankList({
   series,
@@ -69,10 +67,6 @@ export function RankList({
                 {s.classification === "adult" && <Badge tone="adult">+18</Badge>}
               </p>
             </div>
-            <span className="meta inline-flex shrink-0 items-center gap-1 tabular-nums">
-              <Eye className="size-3" aria-hidden />
-              {number.format(s.vues)} vues
-            </span>
           </Link>
         </li>
       ))}

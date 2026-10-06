@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, Play, Sparkles, TrendingUp } from "lucide-react";
 import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getDb, TABLES } from "@/lib/db";
 import { firstChapterNumbers, listRecentReleases } from "@/lib/data/chapters";
@@ -307,25 +307,35 @@ async function continueBlock(userId: string) {
   return (
     <section>
       <h2 className="section-title">Continuer la lecture</h2>
-      <Link
-        href={`/serie/${series.slug}/chapitre-${chapter.numero}`}
-        className="card mt-4 flex items-center gap-4 p-4 hover:border-primary"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={series.couverture}
-          alt=""
-          width={80}
-          height={120}
-          className="h-28 w-[74px] rounded-lg object-cover"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold">{series.titre}</p>
+      {/* §12.6 : la carte (couverture, titre) mène à la fiche série ; la reprise
+          de lecture reste un bouton explicite, distinct du clic carte. */}
+      <div className="card mt-4 flex flex-wrap items-center gap-4 p-4">
+        <Link
+          href={`/serie/${series.slug}`}
+          className="shrink-0"
+          aria-label={`Voir la fiche de ${series.titre}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={series.couverture}
+            alt=""
+            width={80}
+            height={120}
+            className="h-28 w-[74px] rounded-lg object-cover"
+          />
+        </Link>
+        <div className="min-w-0 flex-1 space-y-1">
+          <Link
+            href={`/serie/${series.slug}`}
+            className="font-semibold text-fg hover:text-primary"
+          >
+            {series.titre}
+          </Link>
           <p className="text-sm text-muted">
             Chapitre {chapter.numero} — page {Math.max(entry.page, 1)}/{chapter.nb_pages}
           </p>
           <div
-            className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface2"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-surface2"
             role="progressbar"
             aria-label={`Progression de lecture — ${series.titre}, chapitre ${chapter.numero}`}
             aria-valuemin={0}
@@ -343,8 +353,15 @@ async function continueBlock(userId: string) {
             />
           </div>
         </div>
-        <ArrowRight className="size-5 text-muted" />
-      </Link>
+        <Link
+          href={`/serie/${series.slug}/chapitre-${chapter.numero}`}
+          className="btn-primary w-full shrink-0 justify-center sm:w-auto"
+          aria-label={`Reprendre la lecture de ${series.titre} — chapitre ${chapter.numero}, page ${Math.max(entry.page, 1)}`}
+        >
+          <Play className="size-4" aria-hidden />
+          Reprendre
+        </Link>
+      </div>
     </section>
   );
 }
