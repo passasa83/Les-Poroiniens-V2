@@ -11,6 +11,8 @@ export type ChapterRow = {
   numero: number;
   titre: string;
   volume: number | null;
+  /** Équipes de scantrad du chapitre (pastilles sous le titre, fiche uniquement). */
+  teams: string[];
   /** Libellé de date déjà formate (relatif sous 7 jours). */
   date: string;
   pages: number;
@@ -118,18 +120,34 @@ export function ChapterList({
                   <span className="w-14 shrink-0 text-sm font-bold text-primary">
                     Ch. {chapter.numero}
                   </span>
-                  <Link
-                    href={chapter.href}
-                    /* py-3 reporté sur le lien : la zone de clic occupe toute
-                       la hauteur de la ligne (44 px, §8.1) sans changer la
-                       hauteur de la rangée. */
-                    className="min-w-0 flex-1 truncate py-3 text-sm text-fg hover:text-primary"
-                  >
-                    {chapter.titre || `Chapitre ${chapter.numero}`}
-                    {chapter.volume !== null && (
-                      <span className="ml-2 text-xs text-muted">Vol. {chapter.volume}</span>
+                  <div className="min-w-0 flex-1 py-3">
+                    <Link
+                      href={chapter.href}
+                      /* py-3 reporté sur le conteneur : la zone de clic occupe
+                         toute la hauteur de la ligne (44 px, §8.1) sans changer
+                         la hauteur de la rangée. */
+                      className="block truncate text-sm text-fg hover:text-primary"
+                    >
+                      {chapter.titre || `Chapitre ${chapter.numero}`}
+                      {chapter.volume !== null && (
+                        <span className="ml-2 text-xs text-muted">Vol. {chapter.volume}</span>
+                      )}
+                    </Link>
+                    {/* Pastilles des équipes de scantrad (discret, sous le titre). */}
+                    {chapter.teams.length > 0 && (
+                      <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                        {chapter.teams.map((team) => (
+                          <span
+                            key={team}
+                            className="inline-flex items-center gap-1 text-xs text-muted"
+                          >
+                            <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+                            {team}
+                          </span>
+                        ))}
+                      </p>
                     )}
-                  </Link>
+                  </div>
                   <span className="hidden shrink-0 text-xs text-muted md:block">
                     {chapter.date}
                   </span>

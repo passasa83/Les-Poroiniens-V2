@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Play, Sparkles, TrendingUp } from "lucide-react";
 import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { getDb, TABLES } from "@/lib/db";
-import { firstChapterNumbers, listRecentReleases } from "@/lib/data/chapters";
+import { firstChapterNumbers, listRecentReleasesGrouped } from "@/lib/data/chapters";
 import {
   activeRecommendations,
   getSeriesById,
@@ -36,7 +36,9 @@ export default async function HomePage() {
 
   const [popular, releases, nouveautes, library] = await Promise.all([
     popularSeries(10, adult),
-    listRecentReleases({ perPage: 12, includeAdult: adult }),
+    // Une carte par série (12 séries × 3 derniers chapitres, §6.1) : le
+    // total reste le décompte des chapitres (bouton « Charger plus »).
+    listRecentReleasesGrouped({ series: 12, perSeries: 3, includeAdult: adult }),
     listSeries({ sort: "nouveautes", perPage: 6, includeAdult: adult }),
     user ? listLibrary(user.id) : Promise.resolve([]),
   ]);
@@ -133,10 +135,10 @@ export default async function HomePage() {
       {continueReading}
 
       {/* Dernières sorties : onglets + « Charger plus » (§6.1) */}
-      {releases.total > 0 && (
+      {releases.seriesCount > 0 && (
         <ReleasesSection
           initialItems={releases.items.map((ch) => toReleaseDto(ch))}
-          initialTotal={releases.total}
+          initialTotal={releases.totalChapters}
           adultAllowed={adult}
         />
       )}

@@ -266,6 +266,51 @@ export async function listRecentReleases(
   });
 }
 
+/**
+ * « Dernières sorties » groupées par œuvre (§6.1, décision client) : **une
+ * seule carte par série**, contenant ses derniers chapitres (MANGA Plus) —
+ * même avec plusieurs sorties du jour. La série apparaît une fois, ordonnée
+ * sur son chapitre le plus récent (ordre antéchronologique conservé).
+ * `/nouveautes` garde son détail jour par jour (non regroupé).
+ */
+export async function listRecentReleasesGrouped(
+  opts: {
+    type?: SeriesType | "";
+    /** Séries par page d'accueil (défaut 12). */
+    series?: number;
+    /** Chapitres conservés par série (défaut 3). */
+    perSeries?: number;
+    includeAdult?: boolean;
+  } = {},
+): Promise<{ items: ReleaseItem[]; seriesCount: number; totalChapters: number }> {
+  const maxSeries = Math.min(Math.max(opts.series ?? 12, 1), 48);
+  const perSeries = Math.min(Math.max(opts.perSeries ?? 3, 1), 10);
+
+  const items: ReleaseItem[] = [];
+  const parSerie = new Map<string, number>();
+  let totalChapters = 0;
+  // Assez de chapitres pour remplir les séries (12 × 3 + marge), page par page.
+  for (let page = 1; page <= 5; page++) {
+    const { items: lot, total } = await listRecentReleases({
+      type: opts.type,
+      page,
+      perPage: 48,
+      includeAdult: opts.includeAdult,
+    });
+    totalChapters = total;
+    if (lot.length === 0) break;
+    for (const ch of lot) {
+      const pris = parSerie.get(ch.series_id) ?? 0;
+      if (pris >= perSeries) continue;
+      if (!parSerie.has(ch.series_id) && parSerie.size >= maxSeries) continue;
+      parSerie.set(ch.series_id, pris + 1);
+      items.push(ch);
+    }
+    if (parSerie.size >= maxSeries) break;
+  }
+  return { items, seriesCount: parSerie.size, totalChapters };
+}
+
 export async function saveChapter(chapter: Partial<Chapter> & { id: string }): Promise<Chapter> {
   const db = getDb();
   const { id, ...data } = chapter;

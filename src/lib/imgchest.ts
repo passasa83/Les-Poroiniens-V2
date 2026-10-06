@@ -164,12 +164,22 @@ function num(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/**
+ * Normalise les fichiers d'un album (`props.post.files`, repli
+ * `props.files` observé sur l'ancien site) : `link || url`, entrées
+ * non-URL et vidéos écartées, triées par `position`.
+ */
 function toFiles(raw: unknown): ImgChestFile[] {
   if (!Array.isArray(raw)) return [];
   const files = raw.flatMap((entry, order): ImgChestFile[] => {
-    if (!entry || typeof entry !== "object") return [];
-    const row = entry as Record<string, unknown>;
-    const url = typeof row.link === "string" ? row.link.trim() : "";
+    const row = (typeof entry === "string" ? { link: entry } : entry) as Record<string, unknown> | null;
+    if (!row || typeof row !== "object") return [];
+    const url =
+      typeof row.link === "string" && row.link.trim()
+        ? row.link.trim()
+        : typeof row.url === "string"
+          ? row.url.trim()
+          : "";
     if (!url || !/^https?:\/\//i.test(url)) return [];
     if (row.mp4 === 1 || row.mp4 === true || /\.mp4($|\?)/i.test(url)) return [];
     return [
@@ -212,8 +222,11 @@ export async function imgchestPost(postId: string): Promise<ImgChestPost> {
       throw new ImgChestError("protocol", "Album illisible : données JSON invalides.");
     }
 
-    const post = (data as { props?: { post?: Record<string, unknown> } } | null)?.props?.post;
-    const files = toFiles(post?.files);
+    const props = (data as { props?: { post?: Record<string, unknown>; files?: unknown } } | null)?.props;
+    const post = props?.post;
+    // Repli observé sur l'ancien site (`proxy.routes.js`) : certains albums
+    // exposent leurs fichiers en `props.files` plutôt qu'en `props.post.files`.
+    const files = toFiles(post && typeof post === "object" ? (post.files ?? props?.files) : props?.files);
     if (files.length === 0) {
       throw new ImgChestError("protocol", "Aucune image trouvée dans cet album.");
     }

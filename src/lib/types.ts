@@ -50,6 +50,10 @@ export interface Chapter {
   publish_at: string | null;
   /** Origine des images : `nas` (chemins relatifs) ou `imgchest` (URLs CDN). */
   source: "nas" | "imgchest";
+  /** Équipes de scantrad du chapitre (clés de `chapters.groups` de l'ancien
+   *  site, ordre stable) : pastilles sur les lignes de la fiche série.
+   *  Absent des lignes créées avant cet attribut (lire avec `?? []`). */
+  teams: string[];
   /** Format d'origine de la série, dénormalisé à l'écriture (§6.1 : filtres de
    *  « Dernières sorties »). Absent sur les lignes créées avant cette colonne. */
   series_type?: SeriesType;

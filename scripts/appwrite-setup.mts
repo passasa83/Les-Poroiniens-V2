@@ -138,7 +138,13 @@ const TABLES: Table[] = [
     name: "Chapitres",
     columns: [
       { key: "series_id", ...ID64 },
-      { key: "numero", type: "integer" },
+      // Numéro décimal (`8.5`, `10.51`) : migré depuis `integer` par
+      // `scripts/migrate-numero-double.mts` (Appwrite ne change pas le type
+      // d'une colonne en place). L'égalité et le tri restent exacts.
+      { key: "numero", type: "double" },
+      // Équipes de scantrad du chapitre (pastilles de la fiche) : affichées
+      // uniquement, jamais filtrées (pas d'index sur les colonnes array).
+      { key: "teams", type: "string", size: 64, array: true },
       { key: "volume", type: "integer" },
       { key: "titre", type: "varchar", size: 255 },
       { key: "statut", type: "enum", elements: ["draft", "scheduled", "published"] },

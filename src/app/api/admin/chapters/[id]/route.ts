@@ -27,6 +27,7 @@ const patchInput = z.object({
   titre: z.string().trim().max(200).optional(),
   numero: z.number().int().min(1).max(100000).optional(),
   classification: z.enum(["all", "adult"]).optional(),
+  teams: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
 });
 
 /**
@@ -161,6 +162,7 @@ export async function PATCH(
       titre: existing.titre,
       numero: existing.numero,
       classification: existing.classification,
+      teams: (existing as { teams?: string[] }).teams ?? [],
     },
     apres: {
       statut: chapter.statut,
@@ -168,6 +170,7 @@ export async function PATCH(
       titre: chapter.titre,
       numero: chapter.numero,
       classification: chapter.classification,
+      teams: chapter.teams ?? [],
       ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
     },
     ip: clientIp(request),

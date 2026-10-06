@@ -215,6 +215,8 @@ export async function POST(request: Request) {
       series_type: series.type,
       nb_pages: indexed.length,
       classification: data.classification || series.classification,
+      // Import manuel du Gérant : aucun groupe de scan connu (pas de pastille).
+      teams: [],
       vues: 0,
       created_by: user.id,
       created_at: now,

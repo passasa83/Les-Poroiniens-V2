@@ -32,12 +32,14 @@ const INTROUVABLE = "/__lp_page_introuvable__";
 /** `/serie/{slug}` et `/serie/{slug}/chapitre-{n}` (ou `/serie/{slug}/{n}`). */
 const SERIE_ROUTE = /^\/serie\/([^/]+)(?:\/([^/]+))?$/;
 
-/** `10`, `chapitre-10` → numéro entier strictement positif. */
+/** `10`, `8.5`, `chapitre-10`, `chapitre-8.5` → nombre fini strictement
+ *  positif (`numero` est un `double` en base). Le proxy doit accepter les
+ *  décimaux, sinon leurs URLs basculent en 404 réel (§6.12). */
 function parseNumero(segment: string | null): number | null {
   if (segment === null) return null;
   const value = segment.replace(/^chapitre-/i, "");
   const numero = Number(value);
-  return Number.isInteger(numero) && numero > 0 ? numero : null;
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
 function decode(segment: string): string {

@@ -312,6 +312,8 @@ function build(): DemoDatabase {
         series_type: s.type,
         nb_pages: nbPages,
         classification,
+        // Chapitre de la graine : aucun groupe de scan (pas de pastille).
+        teams: [],
         vues: Math.max(10, (nbChapters - n + 1) * 137 + si * 41),
         created_by: "user-owner",
         created_at: published,

@@ -25,12 +25,14 @@ type Params = Promise<{ slug: string; n: string }>;
 /**
  * Segment dynamique `[n]` réécrit depuis l'URL publique `/chapitre-{n}`
  * (voir `rewrites()` dans `next.config.ts`). On tolère les deux formes.
+ * Les numéros décimaux (`chapitre-8.5`) sont routables : `numero` est un
+ * `double` en base (migration `scripts/migrate-numero-double.mts`).
  */
 function parseNumero(raw: string | undefined): number | null {
   if (!raw) return null;
   const value = raw.replace(/^chapitre-/i, "");
   const numero = Number(value);
-  return Number.isInteger(numero) && numero > 0 ? numero : null;
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
 function chapterHref(slug: string, numero: number): string {
@@ -166,6 +168,13 @@ export default async function ChapitrePage({ params }: { params: Params }) {
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
           {isAdult && <span className="badge bg-adult/15 text-adult">+18</span>}
+          {/* Équipes du chapitre (mêmes pastilles que la fiche, en discret). */}
+          {(context.chapter.teams ?? []).map((team) => (
+            <span key={team} className="inline-flex items-center gap-1">
+              <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+              {team}
+            </span>
+          ))}
           <span>
             {indisponible ? "Pages indisponibles" : `${context.pages.length} pages`}
           </span>

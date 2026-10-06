@@ -128,6 +128,7 @@ export default async function SeriePage({
       numero: chapter.numero,
       titre: chapter.titre,
       volume: chapter.volume,
+      teams: chapter.teams ?? [],
       date: dateOrRelative(chapter.publish_at ?? chapter.created_at),
       pages: chapter.nb_pages,
       likes: chapter.likes ?? 0,
@@ -164,6 +165,10 @@ export default async function SeriePage({
       : {}),
   };
 
+  /* Couverture vide (série sans chapitre ni image) : même visuel généré
+     que les cartes du catalogue (`|| /api/img/cover/…` dans tout le site). */
+  const couverture = series.couverture || `/api/img/cover/${series.slug}`;
+
   const tabs: Array<{ id: Onglet; label: string; count?: number }> = [
     { id: "chapitres", label: "Chapitres", count: chapters.length },
     { id: "commentaires", label: "Commentaires" },
@@ -185,7 +190,7 @@ export default async function SeriePage({
           <div aria-hidden className="absolute inset-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={series.banniere ?? series.couverture}
+              src={series.banniere ?? couverture}
               alt=""
               width={1600}
               height={900}
@@ -200,7 +205,7 @@ export default async function SeriePage({
             <div className="relative mx-auto w-40 sm:mx-0 sm:w-full">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={series.couverture}
+                src={couverture}
                 alt={`Couverture de ${series.titre}`}
                 width={600}
                 height={900}

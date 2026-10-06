@@ -55,6 +55,11 @@
  *   release_year          → annee                entier, sinon omis
  *   tags[]                → genres[] / tags[]    vocabulaire `GENRES` → `genres`,
  *                                                 le reste → `tags`
+ *   chapters[*].groups (clés)
+ *                         → teams[] (chapitre)   noms de groupes **de ce
+ *                                                 chapitre**, ordre stable,
+ *                                                 sans alias — pastilles des
+ *                                                 lignes de la fiche
  *   author + artist       → auteurs[]            uniques et non vides
  *   (constante)           → langue               "FR"
  *   (convention admin)    → noteMoy, nbVotes, vues, populaire
@@ -68,15 +73,19 @@
  *   (dérivé)              → id                   `rowId("s-" + slug)`
  *
  * TABLE `chapters` (un objet de `chapters`)
- *   clé d'objet ("12","8.5","Oneshot")
- *                         → numero               **entier strict > 0** (le lecteur
- *                                                 refuse tout autre : `parseNumero`
- *                                                 dans src/app/serie/[slug]/[n]/page.tsx) ;
- *                                                 la clé "0" devient `1` si `1` est
- *                                                 libre, sinon elle est ignorée ;
- *                                                 clés non entières → ignorées
+ *   clé d'objet ("12","8.5")
+ *                         → numero               **entier ou décimal > 0**
+ *                                                 (`double` en base, tri
+ *                                                 numérique) ; la clé "0"
+ *                                                 devient `1` si `1` est
+ *                                                 libre, sinon elle est
+ *                                                 ignorée ; clés non
+ *                                                 numériques (`Oneshot`,
+ *                                                 `1 en couleur`) → ignorées
  *   groupe `…/imgchest/chapter/<id>`
  *                         → source               "imgchest" (jamais "nas")
+ *   clés de `groups`      → teams                noms des équipes de ce
+ *                                                 chapitre (pastilles fiche)
  *   title                 → titre                sinon `Chapitre <numero>`
  *   volume                → volume               entier, sinon omis
  *   last_updated (sec.)   → publish_at, created_at
@@ -112,12 +121,16 @@
  *     sans image ni chapitre n'a aucune valeur et pollue le catalogue.
  *     `--include-no-cover` force l'import de ces fiches (couverture générée).
  *  B. **Séries à couverture morte mais avec des chapitres ImgChest** : fiche
- *     importée quand même (les chapitres sont la valeur), `couverture = ""` →
- *     image générée. Le Gérant pourra la remplacer ensuite.
+ *     importée quand même (les chapitres sont la valeur), et — sans
+ *     couverture vivante — la **1re planche du chapitre au plus petit
+ *     numéro** devient `couverture` + `banniere` (plutôt que l'image
+ *     générée). Une couverture vivante n'est jamais écrasée.
  *  C. **Chapitres NAS** : ignorés, jamais de chemin NAS écrit.
  *  D. **Chapitres sans groupe de scan** : ignorés (aucune source).
- *  E. **Numéros non entiers** (`8.5`, `10.51`, `Oneshot`, `1 en couleur`) :
- *     ignorés — le lecteur n'accepte que des entiers strictement positifs.
+ *  E. **Numéros non entiers** (`8.5`, `10.51`) : **importés** (`numero`
+ *     `double` en base, tri numérique, précédent/suivant corrects,
+ *     affichage « Chapitre 8.5 »). Seules les clés non numériques
+ *     (`Oneshot`, `1 en couleur`) restent ignorées, avec rapport.
  *  F. **Chapitre `0`** : renuméroté `1` si `1` est libre dans la série,
  *     sinon ignoré (collision).
  *  G. **Dates** : `last_updated` devient `publish_at` ; les dates sont anciennes,
@@ -325,6 +338,8 @@ interface ChapterPlan {
   remapped: boolean;
   albumId: string;
   titre: string;
+  /** Équipes de scantrad du chapitre (clés de `groups`, ordre stable). */
+  teams: string[];
   volume: number | null;
   publishAt: string;
   chapterId: string;
@@ -366,6 +381,8 @@ const stats = {
   seriesDoublons: 0,
   couverturesVivantes: 0,
   couverturesSansSource: 0,
+  couverturesAuto: 0,
+  chaptersAvecTeams: 0,
   chapitresTotal: 0,
   chapitresImgchest: 0,
   chapitresNas: 0,
@@ -646,15 +663,20 @@ async function fetchAlbum(id: string): Promise<AlbumFile[]> {
   } catch {
     throw new Error("album illisible (JSON invalide)");
   }
-  const files = ((data as { props?: { post?: { files?: unknown } } })?.props?.post?.files ??
-    []) as unknown[];
+  const files = ((data as { props?: { post?: { files?: unknown }; files?: unknown } })?.props?.post as
+    | { files?: unknown }
+    | undefined)?.files ??
+    ((data as { props?: { files?: unknown } })?.props?.files ?? []) as unknown[];
   if (!Array.isArray(files)) throw new Error("aucun fichier dans l'album");
 
   const out: AlbumFile[] = [];
   for (const raw of files) {
-    if (!raw || typeof raw !== "object") continue;
-    const row = raw as Record<string, unknown>;
-    const url = typeof row.link === "string" ? row.link.trim() : "";
+    // Repli observé sur l'ancien site : `props.files` et `link || url`.
+    const row = (typeof raw === "string" ? { link: raw } : raw) as Record<string, unknown> | null;
+    if (!row || typeof row !== "object") continue;
+    const link = typeof row.link === "string" ? row.link.trim() : "";
+    const alt = typeof row.url === "string" ? row.url.trim() : "";
+    const url = link || alt;
     if (!url || !/^https?:\/\//i.test(url)) continue;
     if (row.mp4 === 1 || row.mp4 === true || /\.mp4($|\?)/i.test(url)) continue;
     out.push({
@@ -744,7 +766,11 @@ function hasNasSource(groups: Record<string, string> | undefined): boolean {
   return Object.values(groups ?? {}).some((path) => /les_poro_img/i.test(path));
 }
 
-/** `numero` : entier strictement positif (contrainte du lecteur). */
+/** `numero` : entier strictement positif **ou décimal** (`8.5`, `10.51`).
+ *  Le lecteur accepte tout nombre fini > 0 (`parseNumero` dans
+ *  `src/app/serie/[slug]/[n]/page.tsx` et `src/proxy.ts`) et `numero` est
+ *  un `double` en base : seules les clés non numériques (`Oneshot`,
+ *  `1 en couleur`) sont ignorées, avec rapport. */
 function planChapterNumbers(
   keys: string[],
 ): { keep: Array<{ key: string; numero: number; remapped: boolean }>; skipped: Ignored[] } {
@@ -752,14 +778,26 @@ function planChapterNumbers(
   const skipped: Ignored[] = [];
   const taken = new Set<number>();
 
-  const numeric = keys.filter((k) => /^\d+$/.test(k));
-  const others = keys.filter((k) => !/^\d+$/.test(k));
-  // Les numéros ≥ 1 d'abord : le « 0 » ne peut être renuméroté que s'ils sont libres.
-  const positives = numeric.filter((k) => Number(k) >= 1).sort((a, b) => Number(a) - Number(b));
-  const zeros = numeric.filter((k) => Number(k) === 0);
+  const numeric = keys.filter((k) => /^\d+(?:\.\d+)?$/.test(k));
+  const others = keys.filter((k) => !/^\d+(?:\.\d+)?$/.test(k));
+  // Tri numérique : `8.5` s'intercale entre `8` et `9` (précédent/suivant
+  // corrects), et le « 0 » ne peut être renuméroté que si `1` est libre.
+  const ordered = numeric.sort((a, b) => Number(a) - Number(b));
 
-  for (const key of positives) {
+  for (const key of ordered) {
     const numero = Number(key);
+    if (numero === 0) {
+      if (taken.has(1)) {
+        skipped.push({
+          titre: "chapitre 0",
+          detail: "numéro 1 déjà pris, renumérotation impossible",
+        });
+        continue;
+      }
+      taken.add(1);
+      keep.push({ key, numero: 1, remapped: true });
+      continue;
+    }
     if (taken.has(numero)) {
       skipped.push({ titre: `chapitre ${key}`, detail: `numéro ${numero} déjà présent` });
       continue;
@@ -767,21 +805,10 @@ function planChapterNumbers(
     taken.add(numero);
     keep.push({ key, numero, remapped: false });
   }
-  for (const key of zeros) {
-    if (taken.has(1)) {
-      skipped.push({
-        titre: "chapitre 0",
-        detail: "numéro 1 déjà pris, renumérotation impossible",
-      });
-      continue;
-    }
-    taken.add(1);
-    keep.push({ key, numero: 1, remapped: true });
-  }
   for (const key of others) {
     skipped.push({
       titre: `chapitre ${key}`,
-      detail: "clé non entière (le lecteur n'accepte que des entiers > 0)",
+      detail: "clé non numérique (ni entier ni décimal > 0)",
     });
   }
   return { keep, skipped };
@@ -847,6 +874,12 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
     if (entry.remapped) stats.chapitresRenumerotes += 1;
     const titreChapitre =
       typeof chapter.title === "string" ? chapter.title.trim() : "";
+    /* Équipes de scantrad : clés des groupes **de ce chapitre** (ordre
+       stable, sans alias — pas de table). La team est une propriété du
+       chapitre, réuploadée avec lui (pastilles de la fiche). */
+    const teams = uniqueStrings(Object.keys(chapter.groups ?? {}))
+      .slice(0, 20)
+      .map((t) => truncate(t, 64));
     chapters.push({
       serie: titre,
       key: entry.key,
@@ -854,6 +887,7 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
       remapped: entry.remapped,
       albumId: extractAlbumId(chapter.groups),
       titre: titreChapitre || `Chapitre ${entry.numero}`,
+      teams,
       volume: parseVolume(chapter.volume),
       publishAt: iso,
       chapterId: "",
@@ -882,7 +916,6 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
     if (GENRES.has(clean.toLowerCase())) genres.push(clean);
     else tags.push(clean);
   }
-
   const seriesId = rowId(`s-${slug}`);
   const row: Record<string, unknown> = {
     slug,
@@ -1079,6 +1112,22 @@ async function finalizeAndCount(createdBy: string): Promise<void> {
   for (const plan of seriesPlans) {
     if (plan.duplicate) continue;
 
+    /* Couverture auto : pas de couverture vivante mais des chapitres ImgChest
+       résolus → 1re planche du chapitre au plus petit numéro (même règle que
+       `scripts/backfill-couvertures.mts` pour les séries déjà en base ; les
+       lignes existantes ne sont jamais réécrites ici). */
+    if (!plan.row.couverture) {
+      const WithPages = plan.chapters
+        .filter((c) => c.pages && c.pages.length > 0)
+        .sort((a, b) => a.numero - b.numero);
+      const first = WithPages[0]?.pages?.[0];
+      if (first) {
+        plan.row.couverture = first.chemin;
+        plan.row.banniere = first.chemin;
+        stats.couverturesAuto += 1;
+      }
+    }
+
     for (const chapter of plan.chapters) {
       if (!chapter.pages) continue; // album non résolu : rien à écrire
 
@@ -1089,6 +1138,7 @@ async function finalizeAndCount(createdBy: string): Promise<void> {
         statut: "published",
         publish_at: chapter.publishAt,
         source: "imgchest",
+        teams: chapter.teams,
         nb_pages: chapter.pages.length,
         likes: 0,
         classification: String(plan.row.classification ?? "all"),
@@ -1098,6 +1148,7 @@ async function finalizeAndCount(createdBy: string): Promise<void> {
         created_at: chapter.publishAt,
       };
       if (chapter.volume !== null) chapter.row.volume = chapter.volume;
+      if ((chapter.teams ?? []).length > 0) stats.chaptersAvecTeams += 1;
 
       if (!chapter.existing) {
         stats.chapitresACreer += 1;
@@ -1149,8 +1200,9 @@ function printReport(createdBy: string): void {
     `Albums ImgChest      : cache ${stats.albumsDepuisCache} · réseau ${stats.albumsResolus} · non résolus ${stats.albumsNonResolus}`,
   );
   console.log(
-    `Couvertures vivantes : ${stats.couverturesVivantes} · sans couverture vivante : ${stats.couverturesSansSource}`,
+    `Couvertures vivantes : ${stats.couverturesVivantes} · sans couverture vivante : ${stats.couverturesSansSource} · auto (1re planche) : ${stats.couverturesAuto}`,
   );
+  console.log(`Chapitres avec teams   : ${stats.chaptersAvecTeams}`);
   console.log("");
   console.log("SÉRIES");
   console.log(`  à créer             : ${stats.seriesACreer} (dont ${stats.seriesFicheSeule} fiche seule, 0 chapitre)`);
@@ -1172,7 +1224,7 @@ function printReport(createdBy: string): void {
   console.log(`  ignorés             : ${chapitresIgnores}`);
   console.log(`      · source NAS              : ${stats.chapitresNas}`);
   console.log(`      · aucune source           : ${stats.chapitresSansSource}`);
-  console.log(`      · numéro refusé/non entier: ${stats.chapitresIgnoresNumero}`);
+  console.log(`      · numéro refusé/non numérique: ${stats.chapitresIgnoresNumero}`);
   console.log(`      · déjà en base, autre src. : ${stats.chapitresIgnoresAutreSource}`);
   console.log(`  renumérotés 0 → 1   : ${stats.chapitresRenumerotes}`);
   console.log(`  album non résolu     : ${stats.chapitresNonResolus}`);

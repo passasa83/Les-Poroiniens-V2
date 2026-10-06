@@ -28,18 +28,22 @@ type ReleaseCard = {
   chapters: Array<{ id: string; numero: number }>;
 };
 
-/** Les chapitres arrivent triés du plus récent au plus ancien : les sorts d'une
- *  même série se suivent et forment une carte « couverture + 2 chapitres » (§6.1). */
+/** Les chapitres arrivent triés du plus récent au plus ancien : on fusionne
+ *  par série (une seule carte par œuvre, 3 derniers chapitres au maximum),
+ *  y compris entre les pages de « Charger plus » et les onglets (§6.1). */
 function groupReleases(items: ReleaseDto[]): ReleaseCard[] {
-  const cards: ReleaseCard[] = [];
+  const MAX_CHAPITRES = 3;
+  const cartes = new Map<string, ReleaseCard>();
   for (const it of items) {
-    const last = cards[cards.length - 1];
-    if (last && last.slug === it.series.slug && last.chapters.length < 2) {
-      last.chapters.push({ id: it.id, numero: it.numero });
+    const carte = cartes.get(it.series.slug);
+    if (carte) {
+      if (carte.chapters.length < MAX_CHAPITRES) {
+        carte.chapters.push({ id: it.id, numero: it.numero });
+      }
       continue;
     }
-    cards.push({
-      key: `${it.series.slug}:${it.id}`,
+    cartes.set(it.series.slug, {
+      key: it.series.slug,
       slug: it.series.slug,
       titre: it.series.titre,
       cover: it.series.couverture,
@@ -48,7 +52,7 @@ function groupReleases(items: ReleaseDto[]): ReleaseCard[] {
       chapters: [{ id: it.id, numero: it.numero }],
     });
   }
-  return cards;
+  return [...cartes.values()];
 }
 
 /**
