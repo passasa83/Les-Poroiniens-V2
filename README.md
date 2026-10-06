@@ -50,6 +50,24 @@ Pour brancher Appwrite :
    + profil Gérant pour `APPWRITE_OWNER_EMAIL`).
 4. `npm run appwrite:seed` (données de démonstration, facultatif).
 
+### Jeu de démo masqué en production
+
+La base Appwrite `poroiniens` est **partagée dev/prod** : la graine
+(`npm run appwrite:seed` ou `POST /api/cron/seed`) y écrit 10 séries de
+démonstration, leurs chapitres (planches SVG `/api/img/page/…`), des
+recommandations et des lignes de bibliothèque.
+
+- **Production** (`VERCEL_ENV=production`) : tout ce jeu est **masqué** par
+  `src/lib/demo-gate.ts` — absent des listes (exclusion portée **par la
+  requête**, donc `total`, pagination et repli flou inchangés), fiches,
+  lecteur, planches et annonces en **vrai 404**, absent du sitemap et des
+  KPI d'administration. Le corpus importé (335 séries) n'est pas affecté.
+- **Local et previews** : rien ne change — la graine reste visible, les
+  recettes s'appuient sur `/serie/les-poroiniens`.
+- **`POST /api/cron/seed`** répond `{"status":"skipped","reason":"production"}`
+  en prod, afin de ne jamais réécrire un jeu masqué ; la variable
+  `SEED_EN_PROD=1` autorise une exécution manuelle exceptionnelle.
+
 ## Déploiement Vercel
 
 1. **Importer** le repo GitHub sur <https://vercel.com/new> : preset
