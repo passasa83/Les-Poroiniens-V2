@@ -157,8 +157,22 @@ function normalizePath(base: string, name: string): string {
 
 function toEntry(raw: unknown, basePath: string): NasEntry | null {
   if (typeof raw === "string") {
-    const isDir = raw.endsWith("/");
-    const name = raw.replace(/\/+$/, "");
+    const text = raw.trim();
+    if (!text) return null;
+    // L'API peut renvoyer des URLs absolues (`/list?path=…` validé) : on ne
+    // garde que le chemin relatif, seul stockable (`storeCover`, §5.2).
+    if (/^https?:\/\//i.test(text)) {
+      try {
+        const relative = new URL(text).pathname.replace(/^\/+/, "");
+        const name = relative.split("/").pop() ?? "";
+        if (!name) return null;
+        return { name, path: relative, isDir: false };
+      } catch {
+        return null;
+      }
+    }
+    const isDir = text.endsWith("/");
+    const name = text.replace(/\/+$/, "");
     if (!name) return null;
     return { name, path: normalizePath(basePath, name), isDir };
   }
@@ -170,8 +184,19 @@ function toEntry(raw: unknown, basePath: string): NasEntry | null {
   const type = str(row.type);
   const isDir =
     type === "dir" || type === "directory" || type === "folder" || row.is_dir === true;
-  const path = str(row.path) || str(row.url) || normalizePath(basePath, name);
-  return { name, path: path.replace(/^\//, ""), isDir };
+  const location = str(row.path) || str(row.url) || normalizePath(basePath, name);
+  // Même repli que ci-dessus si `url` est absolue.
+  const path = /^https?:\/\//i.test(location)
+    ? (() => {
+        try {
+          return new URL(location).pathname.replace(/^\/+/, "");
+        } catch {
+          return "";
+        }
+      })()
+    : location.replace(/^\//, "");
+  if (!path) return null;
+  return { name, path, isDir };
 }
 
 function toPage(raw: unknown, basePath: string): NasPage | null {
@@ -194,7 +219,9 @@ function natural(a: string, b: string): number {
   return a.localeCompare(b, "fr", { numeric: true });
 }
 
-/** `GET /list?path=` — pages d'un dossier de chapitre (§4.1). */
+/** `GET /list?path=` — pages d'un dossier de chapitre (§4.1).
+ *  L'API renvoie un tableau d'URLs absolues `img.` (ou des objets
+ *  `{ name, path, … }`) : seul le chemin relatif est conservé. */
 export async function nasList(path: string): Promise<{ path: string; count: number; pages: NasPage[] }> {
   if (!isSafePath(path)) {
     throw new NasError("invalid_path", "Chemin refusé (validation anti traversal).");

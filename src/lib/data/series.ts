@@ -5,14 +5,18 @@ import { resolveCover, storeCover } from "@/lib/media";
 import type { Recommendation, Series, SeriesStatus, SeriesType } from "@/lib/types";
 
 /**
- * Lisibilité : la couverture stockée en base est un chemin relatif (`public/`
- * sur le NAS) ou une URL ; on renvoie toujours une URL servable, versionnée
- * par la dernière mise à jour (§7.3). `saveSeries` applique l'opération
- * inverse pour ne jamais réécrire une URL résolue.
+ * Lisibilité : la couverture et la bannière stockées en base sont des chemins
+ * relatifs (`public/` sur le NAS) ou des URLs ; on renvoie toujours des URLs
+ * servables, versionnées par la dernière mise à jour (§7.3). `saveSeries`
+ * applique l'opération inverse pour ne jamais réécrire une URL résolue.
  */
 export function mapSeries<T extends Series>(row: T): T {
   if (!row) return row;
-  return { ...row, couverture: resolveCover(row.couverture, row.updated_at) };
+  return {
+    ...row,
+    couverture: resolveCover(row.couverture, row.updated_at),
+    banniere: row.banniere ? resolveCover(row.banniere, row.updated_at) : row.banniere,
+  };
 }
 
 export type SeriesSort =
@@ -296,6 +300,9 @@ export async function saveSeries(series: Partial<Series> & { id: string }): Prom
   if (typeof data.couverture === "string") {
     // Jamais de résolution en base : on stocke un chemin relatif (§5.2).
     data.couverture = storeCover(data.couverture);
+  }
+  if (typeof data.banniere === "string" && data.banniere) {
+    data.banniere = storeCover(data.banniere);
   }
   const existing = await db.get<Series>(TABLES.series, id);
   /* Recherche plein texte (§6.4) : les colonnes array ne sont pas indexables,

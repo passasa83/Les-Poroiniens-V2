@@ -208,42 +208,50 @@ les pages sont servies par le CDN tiers, aucun stockage ni transfet par Vercel.
 - La CSP du site autorise déjà `img-src https:` : les images `cdn.imgchest.com`
   s'affichent sans réglage supplémentaire.
 
-### Mode « sans NAS ni Cloudflare » (retenu)
+### Mode NAS actif (phase 1 « tout sur le NAS », 06/10/2026)
 
-Décision : le site fonctionne **uniquement avec ImgChest** tant que les clés
-NAS et Cloudflare ne sont pas fournies (aucune n'existe côté responsable).
+Décision client : les chapitres et couvertures déjà déposés sur le NAS sont
+la source principale. `img.lesporoiniens.org` sert les fichiers,
+`api-img.lesporoiniens.org/list?path=…` fournit le catalogue (pattern validé
+par le proprio). Les albums ImgChest (~330 chapitres) et les couvertures
+`file.garden` restent en place ; leur rapatriement viendra plus tard.
 
-- **Variables volontairement vides** : `IMG_BASE_URL` (alias `CDN_BASE_URL`),
-  `NAS_API_BASE` / `NAS_API_*`, `IMG_SIGNING_SECRET`, `CF_API_TOKEN` /
-  `CF_ZONE_ID`. Aucune n'est bloquante : import NAS refusé avec message
-  explicite (`nasConfigured()` faux), purge Cloudflare `skipped: true`,
-  aperçus signés repliés sur `AUTH_SECRET`, publication des URL externes sans
-  déplacement de fichier.
-- **Règle d'écriture** : ne jamais enregistrer de chemin NAS relatif dans
-  `series.couverture` ni dans les pages d'un chapitre tant que `IMG_BASE_URL`
-  est vide — sinon `/api/image` répond `502 NAS_NOT_CONFIGURED` (couverture
-  cassée, page du lecteur « indisponible »). Seules des **URLs complètes** ou
-  les chemins de démonstration `/api/img/…` sont acceptés.
-- **Lecture sans clé** : l'API ImgChest est publique (`GET /p/<id>` et
-  `GET /api/posts?username=…`) ; `IMG_CHEST_API_KEY` reste facultative — au
-  passage, `IMGCHEST_API_KEY` figurant dans le `.dev.vars` de l'ancien site
-  n'était jamais lue par son code.
-- **État de l'ancien corpus (05/10/2026)** : `data/series/*.json` =
-  335 séries et 4 223 chapitres, dont **3 844 hébergés sur le NAS hors ligne**
-  (`img.lesporoiniens.org` et `api-img.lesporoiniens.org` renvoient 530).
-  Restent récupérables sans clé : 336 albums ImgChest (~379 chapitres) et les
-  couvertures tierces `file.garden`. **Import différé** : en attente du dépôt
-  complet de l'ancien site (fichiers et dossiers ignorés par git).
+- **Variables à poser** (local : `.env.local`, non versionné ; prod : Vercel →
+  Settings → Environment Variables — les 3 mêmes valeurs) :
+  `IMG_BASE_URL=https://img.lesporoiniens.org`,
+  `NAS_API_BASE=https://api-img.lesporoiniens.org`,
+  `IMG_SIGNING_SECRET=…` (secret généré localement, jamais dans le dépôt).
+  `NAS_API_KEY` / `NAS_API_CLIENT_*` restent vides en phase 1 (`/list` est
+  public) ; `CF_API_TOKEN` / `CF_ZONE_ID` ne servent qu'à la purge ciblée
+  (repli `skipped: true` sans eux).
+- **Stockage** : chemins **relatifs** en base (`Fruit%20of…/Chapitre%201/001.png`),
+  préfixés par `IMG_BASE_URL` à la lecture (`pageUrl()` / `resolveCover()`).
+  Changer de domaine ne demande aucune migration (§5.2).
+- **Repli si le NAS ne répond pas** (comportement conservé) : import — dossier
+  absent ou API injoignable → rien n'est écrit, chapitre compté « non résolu »
+  ; lecture — 2 reprises automatiques puis page de remplacement + signalement ;
+  proxy `/api/image` — `400 INVALID_PATH` (sans path, traversal) ou `502 NAS_*`
+  (fichier absent, NAS injoignable), toujours en JSON `{error, code}`.
+- **État importé (06/10/2026)** : `data/series/*.json` = 335 séries ;
+  **3 449 chapitres NAS** et **330 chapitres ImgChest** en base
+  (**127 529 pages** au total, teams par chapitre) ; **249 couvertures**
+  comblées en relatif ; dossiers absents du NAS et clés non numériques
+  restés hors base (voir rapport d'import). Les séries mixtes NAS+ImgChest
+  gardent leurs deux sources, un chapitre n'étant jamais dupliqué
+  (priorité ImgChest).
 
 ## Migration de l'ancien corpus
 
 L'ancien site (Cloudflare Pages + Functions, D1/KV/R2) a été livré en copie complète
 (`C:\Users\test\Documents\Ancien Poroiniens\Complet`). Décisions arrêtées avant import :
 
-1. **Import sans NAS** : seuls les chapitres **ImgChest** (~379 groupes, résolution sans clé)
-   et les couvertures `file.garden` / ImgChest seront importés. Les 3 844 chapitres qui
-   pointent vers `img.lesporoiniens.org` (HTTP 530) restent hors périmètre tant que le NAS
-   n'est pas relevé ; à ce moment-là, poser `IMG_BASE_URL` sur Vercel.
+1. **Import avec NAS (phase 1, 06/10/2026)** : chapitres **NAS** résolus via
+   `NAS_API_BASE/list?path=` (chemin relatif, `source: "nas"`) et chapitres
+   **ImgChest** (~334, résolution sans clé), couvertures `file.garden` /
+   ImgChest conservées et couvertures `img.lesporoiniens.org` stockées en
+   relatif. Dossiers NAS absents et clés non numériques (`Oneshot`,
+   `1 en couleur`) : hors base, avec rapport. Rapatriement ImgChest →
+   NAS plus tard ; import Gérant → NAS en phase 2.
 2. **Comptes : repartir de zéro** — les hashs bcrypt de la D1 ne sont pas réutilisables dans
    Appwrite Auth. Aucun import de comptes, aucune réinitialisation forcée. Le pipeline
    likes/commentaires de l'ancien (KV, sans cron de production) n'est pas migré non plus.
@@ -264,12 +272,11 @@ subsiste. Les tables Appwrite sont conservées (structure prête à l'emploi).
 Pour (re)remplir le site :
 
 - **Espace Gérant → Import** : crée la fiche série (back-office `/admin/series`)
-  puis importe un chapitre, **depuis un album ImgChest** (source active : liste
-  des albums du compte ou identifiant collé), depuis un dossier du NAS (listing
-  serveur, largeurs/hauteurs/poids/hash lus sur place), ou en indexant des noms
-  de fichiers. Tant que `NAS_API_BASE` est absent et qu'aucun album n'est choisi,
-  les pages importées sont des **images de démonstration** — le site est alors
-  remplissable et testable de bout en bout.
+  puis importe un chapitre, **depuis un album ImgChest** (liste des albums du
+  compte ou identifiant collé), depuis un dossier du NAS (listing serveur,
+  largeurs/hauteurs/poids/hash lus sur place), ou en indexant des noms
+  de fichiers. L'import massif de l'ancien corpus passe par
+  `npx tsx scripts/import-ancien.mts` (dry-run par défaut, `--apply` idempotent).
 - **`npm run appwrite:seed`** : recopie le jeu de démonstration (10 séries) —
   à éviter si l'on veut garder un site vide.
   L'insertion prend environ cinq minutes : le client HTTP expire au bout de

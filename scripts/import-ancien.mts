@@ -10,13 +10,19 @@
  *
  * ─── Règles absolues ───────────────────────────────────────────────────────
  *  1. **Aucune écriture sans `--apply`** : par défaut le script ne fait que
- *     lire le corpus, Appwrite et ImgChest. `--apply` est le seul chemin qui
+ *     lire le corpus, Appwrite, ImgChest et le NAS. `--apply` est le seul chemin qui
  *     appelle `createRow`.
- *  2. **Jamais de NAS** : le corpus contient des sources
- *     `/proxy/api/les_poro_img/<dossier>` (NAS mort) et des couvertures
- *     `img.lesporoiniens.org` (domaine mort). Ces valeurs ne sont ni lues comme
- *     source ni écrites : `assertCleanUrl()` lève une erreur sur toute URL
- *     interdite, et seuls les albums **ImgChest** sont indexés.
+ *  2. **NAS actif (phase 1 « tout sur le NAS », 06/10/2026)** : les groupes
+ *     `/proxy/api/les_poro_img/<Série>/<Chapitre N>` sont résolus via
+ *     `NAS_API_BASE/list?path=<relPath>` et stockés en **chemin relatif**
+ *     (`source: "nas"`), préfixés par `IMG_BASE_URL` à la lecture
+ *     (`pageUrl`/`resolveCover` de `src/lib/media.ts`). `assertCleanUrl()`
+ *     continue d'interdire toute URL morte **absolue** dans les champs qui
+ *     n'en portent que des vivantes ; les chemins NAS relatifs sont validés
+ *     par `assertNasRelPath()` (ni `..`, ni absolu, ni préfixe `/proxy/`).
+ *     Seuls les albums **ImgChest** et les dossiers **NAS** sont indexés ;
+ *     un chapitre qui porte les deux sources est importé **via ImgChest**
+ *     (jamais dupliqué).
  *  3. **Idempotent** : chaque ligne porte un identifiant déterministe ; une
  *     ligne déjà présente est comptée « déjà là » et n'est pas réécrite, ce qui
  *     rend la ré-exécution et la reprise sûres (les pages manquantes d'un
@@ -34,9 +40,11 @@
  *   alternative_titles[]  → titresAlt[]          non vides, sans doublon, ≤20
  *   description           → synopsis             tel quel
  *   cover / covers_gallery[].url_lq|url_hq / vignette / preview_image
- *                         → couverture           **hôtes vivants uniquement**
- *                                                 (`file.garden`, `imgchest.com`,
- *                                                 `cdn.imgchest.com`) ; sinon ""
+ *                         → couverture           hôtes vivants (`file.garden`,
+ *                                                 `imgchest.com`,
+ *                                                 `cdn.imgchest.com`) sinon
+ *                                                 couverture NAS du JSON en
+ *                                                 **chemin relatif**, sinon ""
  *                                                 → image générée
  *                                                 `/api/img/cover/<slug>`
  *   (même valeur)         → banniere             identique à `couverture`
@@ -64,7 +72,7 @@
  *   (constante)           → langue               "FR"
  *   (convention admin)    → noteMoy, nbVotes, vues, populaire
  *                                                 0
- *   (dénombrement)        → nb_chapitres         chapitres ImgChest importables
+ *   (dénombrement)        → nb_chapitres         chapitres importables (NAS + ImgChest)
  *   titresAlt / auteurs   → recherche_alt / recherche_auteurs
  *                                                 `join(" ")` tronqué à 512 (§6.4)
  *   chapters[*].last_updated (Unix)
@@ -83,7 +91,17 @@
  *                                                 numériques (`Oneshot`,
  *                                                 `1 en couleur`) → ignorées
  *   groupe `…/imgchest/chapter/<id>`
- *                         → source               "imgchest" (jamais "nas")
+ *                         → source               "imgchest" (pages : URL CDN
+ *                                                 complètes, voir ci-dessous)
+ *   groupe `/proxy/api/les_poro_img/<Série>/<Chapitre N>`
+ *                         → source               "nas" (**sans** équivalent
+ *                                                 ImgChest sur le chapitre —
+ *                                                 jamais de doublon) ; pages
+ *                                                 résolues via
+ *                                                 `NAS_API_BASE/list?path=`,
+ *                                                 `chemin` **relatif**
+ *                                                 (préfixé par `IMG_BASE_URL`
+ *                                                 dans `pageUrl()`)
  *   clés de `groups`      → teams                noms des équipes de ce
  *                                                 chapitre (pastilles fiche)
  *   title                 → titre                sinon `Chapitre <numero>`
@@ -96,10 +114,10 @@
  *   (compte Gérant)       → created_by            id Appwrite de
  *                                                 APPWRITE_OWNER_EMAIL, sinon "user-owner"
  *   (dérivé)              → id                    `rowId(\`${seriesId}-c${numero}\`)`
- *   groupes `…/les_poro_img/…`
- *                         → —                    **ignorés** (NAS mort)
+ *   (sans groupe ni dossier) → —                   **ignorés** (aucune source)
  *
- * TABLE `pages` (un fichier de l'album ImgChest résolu)
+ * TABLE `pages` (un fichier de l'album ImgChest résolu, ou une entrée
+ * `NAS_API_BASE/list?path=` pour la source `nas`)
  *   rang dans l'album     → ordre                 0..n-1 (la colonne publique
  *                                                 `index` est mappée sur `ordre`
  *                                                 par `src/lib/db/appwrite.ts`)
@@ -107,25 +125,34 @@
  *                                                 `https://cdn.imgchest.com/…` :
  *                                                 `pageUrl()` la sert telle quelle
  *                                                 (§7.1 « URL héritée »)
- *   file.width/height     → largeur/hauteur       défaut 1200 × 1800
+ *   entrée `NAS_API_BASE/list?path=` (URL absolue `img.`)
+ *                         → chemin                **relatif** (préfixe `IMG_BASE_URL`
+ *                                                 retiré, encodage `%20` conservé) :
+ *                                                 `pageUrl()` le préfixe à la lecture
+ *   file.width/height     → largeur/hauteur       défaut 1200 × 1800 (`/list`
+ *                                                 ne donne pas de dimensions)
  *   file.size             → bytes                 défaut 0
  *   file.id               → hash                  version d'URL `?v=`
  *   (dérivé)              → id                    `rowId(chapterId, "p<i>")`
  *   (dérivé)              → chapter_id            id du chapitre
  *
  * ─── Décisions éditoriales ─────────────────────────────────────────────────
- *  A. **Séries sans aucun chapitre ImgChest** : la fiche est importée (avec
+ *  A. **Séries sans aucun chapitre importable** : la fiche est importée (avec
  *     `nb_chapitres = 0`) **si et seulement si** une couverture vivante existe ;
  *     sinon la série est ignorée et listée dans le rapport. Justification : une
  *     fiche lisible avec image vaut mieux qu'une ligne cassée, mais une fiche
  *     sans image ni chapitre n'a aucune valeur et pollue le catalogue.
  *     `--include-no-cover` force l'import de ces fiches (couverture générée).
- *  B. **Séries à couverture morte mais avec des chapitres ImgChest** : fiche
- *     importée quand même (les chapitres sont la valeur), et — sans
- *     couverture vivante — la **1re planche du chapitre au plus petit
- *     numéro** devient `couverture` + `banniere` (plutôt que l'image
- *     générée). Une couverture vivante n'est jamais écrasée.
- *  C. **Chapitres NAS** : ignorés, jamais de chemin NAS écrit.
+ *  B. **Séries sans couverture vivante mais avec des chapitres** : fiche
+ *     importée quand même (les chapitres sont la valeur) ; la couverture
+ *     devient la couverture NAS du JSON (chemin relatif) si elle existe,
+ *     sinon la **1re planche du chapitre au plus petit numéro** (plutôt
+ *     que l'image générée). Une couverture vivante n'est jamais écrasée.
+ *  C. **Chapitres NAS** : **importés** via `NAS_API_BASE/list?path=` (chemin
+ *     relatif, `source: "nas"`), sauf dossier absent ou API injoignable
+ *     (comptés « non résolus », rien n'est écrit pour eux). Un chapitre qui
+ *     porte aussi un album ImgChest est importé **via ImgChest** (jamais
+ *     dupliqué) ; les teams (clés de `groups`) s'appliquent aux deux sources.
  *  D. **Chapitres sans groupe de scan** : ignorés (aucune source).
  *  E. **Numéros non entiers** (`8.5`, `10.51`) : **importés** (`numero`
  *     `double` en base, tri numérique, précédent/suivant corrects,
@@ -208,7 +235,7 @@ for (const arg of args) {
   }
 }
 if (APPLY && !RESOLVE) {
-  console.error("✖ --apply exige la résolution des albums ImgChest (retirez --no-resolve).");
+  console.error("✖ --apply exige la résolution des albums et dossiers (retirez --no-resolve).");
   process.exit(1);
 }
 
@@ -221,13 +248,29 @@ const ANCIEN_CORPUS =
 const CONCURRENCE = 12;
 /** Résolution des albums ImgChest : on reste poli envers ImgChest. */
 const CONCURRENCE_ALBUMS = 6;
+/** Listings NAS : l'API du proprio supporte la parallélisation modérée. */
+const CONCURRENCE_NAS = 6;
 const TTL_CACHE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Cache local des albums résolus : %TEMP%, sans lien avec Appwrite. */
 const CACHE_FILE = join(tmpdir(), "poroiniens-imgchest-cache.json");
+/** Cache local des dossiers NAS résolus : %TEMP%, sans lien avec Appwrite. */
+const NAS_CACHE_FILE = join(tmpdir(), "poroiniens-nas-cache.json");
 
 const IMGCHEST_CHAPTER = /\/imgchest\/chapter\/([a-z0-9]{4,32})(?:[/?#]|$)/i;
 const IMGCHEST_POST = /imgchest\.com\/p\/([a-z0-9]{4,32})(?:[/?#]|$)/i;
 const IMGCHEST_ID = /^[a-z0-9]{4,32}$/i;
+/** Groupes de l'ancien site qui pointent vers un dossier du NAS. */
+const NAS_PROXY_PREFIX = /\/proxy\/api\/les_poro_img\//i;
+/** Domaine public qui sert les fichiers du NAS (préfixe retiré au stockage). */
+function imgBaseOf(): string {
+  return (process.env.IMG_BASE_URL || process.env.CDN_BASE_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+/** API de listing du NAS (`/list?path=…`, pattern validé par le proprio). */
+function nasApiBaseOf(): string {
+  return (process.env.NAS_API_BASE || process.env.NAS_API_URL || "").trim().replace(/\/+$/, "");
+}
 /** Domaines encore en vie pour une couverture. */
 const COVER_HOSTS = ["file.garden", "imgchest.com", "cdn.imgchest.com"];
 /** Ce qui ne doit **jamais** être écrit : NAS mort et domaine mort. */
@@ -336,7 +379,11 @@ interface ChapterPlan {
   key: string;
   numero: number;
   remapped: boolean;
+  /** Source du chapitre : album ImgChest ou dossier NAS (jamais les deux). */
+  source: "imgchest" | "nas";
   albumId: string;
+  /** Dossier NAS relatif décodé (ex. `Fruit of the Underworld/Chapitre 1`). */
+  nasPath: string;
   titre: string;
   /** Équipes de scantrad du chapitre (clés de `groups`, ordre stable). */
   teams: string[];
@@ -345,7 +392,7 @@ interface ChapterPlan {
   chapterId: string;
   /** Résolution ImgChest (null = album non résolu). */
   pages: PagePlan[] | null;
-  /** Ligne déjà en base (source `imgchest`) : jamais réécrite. */
+  /** Ligne déjà en base (même `source`) : jamais réécrite. */
   existing: AppwriteRow | null;
   /** Ligne à écrire, buildée après résolution. */
   row: Record<string, unknown> | null;
@@ -386,6 +433,11 @@ const stats = {
   chapitresTotal: 0,
   chapitresImgchest: 0,
   chapitresNas: 0,
+  chapitresNasSansApi: 0,
+  chapitresNasDossierAbsent: 0,
+  chapitresNasDoublonDossier: 0,
+  seriesMixtes: 0,
+  seriesNasSeul: 0,
   chapitresSansSource: 0,
   chapitresIgnoresNumero: 0,
   chapitresIgnoresAutreSource: 0,
@@ -398,6 +450,9 @@ const stats = {
   albumsResolus: 0,
   albumsDepuisCache: 0,
   albumsNonResolus: 0,
+  dossiersNasResolus: 0,
+  dossiersNasDepuisCache: 0,
+  dossiersNasNonResolus: 0,
 };
 
 const ignoredSeries: Ignored[] = [];
@@ -516,13 +571,15 @@ function isRetryable(err: unknown): boolean {
   return code === 429 || code === 502 || code === 503 || code === 504;
 }
 
-/** Reprise sur 429/5xx (quotas Appwrite), échec après 5 tentatives. */
+/** Reprise sur 429/5xx (quotas Appwrite), échec après 5 tentatives.
+ *  Un dossier NAS absent n'est jamais rejoué (constaté en 1 appel). */
 async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   let attempt = 0;
   for (;;) {
     try {
       return await fn();
     } catch (err) {
+      if (err instanceof NasMissingError) throw err;
       attempt += 1;
       if (attempt >= 5 || !isRetryable(err)) throw err;
       const delay = attempt * 1500;
@@ -714,6 +771,188 @@ async function resolveAlbum(id: string): Promise<AlbumFile[] | null> {
   }
 }
 
+/* ── Résolution des dossiers NAS (`/list?path=…`, lecture réseau) ──────── */
+
+type NasFile = {
+  /** Chemin relatif stockable (préfixe `IMG_BASE_URL` retiré). */
+  chemin: string;
+  position: number;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  hash?: string;
+};
+
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
+
+const nasCache = new Map<string, { at: number; files: NasFile[]; missing: boolean }>();
+let nasCacheDirty = false;
+
+function loadNasCache(): void {
+  try {
+    if (!existsSync(NAS_CACHE_FILE)) return;
+    const raw = JSON.parse(readFileSync(NAS_CACHE_FILE, "utf8")) as Record<
+      string,
+      { at: number; files: NasFile[]; missing?: boolean }
+    >;
+    for (const [id, entry] of Object.entries(raw)) {
+      nasCache.set(id, { at: entry.at, files: entry.files ?? [], missing: entry.missing ?? false });
+    }
+  } catch {
+    /* cache illisible : on repart de zéro */
+  }
+}
+
+function saveNasCache(): void {
+  if (!nasCacheDirty) return;
+  try {
+    const out: Record<string, { at: number; files: NasFile[]; missing: boolean }> = {};
+    for (const [id, entry] of nasCache) out[id] = entry;
+    writeFileSync(NAS_CACHE_FILE, JSON.stringify(out), "utf8");
+    nasCacheDirty = false;
+  } catch (err) {
+    recordError("cache NAS", err);
+  }
+}
+
+/** Dossier absent du NAS : pas une erreur réseau, aucune reprise. */
+class NasMissingError extends Error {
+  constructor(path: string) {
+    super(`dossier absent du NAS : ${truncate(path, 120)}`);
+    this.name = "NasMissingError";
+  }
+}
+
+function nasAuthHeaders(): Record<string, string> {
+  const out: Record<string, string> = { Accept: "application/json" };
+  const id = process.env.NAS_API_CLIENT_ID;
+  const secret = process.env.NAS_API_CLIENT_SECRET;
+  if (id && secret) {
+    out["CF-Access-Client-Id"] = id;
+    out["CF-Access-Client-Secret"] = secret;
+  }
+  const key = process.env.NAS_API_KEY;
+  if (key) {
+    out["X-Api-Key"] = key;
+    out.Authorization = `Bearer ${key}`;
+  }
+  return out;
+}
+
+function naturalFr(a: string, b: string): number {
+  return a.localeCompare(b, "fr", { numeric: true });
+}
+
+/**
+ * `GET <NAS_API_BASE>/list?path=<relPath encodé>` : l'API renvoie un tableau
+ * d'URLs absolues `img.` (ou des objets `{ name, path, url, … }`). Seuls les
+ * chemins relatifs sont conservés, triés en ordre naturel (`1.png` avant
+ * `10.png`). Dimensions inconnues : 1200 × 1800 par défaut, comme ImgChest
+ * sans métadonnées.
+ */
+async function fetchNasListing(nasPath: string): Promise<NasFile[]> {
+  const base = nasApiBaseOf();
+  if (!base) throw new Error("API du NAS non configurée (NAS_API_BASE).");
+  const res = await fetch(`${base}/list?path=${encodeURIComponent(nasPath)}`, {
+    headers: { ...nasAuthHeaders(), "User-Agent": "Les-Poroiniens-Reader/2.0 (+https://lesporoiniens.org)" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(20_000),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    // Dossier absent : l'API répond 500 + `ENOENT` (pas de reprise).
+    if (/ENOENT|no such file|not found/i.test(text)) throw new NasMissingError(nasPath);
+    throw new Error(`le NAS a répondu ${res.status}`);
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("listing NAS illisible (JSON invalide)");
+  }
+  const raws: unknown[] = Array.isArray(data) ? data : [];
+  const out: Array<NasFile & { name: string }> = [];
+  for (const raw of raws) {
+    let chemin = "";
+    let width: number | undefined;
+    let height: number | undefined;
+    let bytes: number | undefined;
+    let hash: string | undefined;
+    if (typeof raw === "string") {
+      const relative = stripImgBase(raw);
+      if (!relative) continue;
+      chemin = relative;
+    } else if (raw && typeof raw === "object") {
+      const row = raw as Record<string, unknown>;
+      const candidate =
+        stripImgBase(typeof row.url === "string" ? row.url : "") ||
+        (typeof row.path === "string" && !/^https?:\/\//i.test(row.path) ? row.path : "");
+      if (!candidate) continue;
+      chemin = candidate;
+      const n = (v: unknown): number | undefined => {
+        const parsed = typeof v === "number" ? v : Number(v);
+        return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : undefined;
+      };
+      width = n(row.width ?? row.w);
+      height = n(row.height ?? row.h);
+      bytes = n(row.bytes ?? row.size);
+      hash = typeof row.hash === "string" && row.hash ? row.hash : undefined;
+    } else {
+      continue;
+    }
+    let name = chemin.split("/").pop() ?? chemin;
+    try {
+      name = decodeURIComponent(name);
+    } catch {
+      /* nom brut */
+    }
+    if (!IMAGE_EXT.test(name)) continue;
+    try {
+      out.push({
+        name,
+        chemin: assertNasRelPath(chemin, `page NAS ${truncate(nasPath, 80)}`),
+        position: out.length + 1,
+        width,
+        height,
+        bytes,
+        hash,
+      });
+    } catch {
+      continue;
+    }
+  }
+  out.sort((a, b) => naturalFr(a.name, b.name));
+  if (out.length === 0) throw new NasMissingError(nasPath);
+  return out.map(({ name: _name, ...file }) => file);
+}
+
+/** Cache local (%TEMP%) puis réseau ; `--no-resolve` ne sort jamais du cache. */
+async function resolveNas(nasPath: string): Promise<{ files: NasFile[] } | { missing: true } | null> {
+  const hit = nasCache.get(nasPath);
+  if (hit && Date.now() - hit.at < TTL_CACHE_MS) {
+    stats.dossiersNasDepuisCache += 1;
+    return hit.missing ? { missing: true } : { files: hit.files };
+  }
+  if (!RESOLVE) return null;
+  try {
+    const files = await withRetry(() => fetchNasListing(nasPath), `nas/${truncate(nasPath, 60)}`);
+    nasCache.set(nasPath, { at: Date.now(), files, missing: false });
+    nasCacheDirty = true;
+    stats.dossiersNasResolus += 1;
+    return { files };
+  } catch (err) {
+    if (err instanceof NasMissingError) {
+      nasCache.set(nasPath, { at: Date.now(), files: [], missing: true });
+      nasCacheDirty = true;
+      // Compté par chapitre dans `resolvePages` (un dossier peut être partagé).
+      return { missing: true };
+    }
+    stats.dossiersNasNonResolus += 1;
+    recordError(`dossier NAS ${truncate(nasPath, 80)}`, err);
+    return null;
+  }
+}
+
 /* ── Lecture du corpus ───────────────────────────────────────────────────── */
 
 function pickCover(serie: AncienSerie): string {
@@ -732,6 +971,34 @@ function pickCover(serie: AncienSerie): string {
     const url = candidate.trim();
     if (!url || FORBIDDEN.test(url)) continue;
     if (COVER_HOSTS.includes(hostOf(url))) return url;
+  }
+  return "";
+}
+
+/**
+ * Couverture NAS du JSON (`cover: https://img.lesporoiniens.org/<chemin>`) :
+ * **chemin relatif** stockable, jamais l'URL absolue. Vide si le JSON ne
+ * porte aucune couverture `img.` (les file.garden/ImgChest vivantes restent
+ * prioritaires via `pickCover()`).
+ */
+function pickNasCover(serie: AncienSerie): string {
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const candidates: string[] = [str(serie.cover)];
+  const gallery = [...(serie.covers_gallery ?? []), ...(serie.Covers_gallery ?? [])];
+  for (const entry of gallery) {
+    candidates.push(str(entry?.url_lq));
+    candidates.push(str(entry?.url_hq));
+  }
+  candidates.push(str(serie.vignette));
+  candidates.push(str(serie.preview_image));
+  for (const candidate of candidates) {
+    const relative = stripImgBase(candidate);
+    if (!relative) continue;
+    try {
+      return assertNasRelPath(relative, "couverture NAS");
+    } catch {
+      continue;
+    }
   }
   return "";
 }
@@ -762,8 +1029,64 @@ function extractAlbumId(groups: Record<string, string> | undefined): string {
   return "";
 }
 
-function hasNasSource(groups: Record<string, string> | undefined): boolean {
-  return Object.values(groups ?? {}).some((path) => /les_poro_img/i.test(path));
+/**
+ * Dossier NAS d'un chapitre (groupes `/proxy/api/les_poro_img/<relPath>`) :
+ * partie après le préfixe, **décodée** (`%20` → espace) pour l'appel
+ * `NAS_API_BASE/list?path=<relPath encodé>`. Chaîne vide si aucun groupe NAS.
+ */
+function extractNasRelPath(groups: Record<string, string> | undefined): string {
+  for (const path of Object.values(groups ?? {})) {
+    const idx = path.search(NAS_PROXY_PREFIX);
+    if (idx < 0) continue;
+    const encoded = path.slice(idx + "/proxy/api/les_poro_img/".length).replace(/^\/+/, "");
+    if (!encoded) continue;
+    let relPath = encoded;
+    try {
+      relPath = decodeURIComponent(encoded);
+    } catch {
+      /* encodage invalide : on garde la forme brute */
+    }
+    relPath = relPath.trim().replace(/^\/+/, "");
+    // Anti traversal par segment (`..` exact) : les noms à points
+    // (« Her Nickname is... ») restent importables.
+    if (!relPath || relPath.includes("\\")) continue;
+    if (relPath.split("/").some((seg) => seg === ".." || seg === ".")) continue;
+    return relPath;
+  }
+  return "";
+}
+
+/**
+ * Garde-fou des chemins NAS **relatifs** stockés en base : jamais d'URL
+ * absolue (morte ou non), jamais de `..`, jamais de préfixe `/proxy/`.
+ * L'encodage `%20` est conservé tel que servi par `img.` (rejeu exact dans
+ * `pageUrl()`/`resolveCover()`).
+ */
+function assertNasRelPath(relPath: string, context: string): string {
+  const clean = relPath.trim().replace(/^\/+/, "").split("?")[0];
+  if (!clean) throw new Error(`chemin NAS vide (${context})`);
+  if (/^https?:\/\//i.test(clean)) {
+    throw new Error(`chemin NAS absolu refusé (${context}) : ${truncate(clean, 140)}`);
+  }
+  if (FORBIDDEN.test(clean) || clean.includes("\\")) {
+    throw new Error(`chemin NAS refusé (${context}) : ${truncate(clean, 140)}`);
+  }
+  // Anti traversal par segment : les noms à points (« Her Nickname is... »)
+  // restent stockables, seuls les segments `..` / `.` sont refusés.
+  if (clean.split("/").some((seg) => seg === ".." || seg === ".")) {
+    throw new Error(`chemin NAS refusé (${context}) : ${truncate(clean, 140)}`);
+  }
+  return clean;
+}
+
+/** Retire le préfixe `IMG_BASE_URL` d'une URL `img.` → chemin relatif stockable. */
+function stripImgBase(url: string): string {
+  const base = imgBaseOf();
+  const clean = url.trim().split("?")[0];
+  if (base && clean.toLowerCase().startsWith(`${base.toLowerCase()}/`)) {
+    return clean.slice(base.length + 1);
+  }
+  return "";
 }
 
 /** `numero` : entier strictement positif **ou décimal** (`8.5`, `10.51`).
@@ -829,38 +1152,52 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
   const skipped: Ignored[] = [];
   if (!slug) return { plan: null, ignored: { titre, detail: "slug vide" }, skipped };
 
-  /* ── Chapitres : seuls les albums ImgChest sont importables ─────────── */
-  const imgchestKeys: string[] = [];
+  /* ── Chapitres : albums ImgChest + dossiers NAS (phase 1) ──────────── */
+  const nasConfigured = nasApiBaseOf() !== "";
+  const importableKeys: string[] = [];
+  const sourceOf = new Map<string, { source: "imgchest" | "nas"; albumId: string; nasPath: string }>();
   for (const [key, chapter] of Object.entries(raw.chapters ?? {})) {
     stats.chapitresTotal += 1;
     const album = extractAlbumId(chapter?.groups);
     if (album) {
+      // Priorité ImgChest : un chapitre aux deux sources n'est jamais dupliqué.
       stats.chapitresImgchest += 1;
-      imgchestKeys.push(key);
-    } else if (hasNasSource(chapter?.groups)) {
-      stats.chapitresNas += 1;
-      skipped.push({ titre: `chapitre ${key}`, detail: "source NAS (dossier mort)" });
-    } else {
-      stats.chapitresSansSource += 1;
-      skipped.push({ titre: `chapitre ${key}`, detail: "aucun groupe de scan" });
+      importableKeys.push(key);
+      sourceOf.set(key, { source: "imgchest", albumId: album, nasPath: "" });
+      continue;
     }
+    const nasPath = extractNasRelPath(chapter?.groups);
+    if (nasPath) {
+      stats.chapitresNas += 1;
+      if (!nasConfigured) {
+        stats.chapitresNasSansApi += 1;
+        skipped.push({ titre: `chapitre ${key}`, detail: "source NAS (API non configurée)" });
+        continue;
+      }
+      importableKeys.push(key);
+      sourceOf.set(key, { source: "nas", albumId: "", nasPath });
+      continue;
+    }
+    stats.chapitresSansSource += 1;
+    skipped.push({ titre: `chapitre ${key}`, detail: "aucun groupe de scan" });
   }
 
-  /* ── Couverture : hôtes vivants uniquement ──────────────────────────── */
+  /* ── Couverture : vivante, sinon NAS (relatif), sinon générée ─────── */
   const cover = pickCover(raw);
+  const nasCover = cover ? "" : pickNasCover(raw);
   if (cover) stats.couverturesVivantes += 1;
   else stats.couverturesSansSource += 1;
 
-  if (imgchestKeys.length === 0 && !cover && !INCLUDE_NO_COVER) {
+  if (importableKeys.length === 0 && !cover && !INCLUDE_NO_COVER) {
     return {
       plan: null,
-      ignored: { titre, detail: "aucun chapitre ImgChest et aucune couverture vivante" },
+      ignored: { titre, detail: "aucun chapitre importable et aucune couverture vivante" },
       skipped,
     };
   }
 
   /* ── Numéros ────────────────────────────────────────────────────────── */
-  const { keep, skipped: skippedNumbers } = planChapterNumbers(imgchestKeys);
+  const { keep, skipped: skippedNumbers } = planChapterNumbers(importableKeys);
   for (const skip of skippedNumbers) {
     stats.chapitresIgnoresNumero += 1;
     skipped.push({ titre: skip.titre, detail: skip.detail });
@@ -869,6 +1206,7 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
   const chapters: ChapterPlan[] = [];
   for (const entry of keep) {
     const chapter = raw.chapters?.[entry.key] ?? {};
+    const src = sourceOf.get(entry.key) ?? { source: "imgchest" as const, albumId: "", nasPath: "" };
     const { iso, ok } = isoFromUnix(chapter.last_updated, now);
     if (!ok) verbose(`   ! chapitre ${entry.key} : last_updated absent → date du jour`);
     if (entry.remapped) stats.chapitresRenumerotes += 1;
@@ -876,7 +1214,8 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
       typeof chapter.title === "string" ? chapter.title.trim() : "";
     /* Équipes de scantrad : clés des groupes **de ce chapitre** (ordre
        stable, sans alias — pas de table). La team est une propriété du
-       chapitre, réuploadée avec lui (pastilles de la fiche). */
+       chapitre, réuploadée avec lui (pastilles de la fiche), pour les deux
+       sources (ex. « Cosmea » sur un chapitre NAS). */
     const teams = uniqueStrings(Object.keys(chapter.groups ?? {}))
       .slice(0, 20)
       .map((t) => truncate(t, 64));
@@ -885,7 +1224,9 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
       key: entry.key,
       numero: entry.numero,
       remapped: entry.remapped,
-      albumId: extractAlbumId(chapter.groups),
+      source: src.source,
+      albumId: src.albumId,
+      nasPath: src.nasPath,
       titre: titreChapitre || `Chapitre ${entry.numero}`,
       teams,
       volume: parseVolume(chapter.volume),
@@ -917,13 +1258,16 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
     else tags.push(clean);
   }
   const seriesId = rowId(`s-${slug}`);
+  /* Couverture : vivante d'abord, sinon NAS relatif du JSON, sinon "" (la
+     1re planche du plus petit chapitre comblera à la finalisation). */
+  const couverture = cover ? assertCleanUrl(cover, `couverture ${slug}`) : nasCover;
   const row: Record<string, unknown> = {
     slug,
     titre: truncate(titre, 255),
     titresAlt,
     synopsis: (typeof raw.description === "string" ? raw.description : "").trim(),
-    couverture: assertCleanUrl(cover, `couverture ${slug}`),
-    banniere: assertCleanUrl(cover, `banniere ${slug}`),
+    couverture,
+    banniere: couverture,
     statut: mapStatut(raw.release_status),
     type: mapType(raw),
     langue: "FR",
@@ -1059,11 +1403,15 @@ async function reconcile(): Promise<void> {
 
     // La série existe déjà : on regarde quels chapitres sont déjà là.
     const known = existing ? await loadChapters(plan.seriesId) : new Map<number, AppwriteRow>();
+    const hasNas = plan.chapters.some((c) => c.source === "nas");
+    const hasImgchest = plan.chapters.some((c) => c.source === "imgchest");
+    if (hasNas && hasImgchest) stats.seriesMixtes += 1;
+    else if (hasNas) stats.seriesNasSeul += 1;
     for (const chapter of plan.chapters) {
       chapter.chapterId = rowId(`${plan.seriesId}-c${chapter.numero}`);
       const row = known.get(chapter.numero);
       if (!row) continue;
-      if (String(row.source ?? "") !== "imgchest") {
+      if (String(row.source ?? "") !== chapter.source) {
         stats.chapitresIgnoresAutreSource += 1;
         ignoredChapters.push({
           titre: `${plan.titre} · chapitre ${chapter.numero}`,
@@ -1082,13 +1430,16 @@ async function reconcile(): Promise<void> {
 /* ── Résolution des albums puis construction des lignes ──────────────────── */
 
 async function resolvePages(): Promise<void> {
-  const targets: ChapterPlan[] = [];
+  const imgchest: ChapterPlan[] = [];
+  const nas: ChapterPlan[] = [];
   for (const plan of seriesPlans) {
     if (plan.duplicate) continue;
-    for (const chapter of plan.chapters) targets.push(chapter);
+    for (const chapter of plan.chapters) {
+      (chapter.source === "nas" ? nas : imgchest).push(chapter);
+    }
   }
 
-  await runPool(targets, CONCURRENCE_ALBUMS, async (chapter) => {
+  await runPool(imgchest, CONCURRENCE_ALBUMS, async (chapter) => {
     const files = await resolveAlbum(chapter.albumId);
     if (!files) {
       stats.chapitresNonResolus += 1;
@@ -1105,6 +1456,29 @@ async function resolvePages(): Promise<void> {
       hash: truncate(file.hash ?? "", 64),
     }));
   });
+
+  await runPool(nas, CONCURRENCE_NAS, async (chapter) => {
+    const resolved = await resolveNas(chapter.nasPath);
+    if (!resolved) {
+      stats.chapitresNonResolus += 1;
+      return;
+    }
+    if ("missing" in resolved) {
+      stats.chapitresNasDossierAbsent += 1;
+      return;
+    }
+    chapter.pages = resolved.files.map((file, index) => ({
+      id: rowId(chapter.chapterId, `p${index}`),
+      chapter_id: chapter.chapterId,
+      ordre: index,
+      // Chemin relatif : `pageUrl()` le préfixe par `IMG_BASE_URL` (§7.1).
+      chemin: file.chemin,
+      largeur: file.width ?? 1200,
+      hauteur: file.height ?? 1800,
+      bytes: file.bytes ?? 0,
+      hash: truncate(file.hash ?? "", 64),
+    }));
+  });
 }
 
 /** Une fois les albums résolus : ligne de chapitre + totaux détaillés. */
@@ -1112,10 +1486,10 @@ async function finalizeAndCount(createdBy: string): Promise<void> {
   for (const plan of seriesPlans) {
     if (plan.duplicate) continue;
 
-    /* Couverture auto : pas de couverture vivante mais des chapitres ImgChest
-       résolus → 1re planche du chapitre au plus petit numéro (même règle que
-       `scripts/backfill-couvertures.mts` pour les séries déjà en base ; les
-       lignes existantes ne sont jamais réécrites ici). */
+    /* Couverture auto : ni vivante ni NAS, mais des chapitres résolus
+       (les deux sources) → 1re planche du chapitre au plus petit numéro
+       (même règle que `scripts/backfill-series.mts` pour les séries déjà en
+       base ; les lignes existantes ne sont jamais réécrites ici). */
     if (!plan.row.couverture) {
       const WithPages = plan.chapters
         .filter((c) => c.pages && c.pages.length > 0)
@@ -1137,7 +1511,7 @@ async function finalizeAndCount(createdBy: string): Promise<void> {
         titre: chapter.titre,
         statut: "published",
         publish_at: chapter.publishAt,
-        source: "imgchest",
+        source: chapter.source,
         teams: chapter.teams,
         nb_pages: chapter.pages.length,
         likes: 0,
@@ -1178,10 +1552,14 @@ async function finalizeAndCount(createdBy: string): Promise<void> {
 function printReport(createdBy: string): void {
   const bar = "─".repeat(68);
   const nonResolus = ignoredChapters.filter(
-    (c) => !c.detail.startsWith("source NAS") && !c.detail.startsWith("aucun groupe"),
+    (c) =>
+      !c.detail.startsWith("source NAS") &&
+      !c.detail.startsWith("aucun groupe") &&
+      !c.detail.startsWith("déjà en base"),
   );
   const chapitresIgnores =
-    stats.chapitresNas +
+    stats.chapitresNasSansApi +
+    stats.chapitresNasDossierAbsent +
     stats.chapitresSansSource +
     stats.chapitresIgnoresNumero +
     stats.chapitresIgnoresAutreSource;
@@ -1194,10 +1572,16 @@ function printReport(createdBy: string): void {
   console.log(`Fichiers lus         : ${stats.fichiers} (${stats.fichiersEnErreur} en erreur)`);
   console.log(`Séries analysées     : ${stats.seriesAnalysees}`);
   console.log(
+    `Séries NAS seul / mixtes : ${stats.seriesNasSeul} / ${stats.seriesMixtes}`,
+  );
+  console.log(
     `Chapitres au corpus  : ${stats.chapitresTotal} — ImgChest ${stats.chapitresImgchest} · NAS ${stats.chapitresNas} · sans source ${stats.chapitresSansSource}`,
   );
   console.log(
     `Albums ImgChest      : cache ${stats.albumsDepuisCache} · réseau ${stats.albumsResolus} · non résolus ${stats.albumsNonResolus}`,
+  );
+  console.log(
+    `Dossiers NAS         : cache ${stats.dossiersNasDepuisCache} · réseau ${stats.dossiersNasResolus} · non résolus ${stats.dossiersNasNonResolus}`,
   );
   console.log(
     `Couvertures vivantes : ${stats.couverturesVivantes} · sans couverture vivante : ${stats.couverturesSansSource} · auto (1re planche) : ${stats.couverturesAuto}`,
@@ -1222,12 +1606,13 @@ function printReport(createdBy: string): void {
   console.log(`  à créer             : ${stats.chapitresACreer}`);
   console.log(`  déjà en base        : ${stats.chapitresExistants}`);
   console.log(`  ignorés             : ${chapitresIgnores}`);
-  console.log(`      · source NAS              : ${stats.chapitresNas}`);
+  console.log(`      · NAS sans API            : ${stats.chapitresNasSansApi}`);
+  console.log(`      · dossier NAS absent      : ${stats.chapitresNasDossierAbsent}`);
   console.log(`      · aucune source           : ${stats.chapitresSansSource}`);
   console.log(`      · numéro refusé/non numérique: ${stats.chapitresIgnoresNumero}`);
   console.log(`      · déjà en base, autre src. : ${stats.chapitresIgnoresAutreSource}`);
   console.log(`  renumérotés 0 → 1   : ${stats.chapitresRenumerotes}`);
-  console.log(`  album non résolu     : ${stats.chapitresNonResolus}`);
+  console.log(`  non résolu (réseau) : ${stats.chapitresNonResolus}`);
   list(
     "Chapitres ignorés (hors NAS / sans source) :",
     nonResolus.map((c) => `${c.titre} — ${c.detail}`),
@@ -1353,6 +1738,7 @@ async function main(): Promise<void> {
   console.log(`▶ Corpus : ${ANCIEN_CORPUS}`);
 
   loadCache();
+  loadNasCache();
   buildPlan();
   console.log(`▶ ${seriesPlans.length} séries retenues après filtre éditorial.`);
 
@@ -1361,6 +1747,7 @@ async function main(): Promise<void> {
   await resolvePages();
   await finalizeAndCount(createdBy);
   saveCache();
+  saveNasCache();
 
   printReport(createdBy);
 
