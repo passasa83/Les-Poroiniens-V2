@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { appwriteEnabled, getDb, invalidate, TABLES } from "@/lib/db";
 import { getDemoStore } from "@/lib/db/seed";
+import { demoMasque } from "@/lib/demo-gate";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,13 @@ export async function POST(request: Request) {
   }
   if (!authorized) {
     return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
+  }
+  /* Production : la graine ne doit plus rien écrire. Le jeu de démonstration
+     est masqué partout (cf. `@/lib/demo-gate`, équivalent de
+     `VERCEL_ENV === "production"`) ; `SEED_EN_PROD=1` autorise une exécution
+     manuelle exceptionnelle. Partout ailleurs, le comportement est inchangé. */
+  if (demoMasque() && process.env.SEED_EN_PROD !== "1") {
+    return NextResponse.json({ status: "skipped", reason: "production" });
   }
   if (!appwriteEnabled()) {
     return NextResponse.json(

@@ -1,5 +1,6 @@
 import "server-only";
 import { cached, getDb, TABLES } from "@/lib/db";
+import { filtresSansDemo } from "@/lib/demo-gate";
 import { mapSeries } from "@/lib/data/series";
 import type { Chapter, HistoryEntry, Series, SeriesType } from "@/lib/types";
 
@@ -111,6 +112,7 @@ async function calculer(
   limite: number,
 ): Promise<RangClassement[]> {
   const { items } = await getDb().list<Series>(TABLES.series, {
+    filters: filtresSansDemo("series"),
     order: { field: "vues", dir: "desc" },
     limit: 500,
   });

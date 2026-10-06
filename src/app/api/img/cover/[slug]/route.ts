@@ -1,4 +1,5 @@
 import { getSeriesBySlug } from "@/lib/data/series";
+import { serieDeDemo } from "@/lib/demo-gate";
 
 export const runtime = "nodejs";
 
@@ -36,12 +37,19 @@ function wrap(text: string, perLine: number): string[] {
   return lines.slice(0, 4);
 }
 
-/** Couverture générée (démo). En production, les couvertures viennent d'Appwrite Storage. */
+/**
+ * Couverture générée (démo). En production, les couvertures viennent d'Appwrite Storage.
+ * Celle d'une série de la graine est refusée en production : masquage du jeu
+ * de démonstration (le titre de la série ne doit pas fuiter par cette route).
+ */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
+  if (serieDeDemo(slug)) {
+    return new Response("Couverture introuvable", { status: 404 });
+  }
   const series = await getSeriesBySlug(slug);
   const title = series?.titre ?? slug.replace(/-/g, " ");
   const adult = series?.classification === "adult";

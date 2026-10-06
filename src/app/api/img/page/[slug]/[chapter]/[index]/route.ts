@@ -1,3 +1,5 @@
+import { serieDeDemo } from "@/lib/demo-gate";
+
 export const runtime = "nodejs";
 
 function hash(input: string): number {
@@ -17,12 +19,20 @@ function escapeXml(value: string): string {
  * Page de scan de démonstration : une planche SVG déterministe.
  * En production, `pages.chemin` pointe vers le NAS/CDN et cette route
  * ne sert plus qu'aux chemins locaux (voir src/lib/media.ts).
+ *
+ * Les chemins `demoPagePath` d'une série de la graine sont toutefois refusés
+ * en production (masquage du jeu de démo) : seuls ces slugs-là sont bloqués,
+ * les séries importées ayant reçu des planches placeholder via
+ * `/api/owner/import` (slug non démo) restent servies.
  */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string; chapter: string; index: string }> },
 ) {
   const { slug, chapter, index } = await params;
+  if (serieDeDemo(slug)) {
+    return new Response("Planche introuvable", { status: 404 });
+  }
   const page = Number(index) || 0;
   const seed = hash(`${slug}-${chapter}-${page}`);
 

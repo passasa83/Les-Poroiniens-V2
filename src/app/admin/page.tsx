@@ -16,6 +16,7 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card } from "@/components/ui/kit";
 import { appwriteEnabled, dataMode, getDb, TABLES } from "@/lib/db";
 import { listImportJobs, listReports } from "@/lib/data/moderation";
+import { exclureDemo, serieDeDemo } from "@/lib/demo-gate";
 import type { Comment, Profile, Series } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -64,8 +65,11 @@ export default async function AdminDashboard() {
     listImportJobs(50),
   ]);
 
-  const series = seriesRes.items;
-  const chapters = chapterRows.items;
+  /* Masquage du jeu de démonstration en production : KPI et classements du
+     back-office ne comptent que le catalogue réellement visible. */
+  const series = exclureDemo(seriesRes.items);
+  const chapters = chapterRows.items.filter((c) => !serieDeDemo(String(c.series_id)));
+  const comments = exclureDemo(commentRes.items);
   const publishedChapters = chapters.filter((c) => c.statut === "published");
   const draftChapters = chapters.filter((c) => c.statut === "draft");
   const openReports = reports.filter((r) => r.statut === "ouvert");
@@ -92,7 +96,7 @@ export default async function AdminDashboard() {
     { label: "Chapitres en brouillon", values: [total(draftChapters), total(draftChapters), total(draftChapters)], global: true },
     {
       label: "Commentaires",
-      values: WINDOWS.map((w) => rowsSince(commentRes.items, "created_at", w.ms)) as [
+      values: WINDOWS.map((w) => rowsSince(comments, "created_at", w.ms)) as [
         number,
         number,
         number,

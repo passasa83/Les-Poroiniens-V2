@@ -3,6 +3,7 @@ import { atLeast, can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { allSeries } from "@/lib/data/series";
 import { getDb, TABLES } from "@/lib/db";
+import { serieDeDemo } from "@/lib/demo-gate";
 import type { Recommendation } from "@/lib/types";
 import { RecommendationsPanel } from "./_components/recommendations-panel";
 
@@ -30,6 +31,10 @@ export default async function AdminRecommandationsPage() {
     seriesById[s.id] = { id: s.id, titre: s.titre, slug: s.slug, couverture: s.couverture };
   }
 
+  /* Recommandations de la graine (ou visant une série masquée) : écartées du
+     panneau — `allSeries` ne contient plus leurs cibles en production. */
+  const recommandations = recoRes.items.filter((r) => !serieDeDemo(r.series_id));
+
   return (
     <div className="space-y-6">
       <div>
@@ -40,7 +45,7 @@ export default async function AdminRecommandationsPage() {
         </p>
       </div>
 
-      <RecommendationsPanel initial={recoRes.items} seriesById={seriesById} />
+      <RecommendationsPanel initial={recommandations} seriesById={seriesById} />
     </div>
   );
 }

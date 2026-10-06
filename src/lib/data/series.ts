@@ -1,5 +1,6 @@
 import "server-only";
-import { cached, getDb, invalidate, TABLES } from "@/lib/db";
+import { cached, getDb, invalidate, TABLES, type Filter } from "@/lib/db";
+import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
 import { resolveCover, storeCover } from "@/lib/media";
 import type { Recommendation, Series, SeriesStatus, SeriesType } from "@/lib/types";
 
@@ -62,7 +63,7 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
 
   const key = `series:${JSON.stringify({ ...f, page, perPage })}`;
   return cached(key, 30_000, async () => {
-    const filters = [];
+    const filters: Filter[] = [];
     /* Genre multiple (§6.3) : « a,b » = série possédant a **et** b. */
     for (const g of (f.genre ?? "").split(",").map((v) => v.trim()).filter(Boolean)) {
       filters.push({ field: "genres", op: "contains" as const, value: g });
@@ -84,6 +85,11 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
     } else if (f.classification === "adult") {
       filters.push({ field: "classification", op: "eq" as const, value: "adult" });
     }
+
+    /* Jeu de démo masqué en production : l'exclusion est portée **par la
+       requête** pour que `total`, la pagination et le repli tolérant aux
+       fautes (qui réutilise `filters`) restent exacts. */
+    filters.push(...filtresSansDemo("series"));
 
     const { items, total } = await getDb().list<Series>(TABLES.series, {
       filters,
@@ -184,6 +190,9 @@ export function fuzzyScore(query: string, serie: Series): number {
 }
 
 export async function getSeriesBySlug(slug: string): Promise<Series | null> {
+  /* Série de la graine masquée en production : `null` → vrai 404 (page fiche,
+     lecteur, proxy) sans requête inutile. */
+  if (serieDeDemo(slug)) return null;
   const res = await getDb().list<Series>(TABLES.series, {
     filters: [{ field: "slug", op: "eq", value: slug }],
     limit: 1,
@@ -192,12 +201,14 @@ export async function getSeriesBySlug(slug: string): Promise<Series | null> {
 }
 
 export async function getSeriesById(id: string): Promise<Series | null> {
+  if (serieDeDemo(id)) return null;
   const row = await getDb().get<Series>(TABLES.series, id);
   return row ? mapSeries(row) : null;
 }
 
 export async function allSeries(): Promise<Series[]> {
   const { items } = await getDb().list<Series>(TABLES.series, {
+    filters: filtresSansDemo("series"),
     order: { field: "titre", dir: "asc" },
     limit: 1000,
   });
@@ -235,6 +246,8 @@ export async function activeRecommendations(
   });
   const now = Date.now();
   return items.filter((r) => {
+    /* Recommandation éditoriale sur une série de la graine : masquée en prod. */
+    if (serieDeDemo(r.series_id)) return false;
     if (r.debut && new Date(r.debut).getTime() > now) return false;
     if (r.fin && new Date(r.fin).getTime() < now) return false;
     return true;
@@ -244,6 +257,7 @@ export async function activeRecommendations(
 /** Top séries par vues (utilisé pour la home et le dashboard). */
 export async function popularSeries(limit = 10, includeAdult = false): Promise<Series[]> {
   const { items } = await getDb().list<Series>(TABLES.series, {
+    filters: filtresSansDemo("series"),
     order: { field: "vues", dir: "desc" },
     limit,
   });

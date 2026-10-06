@@ -1,5 +1,6 @@
 import "server-only";
 import { getDb, rowId, TABLES } from "@/lib/db";
+import { exclureSeriesDemo } from "@/lib/demo-gate";
 import { getChapterById, listChapters } from "@/lib/data/chapters";
 import { mapSeries } from "@/lib/data/series";
 import type { HistoryEntry, LibraryEntry, LibraryStatus, Series } from "@/lib/types";
@@ -10,7 +11,9 @@ export async function listLibrary(userId: string): Promise<LibraryEntry[]> {
     order: { field: "updated_at", dir: "desc" },
     limit: 1000,
   });
-  return items;
+  /* Lignes sur une série de la graine : masquées en production (la fiche
+     l'est aussi, la ligne ne servirait qu'un identifiant brut à l'écran). */
+  return exclureSeriesDemo(items);
 }
 
 export async function getLibraryEntry(
@@ -73,7 +76,10 @@ export async function listHistory(userId: string, limit = 100): Promise<HistoryE
     order: { field: "read_at", dir: "desc" },
     limit,
   });
-  return items;
+  /* Lectures d'une série de la graine : masquées en production, comme la
+     fiche — historique, statistiques et bloc « Continuer la lecture »
+     restent ainsi cohérents avec ce qui est affiché. */
+  return exclureSeriesDemo(items);
 }
 
 export async function recordProgress(input: {

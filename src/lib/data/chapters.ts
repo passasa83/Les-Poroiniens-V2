@@ -1,5 +1,6 @@
 import "server-only";
 import { cached, getDb, invalidate, TABLES } from "@/lib/db";
+import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
 import { pageUrl } from "@/lib/media";
 import { mapSeries } from "@/lib/data/series";
 import type { Chapter, ScanPage, Series, SeriesType } from "@/lib/types";
@@ -87,6 +88,9 @@ export async function getReaderContext(
   numero: number,
   opts: { allowDraft?: boolean } = {},
 ): Promise<ReaderContext | null> {
+  /* Série de la graine masquée en production : jamais de contexte de lecture
+     (la page appelante déclenche `notFound()` → vrai 404). */
+  if (serieDeDemo(series.id)) return null;
   const chapter = await getChapter(series.id, numero);
   if (!chapter) return null;
   const preview = chapter.statut !== "published";
@@ -110,7 +114,12 @@ export async function getReaderContext(
 export async function recentChapters(limit = 12): Promise<Array<Chapter & { series: Series }>> {
   return cached(`recent-chapters:${limit}`, 60_000, async () => {
     const { items } = await getDb().list<Chapter>(TABLES.chapters, {
-      filters: [{ field: "statut", op: "eq", value: "published" }],
+      filters: [
+        { field: "statut", op: "eq", value: "published" },
+        /* Chapitres de la graine écartés dans la requête : le bandeau garde
+           ses `limit` entrées en production. */
+        ...filtresSansDemo("chapters"),
+      ],
       order: { field: "publish_at", dir: "desc" },
       limit,
     });
@@ -174,6 +183,9 @@ export async function listUpdates(
         ? [{ field: "classification", op: "eq" as const, value: "all" }]
         : []),
       ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+      /* Chapitres de la graine écartés dans la requête (§6.2) : les tranches
+         « Dernières 24 h / Hier » ne montrent plus le jeu de démonstration. */
+      ...filtresSansDemo("chapters"),
     ];
 
     const { items } = await getDb().list<Chapter>(TABLES.chapters, {
@@ -233,6 +245,9 @@ export async function listRecentReleases(
         ? [{ field: "classification", op: "eq" as const, value: "all" }]
         : []),
       ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+      /* Exclusion dans la requête : `total` (§6.1 « Charger plus ») doit
+         correspondre aux lignes réellement servies. */
+      ...filtresSansDemo("chapters"),
     ];
 
     const { items, total } = await getDb().list<Chapter>(TABLES.chapters, {

@@ -1,5 +1,6 @@
 import "server-only";
 import { getDb, TABLES } from "@/lib/db";
+import { exclureDemo, idDeDemo } from "@/lib/demo-gate";
 import type { Annonce } from "@/lib/types";
 
 /**
@@ -9,6 +10,9 @@ import type { Annonce } from "@/lib/types";
  * Aucun cache mémoire : les annonces sont rares et la recette crée/supprime
  * sa propre fixture — un cache de quelques secondes afficherait une page
  * désuète juste après une publication.
+ *
+ * Les annonces de la graine sont masquées en production (voir
+ * `@/lib/demo-gate`) : une annonce réelle publiée ensuite reste servie.
  */
 
 const DATE_INVALIDE = (valeur: string) => Number.isNaN(Date.parse(valeur));
@@ -19,7 +23,9 @@ export async function listAnnonces(limit = 50): Promise<Annonce[]> {
     order: { field: "date", dir: "desc" },
     limit: Math.min(Math.max(limit, 1), 100),
   });
-  return items.filter((a) => a.slug && a.titre && !DATE_INVALIDE(a.date));
+  return exclureDemo(
+    items.filter((a) => a.slug && a.titre && !DATE_INVALIDE(a.date)),
+  );
 }
 
 /** Dernière annonce publiée (bloc de l'accueil, §6.11). */
@@ -31,6 +37,8 @@ export async function derniereAnnonce(): Promise<Annonce | null> {
 /** Annonce par son slug public ; `null` → `notFound()` sur la page détail. */
 export async function getAnnonceBySlug(slug: string): Promise<Annonce | null> {
   if (!slug || slug.length > 128) return null;
+  /* Annonce de la graine masquée en production : `null` → vrai 404. */
+  if (idDeDemo(slug)) return null;
   const { items } = await getDb().list<Annonce>(TABLES.annonces, {
     filters: [{ field: "slug", op: "eq", value: slug }],
     limit: 1,

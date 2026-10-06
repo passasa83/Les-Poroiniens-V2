@@ -1,5 +1,6 @@
 import "server-only";
 import { getDb, TABLES } from "@/lib/db";
+import { idDeDemo } from "@/lib/demo-gate";
 import type { AuditEntry, ImportJob, Notification, Report, SiteSetting } from "@/lib/types";
 
 function newId(prefix: string): string {
@@ -28,7 +29,9 @@ export async function listReports(statut?: Report["statut"]): Promise<Report[]> 
     order: { field: "created_at", dir: "desc" },
     limit: 200,
   });
-  return items;
+  /* Signalement de la graine — ou visant un contenu de la graine : la file de
+     modération ne doit pas exposer le jeu de démonstration en production. */
+  return items.filter((r) => !idDeDemo(r.id) && !idDeDemo(r.target_id));
 }
 
 export async function handleReport(

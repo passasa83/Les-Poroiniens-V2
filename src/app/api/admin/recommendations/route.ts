@@ -4,6 +4,7 @@ import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
 import { getSeriesById } from "@/lib/data/series";
+import { serieDeDemo } from "@/lib/demo-gate";
 import { getDb, TABLES } from "@/lib/db";
 import type { Recommendation } from "@/lib/types";
 
@@ -35,7 +36,8 @@ export async function GET() {
     order: { field: "ordre", dir: "asc" },
     limit: 500,
   });
-  return Response.json({ items });
+  /* Masquage du jeu de démo en production : même filtre que le panneau admin. */
+  return Response.json({ items: items.filter((r) => !serieDeDemo(r.series_id)) });
 }
 
 /** POST /api/admin/recommendations — création (admin+). */

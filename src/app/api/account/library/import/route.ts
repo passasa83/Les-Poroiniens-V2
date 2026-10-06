@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { getDb, TABLES } from "@/lib/db";
+import { filtresSansDemo } from "@/lib/demo-gate";
 import { getLibraryEntry, upsertLibraryEntry } from "@/lib/data/library";
 import { getSeriesById, getSeriesBySlug } from "@/lib/data/series";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -163,7 +164,12 @@ async function resolverSerie(line: LigneImport): Promise<Series | null> {
   }
   if (line.titre) {
     const { items } = await getDb().list<Series>(TABLES.series, {
-      filters: [{ field: "titre", op: "eq", value: line.titre }],
+      filters: [
+        { field: "titre", op: "eq", value: line.titre },
+        /* Série de la graine : jamais résolue en production (la fiche est
+           masquée, une ligne de bibliothèque ne peut pas la remonter). */
+        ...filtresSansDemo("series"),
+      ],
       limit: 1,
     });
     if (items[0]) return getSeriesById(items[0].id);
