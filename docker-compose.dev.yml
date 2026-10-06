@@ -1,0 +1,23 @@
+# Stack de développement sur le NAS OpenMediaVault (Docker).
+#
+# Mise en place (détails dans TUTO-NAS.md) :
+#   1. clone du dépôt dans <partage>/appdata/poroiniens-dev/Les-Poroiniens-V2
+#   2. copie de .env.local → .env.dev.local à côté de ce fichier
+#      (NON versionné) avec NEXT_PUBLIC_SITE_URL adapté
+#   3. docker compose -f docker-compose.dev.yml up -d --build
+#   4. dans nginx Proxy Manager : Proxy Host → <IP-du-NAS>:3100
+#
+# Secrets : uniquement dans env_file (.env.dev.local), jamais ici.
+# `env_file` est résolu relativement à ce fichier (aucun chemin absolu).
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: poroiniens-dev
+    restart: unless-stopped
+    env_file: .env.dev.local
+    ports:
+      # Publish sur toutes les interfaces : joignable depuis le LAN
+      # (recettes, NPM) via http://<IP-du-NAS>:3100
+      - "3100:3000"

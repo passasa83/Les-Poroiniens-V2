@@ -1,0 +1,27 @@
+# Contexte de build du Dockerfile.dev : on n'emmène QUE le code.
+# Critique : .env.local contient les secrets (clé API Appwrite…) —
+# il ne doit jamais se retrouver dans une couche d'image Docker.
+
+# Dépendances et sorties de build (refaites dans l'image)
+node_modules
+.next
+out
+build
+
+# Git et CI
+.git
+.github
+
+# Secrets et environnement (fournis par env_file au runtime, pas au build)
+.env
+.env.*
+*.local
+
+# Hors-image : captures, cahiers des charges, doc interne
+captures
+cahier_des_charges_*.md
+TUTO-NAS.md
+README.md
+Dockerfile*
+docker-compose*
+.dockerignore
