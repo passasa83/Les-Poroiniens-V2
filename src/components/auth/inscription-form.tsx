@@ -35,12 +35,15 @@ type InscriptionFormProps = {
   onSuccess?: () => void;
   /** Dans la modale, la carte de la modale remplace déjà la carte du formulaire. */
   embedded?: boolean;
+  /** Connexion Discord branchée (variables d'environnement présentes). */
+  discordEnabled?: boolean;
 };
 
 /**
  * Inscription : pseudo public, e-mail, mot de passe, captcha.
  * Aucun e-mail n'est vérifié au lancement : l'anti-bot repose sur le
  * captcha Turnstile (s'il est configuré), le honeypot et la limitation de débit.
+ * Le bouton Discord crée aussi le compte, sans formulaire à remplir.
  */
 export function InscriptionForm({
   turnstileSiteKey = null,
@@ -49,6 +52,7 @@ export function InscriptionForm({
   onSwitch,
   onSuccess,
   embedded = false,
+  discordEnabled = false,
 }: InscriptionFormProps) {
   const router = useRouter();
   const [pseudo, setPseudo] = useState("");
@@ -315,7 +319,7 @@ export function InscriptionForm({
           {busy ? "Création du compte…" : "Créer mon compte"}
         </Button>
 
-        <OAuthButtons className="border-t border-line pt-4" />
+        <OAuthButtons className="border-t border-line pt-4" discordEnabled={discordEnabled} />
 
         <p className="text-center text-sm text-muted">
           {onSwitch ? (

@@ -4,6 +4,8 @@ import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit, getSettings, setSetting } from "@/lib/data/moderation";
 import { imageEnv } from "@/lib/media";
+import { discordConfigured } from "@/lib/discord";
+import { turnstileEnabled } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -42,8 +44,12 @@ function secretStatus(): Record<string, { present: boolean; label: string }> {
     },
     nas: { present: Boolean(imageEnv().nasApiBase), label: "API du NAS" },
     captcha: {
-      present: Boolean(process.env.HCAPTCHA_SECRET || process.env.TURNSTILE_SECRET),
-      label: "Captcha (hCaptcha / Turnstile)",
+      present: turnstileEnabled(),
+      label: "Captcha (Turnstile)",
+    },
+    discord: {
+      present: discordConfigured(),
+      label: "Connexion Discord",
     },
     smtp: {
       present: Boolean(process.env.SMTP_HOST || process.env.RESEND_API_KEY),

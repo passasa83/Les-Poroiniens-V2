@@ -9,6 +9,7 @@ import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { PwaRegister } from "@/components/layout/pwa-register";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { demoAccounts } from "@/lib/demo-accounts";
+import { discordConfigured } from "@/lib/discord";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Les Poroiniens";
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <AuthModal
             demoAccounts={demoAccounts()}
             turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || null}
+            discordEnabled={discordConfigured()}
           />
         </Suspense>
       </body>

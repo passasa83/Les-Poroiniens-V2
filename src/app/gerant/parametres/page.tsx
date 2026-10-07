@@ -4,6 +4,8 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { getDb, TABLES } from "@/lib/db";
 import { getSettings } from "@/lib/data/moderation";
 import { imageEnv } from "@/lib/media";
+import { discordConfigured } from "@/lib/discord";
+import { turnstileEnabled } from "@/lib/turnstile";
 import type { Profile, Role } from "@/lib/types";
 import { SettingsForm, type SecretStatus } from "./_components/settings-form";
 
@@ -45,9 +47,15 @@ export default async function GerantParametresPage() {
     },
     {
       key: "captcha",
-      label: "Captcha (hCaptcha / Turnstile)",
-      present: Boolean(process.env.HCAPTCHA_SECRET || process.env.TURNSTILE_SECRET),
-      hint: "Protection anti-bot à l'inscription.",
+      label: "Captcha (Turnstile)",
+      present: turnstileEnabled(),
+      hint: "Protection anti-bot à l'inscription : les deux clés Turnstile doivent être présentes.",
+    },
+    {
+      key: "discord",
+      label: "Connexion Discord",
+      present: discordConfigured(),
+      hint: "Bouton « Discord » actif sur l'inscription et la connexion.",
     },
     {
       key: "smtp",

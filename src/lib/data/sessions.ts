@@ -21,8 +21,12 @@ const FOURNISSEURS: Record<string, string> = {
   email: "E-mail et mot de passe",
   "email-password": "E-mail et mot de passe",
   oauth2: "Compte tiers (OAuth)",
+  discord: "Discord",
   magic_url: "Lien magique",
   anonymous: "Session anonyme",
+  // Session mintée par le serveur : dans ce site, seule la connexion
+  // Discord en ouvre (la connexion e-mail passe par le fournisseur `email`).
+  server: "Discord",
 };
 
 async function rawSession(): Promise<string | null> {

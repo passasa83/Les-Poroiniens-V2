@@ -13,6 +13,7 @@ import {
   isAuthView,
   type AuthView,
 } from "./auth-views";
+import { messageDiscord } from "./oauth-errors";
 
 /**
  * Modale d'authentification accessible **depuis n'importe quelle page** :
@@ -21,19 +22,25 @@ import {
  *   - au chargement d'une URL `?auth=connexion|inscription|oublie` ;
  *   - sur l'événement global déclenché par les liens de l'en-tête.
  *
+ * Un retour d'échec Discord (`?erreur=`) rouvre la modale sur la connexion
+ * pour que le message soit vu, quelle que soit la page d'origine.
+ *
  * Les pages dédiées `/connexion` et `/inscription` restent en place et sont
  * utilisables sans JavaScript.
  */
 export function AuthModal({
   demoAccounts,
   turnstileSiteKey,
+  discordEnabled,
 }: {
   demoAccounts: DemoAccount[];
   turnstileSiteKey: string | null;
+  discordEnabled: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initial = searchParams.get("auth");
+  const discordError = messageDiscord(searchParams.get("erreur"));
   const [view, setView] = useState<AuthView | null>(() =>
     isAuthView(initial) ? initial : null,
   );
@@ -89,6 +96,8 @@ export function AuthModal({
           embedded
           onSwitch={setView}
           onSuccess={success}
+          discordEnabled={discordEnabled}
+          initialError={discordError}
         />
       )}
       {view === "inscription" && (
@@ -99,6 +108,7 @@ export function AuthModal({
           embedded
           onSwitch={setView}
           onSuccess={success}
+          discordEnabled={discordEnabled}
         />
       )}
       {view === "oublie" && <MotDePasseOubliePanel onSwitch={setView} />}

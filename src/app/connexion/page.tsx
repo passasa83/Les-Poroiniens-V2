@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { demoAccounts } from "@/lib/demo-accounts";
+import { discordConfigured } from "@/lib/discord";
 import { ConnexionForm } from "@/components/auth/connexion-form";
+import { messageDiscord } from "@/components/auth/oauth-errors";
 
 export const metadata: Metadata = {
   title: "Connexion",
@@ -18,14 +20,20 @@ function safeNext(raw: string | string[] | undefined): string {
 export default async function ConnexionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; erreur?: string | string[] }>;
 }) {
-  const { next } = await searchParams;
+  const { next, erreur } = await searchParams;
+  const code = Array.isArray(erreur) ? erreur[0] : erreur;
 
   return (
     <div className="container-site py-10">
       <div className="mx-auto w-full max-w-md">
-        <ConnexionForm next={safeNext(next)} demoAccounts={demoAccounts()} />
+        <ConnexionForm
+          next={safeNext(next)}
+          demoAccounts={demoAccounts()}
+          discordEnabled={discordConfigured()}
+          initialError={messageDiscord(code)}
+        />
       </div>
     </div>
   );

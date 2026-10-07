@@ -34,11 +34,16 @@ type ConnexionFormProps = {
   onSuccess?: () => void;
   /** Dans la modale, la carte de la modale remplace déjà la carte du formulaire. */
   embedded?: boolean;
+  /** Connexion Discord branchée (variables d'environnement présentes). */
+  discordEnabled?: boolean;
+  /** Échec du parcours Discord transmis par la page ou la modale. */
+  initialError?: string | null;
 };
 
 /**
  * Connexion : identifiant **ou** adresse e-mail, mot de passe,
- * « Se souvenir de moi », boutons Discord / Google (état « à configurer »).
+ * « Se souvenir de moi », boutons Discord (actif si configuré) et Google
+ * (état « à configurer »). Échec Discord annoncé via `initialError`.
  * Message d'échec unique côté serveur : rien ne révèle l'existence d'un compte.
  */
 export function ConnexionForm({
@@ -49,6 +54,8 @@ export function ConnexionForm({
   onSwitch,
   onSuccess,
   embedded = false,
+  discordEnabled = false,
+  initialError = null,
 }: ConnexionFormProps) {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
@@ -56,7 +63,7 @@ export function ConnexionForm({
   const [remember, setRemember] = useState(true);
   const [reveal, setReveal] = useState(false);
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(initialError);
   const [busy, setBusy] = useState(false);
   const identifierRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -202,7 +209,11 @@ export function ConnexionForm({
           {busy ? "Connexion…" : "Se connecter"}
         </Button>
 
-        <OAuthButtons className="border-t border-line pt-4" />
+        <OAuthButtons
+          className="border-t border-line pt-4"
+          discordEnabled={discordEnabled}
+          next={next}
+        />
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           {onSwitch ? (

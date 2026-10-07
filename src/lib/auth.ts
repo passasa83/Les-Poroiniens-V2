@@ -1,8 +1,9 @@
 import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { accounts, adminClient, createEmailSessionToken, sessionClient, users } from "@/lib/appwrite";
+import { discordLabel, type DiscordIdentity } from "@/lib/discord";
 import { getDb, TABLES } from "@/lib/db";
 import {
   DEFAULT_PREFERENCES,
@@ -313,6 +314,166 @@ export async function register(input: {
   } as unknown as Record<string, unknown>);
   await setSessionCookie(`${userId}.${sign(userId)}`);
   return { ok: true };
+}
+
+/* ── Connexion Discord ────────────────────────────────────────────────── */
+
+export type DiscordLoginResult =
+  | { ok: true; cree: boolean }
+  | { ok: false; code: "echec" };
+
+/**
+ * Pseudo non pris, sur l'arbitrage exact de l'inscription (recherche
+ * d'égalité sur `profiles.pseudo`) : suffixe numérique jusqu'à libération.
+ */
+async function pseudoLibre(db: ReturnType<typeof getDb>, base: string): Promise<string> {
+  const tronque = (valeur: string, longueur: number) =>
+    Array.from(valeur).slice(0, longueur).join("");
+  let candidat = tronque(base, 20);
+  for (let essai = 1; essai <= 50; essai += 1) {
+    const { items } = await db.list<{ pseudo: string }>(TABLES.profiles, {
+      filters: [{ field: "pseudo", op: "eq", value: candidat }],
+      limit: 1,
+    });
+    if (items.length === 0) return candidat;
+    const suffixe = String(essai + 1);
+    candidat = `${tronque(base, 20 - suffixe.length)}${suffixe}`;
+  }
+  return `${tronque(base, 14)}${Date.now().toString(36).slice(-4)}`;
+}
+
+/**
+ * Ouvre une session pour l'identité Discord déjà vérifiée côté serveur.
+ *
+ * Rapprochement, dans cet ordre :
+ *   1. le libellé `discord<id>` posé sur le compte — seul repère qui suit
+ *      le compte même après un changement d'e-mail ;
+ *   2. l'e-mail **vérifié** par Discord → liaison automatique au compte
+ *      existant (un e-mail non vérifié ne donne jamais accès à un compte) ;
+ *   3. sinon, création d'un compte « membre » avec pseudo tiré de Discord.
+ *
+ * La session est ouverte côté serveur (`users.createSession`) : son
+ * `secret` **est** déjà le jeton du cookie Appwrite, à l'identique de la
+ * valeur lue sur `Set-Cookie` de la connexion e-mail. Si le navigateur
+ * avait déjà une session sur ce compte, elle est conservée telle quelle.
+ */
+export async function loginWithDiscord(
+  identity: DiscordIdentity,
+): Promise<DiscordLoginResult> {
+  if (!appwriteMode()) return { ok: false, code: "echec" };
+
+  try {
+    const { ID, Query } = await import("node-appwrite");
+    const service = users(adminClient());
+    const db = getDb();
+    const label = discordLabel(identity.id);
+
+    let userId: string | null = null;
+
+    // 1) libellé Discord
+    try {
+      const { users: trouves } = await service.list({
+        queries: [Query.containsAny("labels", [label]), Query.limit(1)],
+      });
+      userId = trouves[0]?.$id ?? null;
+    } catch {
+      /* recherche indisponible : on poursuit par l'e-mail */
+    }
+
+    // 2) rattachement par e-mail vérifié
+    if (!userId && identity.email && identity.emailVerifie) {
+      try {
+        const { users: trouves } = await service.list({
+          queries: [Query.equal("email", [identity.email]), Query.limit(1)],
+        });
+        const cible = trouves[0];
+        if (cible) {
+          userId = cible.$id;
+          await service.updateLabels({
+            userId,
+            labels: [...new Set([...(cible.labels ?? []), label])],
+          });
+        }
+      } catch {
+        /* rattachement impossible : la création reste ouverte */
+      }
+    }
+
+    let cree = false;
+
+    // 3) création d'un compte membre
+    if (!userId) {
+      const pseudo = await pseudoLibre(db, identity.pseudo);
+      const repli = `${identity.id}@discord.poroiniens.fr`;
+      const motDePasse = randomBytes(24).toString("base64url");
+      const nom = identity.nom || pseudo;
+      let emailRetenu = identity.email ?? repli;
+      try {
+        const compte = await service.create({
+          userId: ID.unique(),
+          email: emailRetenu,
+          password: motDePasse,
+          name: nom,
+        });
+        userId = compte.$id;
+      } catch (erreur) {
+        // Repli seulement si l'e-mail Discord est déjà porté par un autre
+        // compte (il n'était pas vérifié : le compte existant n'est jamais
+        // touché). Toute autre erreur remonte au message générique.
+        const info = (erreur ?? {}) as { code?: number; type?: string };
+        const dejaPris = info.code === 409 || info.type === "user_already_exists";
+        if (!dejaPris || emailRetenu === repli) throw erreur;
+        emailRetenu = repli;
+        const compte = await service.create({
+          userId: ID.unique(),
+          email: repli,
+          password: motDePasse,
+          name: nom,
+        });
+        userId = compte.$id;
+      }
+      await service.updateLabels({ userId, labels: [label] });
+      const profile = await ensureProfile(userId, emailRetenu, pseudo);
+      await db.update<Profile>(TABLES.profiles, userId, {
+        ...profile,
+        pseudo,
+      } as unknown as Record<string, unknown>);
+      cree = true;
+    }
+
+    if (!userId) return { ok: false, code: "echec" };
+
+    // 4) session
+    const store = await cookies();
+    const brut = store.get(SESSION_COOKIE)?.value ?? null;
+    let connecte: string | null = null;
+    if (brut) {
+      try {
+        connecte = (await accounts(sessionClient(brut)).get()).$id;
+      } catch {
+        connecte = null; // session expirée : rien à libérer
+      }
+    }
+
+    if (connecte === userId) return { ok: true, cree }; // déjà connecté
+
+    if (brut && connecte) {
+      // Un autre compte était ouvert dans ce navigateur : sa session courante
+      // est refermée pour ne pas laisser de doublon inutilisé côté serveur.
+      try {
+        await accounts(sessionClient(brut)).deleteSession({ sessionId: "current" });
+      } catch {
+        /* best effort : la reconnexion reste possible sans ce nettoyage */
+      }
+    }
+
+    const session = await service.createSession({ userId });
+    if (!session.secret) return { ok: false, code: "echec" };
+    await setSessionCookie(session.secret);
+    return { ok: true, cree };
+  } catch {
+    return { ok: false, code: "echec" };
+  }
 }
 
 export async function logout() {
