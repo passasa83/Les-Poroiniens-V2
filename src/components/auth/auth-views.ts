@@ -1,5 +1,5 @@
 /**
- * Vues de la modale d'authentification (§6.10) :
+ * Vues de la modale d'authentification :
  * « depuis n'importe quelle page (connexion, inscription, mot de passe oublié) ».
  *
  * Module sans composant : partagé par les liens de déclenchement et la modale.

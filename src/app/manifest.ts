@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Les Poroiniens";
 
 /**
- * Manifeste PWA (§5.4, §8.3 « PWA installable »).
+ * Manifeste PWA (« PWA installable »).
  * `theme_color` / `background_color` reprennent les jetons de la DA
  * (`--bg` = #1d1d1f, `--accent` = #d93a44) et les icônes sont de vraies
  * images PNG générées dans `public/icons` (192, 512, maskable 512).

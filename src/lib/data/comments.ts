@@ -9,7 +9,7 @@ export interface CommentThread extends Comment {
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const LINK_PATTERN = /(https?:\/\/|www\.)/i;
 
-/** Nettoyage : texte brut uniquement, HTML retiré, longueur bornée (§14.1). */
+/** Nettoyage : texte brut uniquement, HTML retiré, longueur bornée. */
 export function sanitizeComment(raw: string): string {
   return raw
     .replace(/<[^>]*>/g, "")
@@ -29,7 +29,7 @@ export async function validateComment(input: {
   const contenu = sanitizeComment(input.contenu);
   if (contenu.length < 2) return { ok: false, reason: "vide" };
   if (contenu.length > 4000) return { ok: false, reason: "trop_long" };
-  // Blocage des liens pour les comptes récents (anti-spam §8)
+  // Blocage des liens pour les comptes récents
   if (input.isNewcomer && LINK_PATTERN.test(contenu)) return { ok: false, reason: "lien" };
 
   const recent = await getDb().list<Comment>(TABLES.comments, {
@@ -105,7 +105,7 @@ export async function getComment(id: string): Promise<Comment | null> {
   return getDb().get<Comment>(TABLES.comments, id);
 }
 
-/** Édition : fenêtre de 15 minutes pour l'auteur (§8). */
+/** Édition : fenêtre de 15 minutes pour l'auteur. */
 export async function updateComment(
   id: string,
   patch: { contenu?: string; spoiler?: boolean },
@@ -127,7 +127,7 @@ export function canEditComment(comment: Comment, userId: string, now = Date.now(
   return now - new Date(comment.created_at).getTime() < EDIT_WINDOW_MS;
 }
 
-/** Like unique par (user_id, target_id) — contrainte d'unicité (§14.8). */
+/** Like unique par (user_id, target_id) — contrainte d'unicité. */
 export async function toggleLike(
   userId: string,
   commentId: string,

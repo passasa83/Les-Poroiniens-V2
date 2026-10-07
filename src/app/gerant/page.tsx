@@ -86,7 +86,7 @@ function Kpi({
 }
 
 /**
- * Tableau de bord du Gérant (§10.3) : état de l'import, santé du NAS,
+ * Tableau de bord du Gérant : état de l'import, santé du NAS,
  * catalogue et raccourcis — la lecture d'ensemble avant de travailler.
  */
 export default async function GerantHomePage() {

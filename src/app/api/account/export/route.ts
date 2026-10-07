@@ -6,7 +6,7 @@ import { getDb, TABLES } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { Comment } from "@/lib/types";
 
-/** GET /api/account/export — export complet des données personnelles (RGPD §15). */
+/** GET /api/account/export — export complet des données personnelles (RGPD). */
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) {

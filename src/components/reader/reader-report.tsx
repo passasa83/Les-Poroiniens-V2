@@ -12,7 +12,7 @@ const REPORT_REASONS: Array<{ value: string; label: string }> = [
 ];
 
 /**
- * Signalement d’un problème de chapitre (§6.6 « Signaler un problème »).
+ * Signalement d’un problème de chapitre (« Signaler un problème »).
  * Extrait du lecteur pour être réutilisé par la barre haute et l’écran de fin.
  * `page` permet de pré-remplir le motif quand le signalement vient d’une page
  * en échec de chargement (le parent re-clé le composant quand `page` change).

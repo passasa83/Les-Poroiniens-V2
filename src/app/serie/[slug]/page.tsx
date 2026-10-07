@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return {
     title: series.titre,
     description,
-    // Contenu +18 : noindex et aucune image dans les aperçus de partage (§11.2)
+    // Contenu +18 : noindex et aucune image dans les aperçus de partage
     robots: isAdult ? { index: false, follow: false } : { index: true, follow: true },
     openGraph: {
       title: series.titre,
@@ -57,7 +57,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-/** Onglets de la fiche : Chapitres / Commentaires / Infos (§6.5). */
+/** Onglets de la fiche : Chapitres / Commentaires / Infos. */
 const ONGLETS = ["chapitres", "commentaires", "infos"] as const;
 type Onglet = (typeof ONGLETS)[number];
 
@@ -138,7 +138,7 @@ export default async function SeriePage({
     };
   });
 
-  /* Données structurées de la fiche (§6.5, SEO). */
+  /* Données structurées de la fiche (SEO). */
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Book",
@@ -264,7 +264,7 @@ export default async function SeriePage({
           </div>
         </header>
 
-        {/* ── Statistiques publiques (§14.8) ──────────────────────────── */}
+        {/* ── Statistiques publiques ──────────────────────────── */}
         {stats && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile icon={<Eye className="size-4" />} label="Vues" value={stats.vues.toLocaleString("fr-FR")} />
@@ -420,7 +420,7 @@ export default async function SeriePage({
           )}
         </div>
 
-        {/* ── Séries similaires (bas de page, §6.5) ───────────────────── */}
+        {/* ── Séries similaires (bas de page) ───────────────────── */}
         {similar.length > 0 && (
           <section className="space-y-4">
             <h2 className="section-title">Séries similaires</h2>

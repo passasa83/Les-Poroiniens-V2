@@ -64,7 +64,7 @@ type ApiComment = CommentThread & {
   canDelete: boolean;
 };
 
-/** Décors : liked / canEdit / canDelete (§8). */
+/** Décors : liked / canEdit / canDelete. */
 async function decorate(
   threads: CommentThread[],
   userId: string | null,

@@ -121,7 +121,7 @@ export async function clearHistory(userId: string): Promise<void> {
   }
 }
 
-/* ── Statistiques lecteur (§7.4) ─────────────────────────────────────── */
+/* ── Statistiques lecteur ─────────────────────────────────────── */
 
 export interface UserStats {
   chapitres_lus: number;
@@ -206,7 +206,7 @@ export async function libraryWithSeries(
   return out;
 }
 
-/* ── Tableau de bord de la bibliothèque (§6.7) ───────────────────────────── */
+/* ── Tableau de bord de la bibliothèque ───────────────────────────── */
 
 export interface LibraryDashboardRow {
   entry: LibraryEntry;
@@ -215,11 +215,11 @@ export interface LibraryDashboardRow {
   totalChapitres: number;
   /** Premier numéro publié (cible du bouton « Lire » d'une série commencée à rien). */
   premierNumero: number | null;
-  /** Dernier chapitre atteint et page : même reprise que la fiche (§6.5). */
+  /** Dernier chapitre atteint et page : même reprise que la fiche. */
   reprise: { numero: number; page: number } | null;
   /** Date ISO de la dernière lecture, `null` si la série n'a jamais été ouverte. */
   derniereLecture: string | null;
-  /** Publication la plus récente de la série → tri « nouveautés » (§6.7). */
+  /** Publication la plus récente de la série → tri « nouveautés ». */
   derniereSortie: string | null;
   /** Chapitres parus après la dernière lecture → badge « +N non lus ». */
   nonLus: number;
@@ -228,7 +228,7 @@ export interface LibraryDashboardRow {
 }
 
 /**
- * Ligne de la bibliothèque enrichie pour la page §6.7 : progression, dernier
+ * Ligne de la bibliothèque enrichie pour la page : progression, dernier
  * chapitre lu et chapitres non lus.
  *
  * Lecture séquentielle assumée (le lecteur reprend toujours sur le dernier
@@ -256,7 +256,7 @@ export async function libraryDashboard(userId: string): Promise<LibraryDashboard
     const numeros = chapters.map((c) => c.numero);
     const total = chapters.length;
     const premierNumero = total > 0 ? Math.min(...numeros) : null;
-    // Dernière parution (§6.7 « nouveautés ») : publication la plus récente.
+    // Dernière parution (« nouveautés ») : publication la plus récente.
     const derniereSortie = chapters.reduce<string | null>((latest, c) => {
       const date = c.publish_at ?? c.created_at;
       return latest === null || date > latest ? date : latest;

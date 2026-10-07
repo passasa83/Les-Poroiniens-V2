@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
-/** Délai d’inactivité avant le masquage automatique des barres (§6.6). */
+/** Délai d’inactivité avant le masquage automatique des barres. */
 const IDLE_MS = 2600;
 /** Distance de défilement (px) nécessaire pour changer d’avis sur la visibilité. */
 const SCROLL_STEP = 24;

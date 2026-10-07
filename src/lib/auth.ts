@@ -30,7 +30,7 @@ export function appwriteMode(): boolean {
 /**
  * Pose la session (à appeler depuis une route ou une server action).
  * `maxDays` nul → cookie de session : il disparaît à la fermeture du
- * navigateur (« Se souvenir de moi » désactivé, §6.10).
+ * navigateur (« Se souvenir de moi » désactivé).
  */
 export async function setSessionCookie(sessionId: string, maxDays = SESSION_DAYS) {
   const store = await cookies();
@@ -134,14 +134,14 @@ export type AuthResult =
   | { ok: false; error: string; field?: AuthField };
 
 /**
- * Message d'échec unique (§14.2) : ni le pseudo, ni l'e-mail, ni l'existence
+ * Message d'échec unique : ni le pseudo, ni l'e-mail, ni l'existence
  * d'un compte ne sont révélés. Identique que la saisie soit un identifiant
  * inconnu ou un mot de passe erroné.
  */
 const LOGIN_FAILED = "Identifiant ou mot de passe incorrect.";
 
 /**
- * Résout un identifiant libre (e-mail **ou** pseudo, §6.10) en adresse e-mail.
+ * Résout un identifiant libre (e-mail **ou** pseudo) en adresse e-mail.
  * Retourne `null` quand rien ne correspond — sans distinguer la raison.
  */
 async function resolveEmail(identifier: string): Promise<string | null> {
@@ -172,7 +172,7 @@ async function resolveEmail(identifier: string): Promise<string | null> {
 }
 
 /**
- * Connexion par identifiant **ou** e-mail (§6.10).
+ * Connexion par identifiant **ou** e-mail.
  * `remember` false → cookie de session (effacé à la fermeture du navigateur) ;
  * `remember` true → cookie persistant de 30 jours.
  */
@@ -189,7 +189,7 @@ export async function login(
 
   const email = await resolveEmail(clean);
   if (!email) {
-    // Message unique : pas de distinction identifiant / mot de passe (§14.2)
+    // Message unique : pas de distinction identifiant / mot de passe
     return { ok: false, error: LOGIN_FAILED };
   }
 
@@ -227,7 +227,7 @@ export async function register(input: {
   const pseudo = input.pseudo.trim();
   const email = input.email.trim().toLowerCase();
 
-  /* Pseudo public (§6.10) : 6 à 20 caractères, lettres et chiffres seulement,
+  /* Pseudo public : 6 à 20 caractères, lettres et chiffres seulement,
      donc ni espace ni symbole. La longueur se compte en caractères Unicode. */
   const longueur = [...pseudo].length;
   if (longueur < 6 || longueur > 20) {
@@ -286,7 +286,7 @@ export async function register(input: {
       return { ok: true };
     } catch {
       // Message volontairement neutre : il ne confirme pas qu'un compte
-      // existe déjà avec cette adresse (§6.10 « pas d'énumération »).
+      // existe déjà avec cette adresse (« pas d'énumération »).
       return {
         ok: false,
         error: "Inscription impossible pour le moment. Réessayez plus tard.",
@@ -333,7 +333,7 @@ export async function logout() {
 /* ── Porte +18 ───────────────────────────────────────────────────────── */
 
 /**
- * Porte +18 (§11) : réservée aux **membres connectés** ayant validé la
+ * Porte +18 : réservée aux **membres connectés** ayant validé la
  * déclaration d'âge (cookie 30 jours ou préférence `adult_ok` du compte).
  * Les visiteurs n'y ont jamais accès, même avec un ancien cookie.
  */

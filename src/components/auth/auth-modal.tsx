@@ -15,7 +15,7 @@ import {
 } from "./auth-views";
 
 /**
- * Modale d'authentification accessible **depuis n'importe quelle page** (§6.10) :
+ * Modale d'authentification accessible **depuis n'importe quelle page** :
  * connexion, inscription et mot de passe oublié y cohabitent sous forme de
  * vues. Elle s'ouvre
  *   - au chargement d'une URL `?auth=connexion|inscription|oublie` ;
@@ -107,7 +107,7 @@ export function AuthModal({
 }
 
 /**
- * Vue « mot de passe oublié » de la modale (§6.10 / §14.3) : sans fournisseur
+ * Vue « mot de passe oublié » de la modale : sans fournisseur
  * de mails, la réinitialisation est manuelle et renvoie explicitement au
  * support du site.
  */

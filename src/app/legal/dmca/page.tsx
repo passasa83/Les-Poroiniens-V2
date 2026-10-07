@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     "Procédure de signalement et de retrait de contenu (notice & takedown) du site Les Poroiniens.",
 };
 
-/** Sommaire ancré (§6.13) : chaque entrée pointe vers l'id de la section. */
+/** Sommaire ancré : chaque entrée pointe vers l'id de la section. */
 const SOMMAIRE = [
   { id: "contenu", titre: "Ce que doit contenir un signalement" },
   { id: "formulaire", titre: "Formulaire de signalement" },

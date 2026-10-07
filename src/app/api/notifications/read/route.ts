@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { markNotificationsRead } from "@/lib/data/moderation";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-/** POST /api/notifications/read — marque toutes les notifications comme lues (§7.3). */
+/** POST /api/notifications/read — marque toutes les notifications comme lues. */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {

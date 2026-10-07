@@ -63,7 +63,7 @@ type ImgInfo = {
   nsfw: boolean;
 };
 
-/** Aperçu d'un dossier avant indexation (§5.1, étape 2). */
+/** Aperçu d'un dossier avant indexation (étape 2). */
 type PreviewData = {
   path: string;
   count: number;
@@ -72,7 +72,7 @@ type PreviewData = {
   anomalies: { name: string; reason: string }[];
 };
 
-/** Candidat renvoyé par `/api/owner/nas/scan` (import par lot, §10.2). */
+/** Candidat renvoyé par `/api/owner/nas/scan` (import par lot). */
 type ScanCandidate = {
   name: string;
   path: string;
@@ -102,7 +102,7 @@ const ETAT_LABEL: Record<ScanCandidate["etat"], string> = {
 
 type ImportStatut = "draft" | "scheduled" | "published";
 
-/** Tri naturel : page-2 avant page-10 (§10.2). */
+/** Tri naturel : page-2 avant page-10. */
 function naturalSort(entries: PageEntry[]): PageEntry[] {
   return [...entries].sort((a, b) => a.name.localeCompare(b.name, "fr", { numeric: true }));
 }
@@ -177,12 +177,12 @@ export function ImportPanel({
   const [nasItems, setNasItems] = useState<NasItem[]>([]);
   const [nasBusy, setNasBusy] = useState(false);
   const [nasError, setNasError] = useState<string | null>(null);
-  /** Dossier de chapitre retenu : le listing est alors fait côté serveur (§5.1). */
+  /** Dossier de chapitre retenu : le listing est alors fait côté serveur. */
   const [nasFolder, setNasFolder] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
 
-  // État de l'import par lot (§10.2)
+  // État de l'import par lot
   const [scan, setScan] = useState<ScanCandidate[] | null>(null);
   const [scanFolder, setScanFolder] = useState<string | null>(null);
   const [scanWarn, setScanWarn] = useState<string[]>([]);
@@ -196,7 +196,7 @@ export function ImportPanel({
   const [batchSummary, setBatchSummary] = useState<{ crees: number; echecs: number } | null>(null);
   const stopRef = useRef(false);
 
-  // Statut à la création (§5.1, étape 4)
+  // Statut à la création (étape 4)
   const [statut, setStatut] = useState<ImportStatut>("draft");
   const [publishAt, setPublishAt] = useState("");
 
@@ -345,7 +345,7 @@ export function ImportPanel({
     }
   }
 
-  /** Aperçu d'un dossier avant indexation (§5.1, étape 2) : trous de
+  /** Aperçu d'un dossier avant indexation (étape 2) : trous de
    *  numérotation, doublons de hash et pages inhabituelles. */
   async function loadPreview(path: string) {
     setPreviewBusy(true);
@@ -555,7 +555,7 @@ export function ImportPanel({
           | { error?: string; nbPages?: number; warning?: string; retryAfter?: number }
           | null;
 
-        /* Quota minute atteinte (§14.1) : on attend la fenêtre indiquée par le
+        /* Quota minute atteinte : on attend la fenêtre indiquée par le
            serveur puis on réessaie une seule fois — un lot ne doit pas échouer
            en plein parcours pour un simple compteur. */
         if (res.status === 429 && !stopRef.current) {
@@ -1327,7 +1327,7 @@ export function ImportPanel({
           </h2>
           <ul className="space-y-2 text-sm text-muted">
             <li>• Drive ne contient que les couvertures, bannières et métadonnées des séries.</li>
-            <li>• Les pages de scans ne transitent jamais par Drive (§6.5) : elles restent sur le NAS.</li>
+            <li>• Les pages de scans ne transitent jamais par Drive : elles restent sur le NAS.</li>
             <li>• Connexion par compte de service, en lecture seule, côté serveur uniquement.</li>
             <li>• Aucun lien Drive n&apos;est exposé au client.</li>
           </ul>
@@ -1374,7 +1374,7 @@ export function ImportPanel({
   );
 }
 
-/* ── Aperçu d'un dossier NAS avant indexation (§5.1) ──────────────────── */
+/* ── Aperçu d'un dossier NAS avant indexation ──────────────────── */
 
 function PreviewPanel({ preview }: { preview: PreviewData }) {
   const clean = preview.anomalies.length === 0;

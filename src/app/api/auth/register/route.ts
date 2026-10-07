@@ -10,12 +10,12 @@ const RegisterSchema = z.object({
   password: z.string().max(256).default(""),
   /** Honeypot : champ invisible, rempli uniquement par un robot. */
   website: z.string().max(500).default(""),
-  /** Jeton Cloudflare Turnstile (§7.1) — vide si le captcha n'est pas configuré. */
+  /** Jeton Cloudflare Turnstile — vide si le captcha n'est pas configuré. */
   captcha: z.string().max(4096).default(""),
 });
 
 /**
- * POST /api/auth/register — inscription (§7.1 et §14.3).
+ * POST /api/auth/register — inscription.
  * Aucun e-mail n'est vérifié au lancement (pas de fournisseur de mails) :
  * l'anti-bot repose sur le captcha Turnstile (s'il est configuré), le honeypot
  * et la limitation de débit par IP.
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Captcha (§7.1) : sauté avec un avertissement clair si Turnstile n'est pas
+  // Captcha : sauté avec un avertissement clair si Turnstile n'est pas
   // configuré (repli explicite, jamais un blocage fantôme).
   const captcha = await verifyTurnstile(parsed.data.captcha, ip);
   if (!captcha.ok) {

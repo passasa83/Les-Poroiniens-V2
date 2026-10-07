@@ -7,7 +7,7 @@ import { SeriesForm } from "@/components/series/series-actions";
 
 export const dynamic = "force-dynamic";
 
-/** Création d'une fiche série (Gérant) — §9.2. */
+/** Création d'une fiche série (Gérant). */
 export default async function GerantNouvelleSeriePage() {
   const user = await getCurrentUser();
   if (!can(user?.role, "edit_series")) {

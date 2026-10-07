@@ -277,7 +277,7 @@ function build(): DemoDatabase {
       vues: 12_000 + si * 3_457,
       populaire: 100 - si * 7,
       nb_chapitres: nbChapters,
-      // recherche plein texte (§6.4) : copies concaténées des colonnes array
+      // recherche plein texte : copies concaténées des colonnes array
       recherche_alt: (s.alt ?? []).join(" "),
       recherche_auteurs: s.auteurs.join(" "),
       created_at: iso(-(400 - si * 10) * DAY),
@@ -289,7 +289,7 @@ function build(): DemoDatabase {
       const chapterId = rowId(`${seriesId}-c${n}`);
       /* Cadence des publications : les cinq derniers chapitres des trois
          premières séries s'étagent sur les ~60 premières heures, pour que la
-         page Nouveautés (§6.2) affiche ses sections « Dernières 24 h »,
+         page Nouveautés affiche ses sections « Dernières 24 h »,
          « Hier » et « Il y a 2 jours » sur le jeu de démonstration. Les
          autres chapitres suivent l'ancienne cadence (rang + 3 jours). */
       const rang = nbChapters - n; // 0 = chapitre le plus récent
@@ -308,7 +308,7 @@ function build(): DemoDatabase {
         statut: "published" as const,
         publish_at: published,
         source: "nas" as const,
-        // dénormalisé (§6.1) : les onglets « Dernières sorties » filtrent dessus
+        // dénormalisé : les onglets « Dernières sorties » filtrent dessus
         series_type: s.type,
         nb_pages: nbPages,
         classification,
@@ -448,7 +448,7 @@ function build(): DemoDatabase {
     created_at: iso(-20 * 3600_000),
   });
 
-  // ── Annonces de l'équipe (§6.11) ─────────────────────────────────────
+  // ── Annonces de l'équipe ─────────────────────────────────────
   for (const a of [
     {
       slug: "ouverture-de-la-saison-automne",

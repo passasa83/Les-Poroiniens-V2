@@ -8,7 +8,7 @@ import type { Chapter } from "@/lib/types";
 export const runtime = "nodejs";
 
 /**
- * Like de chapitre (§14.8) : contrainte d'unicité (user_id, chapter_id),
+ * Like de chapitre : contrainte d'unicité (user_id, chapter_id),
  * le compteur `likes` du chapitre est recalculé par le serveur.
  */
 export async function POST(

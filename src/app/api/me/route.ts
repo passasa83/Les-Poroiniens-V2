@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 
-/** GET /api/me — identité de l'utilisateur connecté (§14.10), jamais d'identité client. */
+/** GET /api/me — identité de l'utilisateur connecté, jamais d'identité client. */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {

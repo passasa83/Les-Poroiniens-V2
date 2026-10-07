@@ -14,7 +14,7 @@ export function jsonError(
 
 /**
  * Garde commune des routes NAS côté Gérant : session, rôle `import_chapters`,
- * quota par IP et présence de `NAS_API_BASE` (§4.3 — jamais d'appel direct
+ * quota par IP et présence de `NAS_API_BASE` (jamais d'appel direct
  * depuis le navigateur).
  */
 export async function guardNas(

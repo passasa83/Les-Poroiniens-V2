@@ -115,7 +115,7 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
             <ul className="mt-3 space-y-2">
               {entries.map((entry) => (
                 <li key={entry.key} className="card flex items-center gap-3 p-3">
-                  {/* §12.6 : couverture et titre mènent à la fiche série ; la
+                  {/* couverture et titre mènent à la fiche série ; la
                       reprise de lecture est un bouton explicite à part. */}
                   <Link
                     href={entry.slug ? `/serie/${entry.slug}` : "/catalogue"}

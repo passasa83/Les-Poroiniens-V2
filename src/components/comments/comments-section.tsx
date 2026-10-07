@@ -47,7 +47,7 @@ const REPORT_REASONS: Array<{ value: string; label: string }> = [
 type Sort = "recents" | "populaires";
 
 /**
- * Commentaires d’une série ou d’un chapitre (§8) : arbre 2 niveaux,
+ * Commentaires d’une série ou d’un chapitre : arbre 2 niveaux,
  * likes, spoiler, édition 15 min, suppression et signalement.
  */
 export function CommentsSection({

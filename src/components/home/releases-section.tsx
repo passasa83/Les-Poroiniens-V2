@@ -30,7 +30,7 @@ type ReleaseCard = {
 
 /** Les chapitres arrivent triés du plus récent au plus ancien : on fusionne
  *  par série (une seule carte par œuvre, 3 derniers chapitres au maximum),
- *  y compris entre les pages de « Charger plus » et les onglets (§6.1). */
+ * y compris entre les pages de « Charger plus » et les onglets. */
 function groupReleases(items: ReleaseDto[]): ReleaseCard[] {
   const MAX_CHAPITRES = 3;
   const cartes = new Map<string, ReleaseCard>();
@@ -56,7 +56,7 @@ function groupReleases(items: ReleaseDto[]): ReleaseCard[] {
 }
 
 /**
- * « Dernières sorties » (§6.1) : onglets [Tout][Manga][Manhwa][Manhua] et
+ * « Dernières sorties » : onglets [Tout][Manga][Manhwa][Manhua] et
  * « Charger plus (n / total) ». L'état initial est rendu côté serveur, les
  * pages suivantes passent par GET /api/home/releases.
  */

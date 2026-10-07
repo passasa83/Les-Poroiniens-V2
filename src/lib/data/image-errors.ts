@@ -17,7 +17,7 @@ type ImageErrorRow = {
 };
 
 /**
- * Télémétrie d'erreur d'images (§9.1) : le lecteur remonte les pages qui
+ * Télémétrie d'erreur d'images : le lecteur remonte les pages qui
  * n'ont pas pu être chargées après reprise, agrégées par jour, chapitre et
  * page. Aucune donnée personnelle n'est collectée.
  */

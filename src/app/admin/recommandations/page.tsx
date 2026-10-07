@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export type SeriesLite = { id: string; titre: string; slug: string; couverture: string };
 
-/** Gestion des recommandations éditoriales (admin+, §12.1). */
+/** Gestion des recommandations éditoriales (admin+). */
 export default async function AdminRecommandationsPage() {
   const user = await getCurrentUser();
   if (!user || !atLeast(user.role, "admin") || !can(user.role, "manage_recommendations")) {
@@ -40,8 +40,8 @@ export default async function AdminRecommandationsPage() {
       <div>
         <h1 className="section-title">Recommandations</h1>
         <p className="mt-1 text-sm text-muted">
-          Sélections manuelles affichées sur la home, les fiches séries et la fin des chapitres
-          (§12.1). Le contenu +18 respecte le gate à l&apos;affichage.
+          Sélections manuelles affichées sur la home, les fiches séries et la fin des chapitres.
+          Le contenu +18 respecte le gate à l&apos;affichage.
         </p>
       </div>
 

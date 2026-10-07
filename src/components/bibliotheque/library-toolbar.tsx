@@ -12,7 +12,7 @@ import { TRIS_BIBLIO, type TriBiblio, type VueBiblio } from "./tri-vue";
 export type { TriBiblio, VueBiblio } from "./tri-vue";
 
 /**
- * Barre d'outils de la bibliothèque (§6.7) : tri et bascule grille / liste.
+ * Barre d'outils de la bibliothèque : tri et bascule grille / liste.
  * Le tri est appliqué dans l'URL (retour du navigateur inchangé) et la vue
  * reste navigable sans JavaScript (liens natifs).
  */

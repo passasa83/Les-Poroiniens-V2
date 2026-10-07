@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 
 /**
- * Page 404 (§6.12) : retour à l'accueil **et** recherche, pour que la
+ * Page 404 : retour à l'accueil **et** recherche, pour que la
  * navigation reparte sans passer par le moteur du navigateur.
  * Le `noindex` est rendu explicitement : cette page sert aussi les URL de
  * série / chapitre inexistantes détectées par le proxy (statut 404 réel).

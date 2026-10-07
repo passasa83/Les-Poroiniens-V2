@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * §6.11 « Annonces » : liste datée du plus récent au plus ancien. Le détail
+ * « Annonces » : liste datée du plus récent au plus ancien. Le détail
  * est une page publique par slug (`/annonces/[slug]`), le titre et le bouton
  * « Lire l'annonce » pointant dessus.
  */

@@ -7,7 +7,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DEFAULT_PREFERENCES, type UserPreferences } from "@/lib/types";
 
 /**
- * PATCH /api/account/preferences — §14.4.
+ * PATCH /api/account/preferences.
  * Seuls les champs connus de `preferences` sont fusionnés ; tous les autres
  * champs reçus sont ignorés (le schéma les écarte, `updatePreferences()` les
  * filtre à nouveau). Écriture réservée au propriétaire de la session.
@@ -23,7 +23,7 @@ const PreferencesSchema = z.object({
 });
 
 /**
- * GET /api/account/preferences — §6.8 « Réglages ».
+ * GET /api/account/preferences — « Réglages ».
  * Renvoie les préférences du compte connecté, complétées par les valeurs par
  * défaut (un compte créé avant l'ajout d'un champ n'a pas de trou dans la
  * réponse). Lecture seule : 401 sans session.
@@ -77,7 +77,7 @@ export async function PATCH(request: Request) {
   }
 
   const preferences: UserPreferences = await updatePreferences(user.id, parsed.data);
-  // Opt-out §11 : le cookie visiteur ne doit pas rouvrir la porte coupée
+  // Opt-out : le cookie visiteur ne doit pas rouvrir la porte coupée
   // côté compte (voir `updatePreferences`, révocation effective).
   if (parsed.data.adult_ok === false) {
     (await cookies()).set(ADULT_COOKIE, "", { path: "/", maxAge: 0 });

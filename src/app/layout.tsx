@@ -13,7 +13,7 @@ import { demoAccounts } from "@/lib/demo-accounts";
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Les Poroiniens";
 
-/* Typographie (DA §3.3) : Poppins, graisses 400 à 700, secours système + CJK
+/* Typographie (DA) : Poppins, graisses 400 à 700, secours système + CJK
    déclarés dans `--font-sans` (globals.css) pour les titres originaux. */
 const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     siteName,
     url: siteUrl,
   },
-  /* PWA (§5.4, §8.3) : icônes réelles dans /public, iPhone incluant un
+  /* PWA : icônes réelles dans /public, iPhone incluant un
      « apple-touch-icon » ; le lien vers manifest.webmanifest est rendu par
      Next depuis src/app/manifest.ts. */
   applicationName: siteName,
@@ -59,7 +59,7 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-/* Thème : préférence enregistrée, sinon `prefers-color-scheme` (DA §8.1). */
+/* Thème : préférence enregistrée, sinon `prefers-color-scheme` (DA). */
 const themeInit = `
 try {
   var stored = localStorage.getItem('lp-theme');
@@ -76,7 +76,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body className="flex min-h-screen flex-col antialiased">
-        {/* Lien d'évitement (WCAG 2.4.1, §8.1) : premier élément focusable,
+        {/* Lien d'évitement (WCAG 2.4.1) : premier élément focusable,
             il saute la barre de navigation pour aller au contenu principal. */}
         <a
           href="#contenu-principal"
@@ -93,10 +93,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Espace réservé à la barre d'onglets mobile (hauteur + encoche) */}
         <div aria-hidden className="h-[calc(3.5rem+env(safe-area-inset-bottom))] md:hidden" />
         <CookieBanner />
-        {/* PWA (§5.4) : enregistrement du service worker, discret et
+        {/* PWA : enregistrement du service worker, discret et
             limité à la construction de production (voir pwa-register.tsx). */}
         <PwaRegister />
-        {/* Modale d'authentification (§6.10) : connexion, inscription et
+        {/* Modale d'authentification : connexion, inscription et
             mot de passe oublié, accessibles depuis n'importe quelle page. */}
         <Suspense fallback={null}>
           <AuthModal

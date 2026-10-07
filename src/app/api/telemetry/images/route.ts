@@ -12,7 +12,7 @@ const payload = z.object({
 
 /**
  * POST /api/telemetry/images — remontée des échecs de chargement d'images
- * (§9.1). Envoyé par lots depuis le lecteur après échec des reprises, sans
+ * Envoyé par lots depuis le lecteur après échec des reprises, sans
  * donnée personnelle, et agrégé par jour pour l'alerte du cron de santé.
  */
 export async function POST(request: Request) {

@@ -37,7 +37,7 @@ export async function getChapterById(id: string): Promise<Chapter | null> {
   return getDb().get<Chapter>(TABLES.chapters, id);
 }
 
-/** Index des pages : lu en base, jamais sur le NAS (§14.7). */
+/** Index des pages : lu en base, jamais sur le NAS. */
 export async function getPages(chapterId: string): Promise<ScanPage[]> {
   const { items } = await getDb().list<ScanPage>(TABLES.pages, {
     filters: [{ field: "chapter_id", op: "eq", value: chapterId }],
@@ -48,7 +48,7 @@ export async function getPages(chapterId: string): Promise<ScanPage[]> {
 }
 
 /** URLs de lecture : publiques et versionnées en lecture normale, signées à
- *  durée courte pour un brouillon prévisualisé par le Gérant (§6.3). */
+ * durée courte pour un brouillon prévisualisé par le Gérant. */
 export async function getChapterPageUrls(
   chapterId: string,
   opts: { signed?: boolean } = {},
@@ -80,7 +80,7 @@ export interface ReaderContext {
 }
 
 /**
- * Contexte du lecteur (§7.2). `allowDraft` est réservé au Gérant : le chapitre
+ * Contexte du lecteur. `allowDraft` est réservé au Gérant : le chapitre
  * s'affiche alors avec des URLs signées à 10 minutes.
  */
 export async function getReaderContext(
@@ -126,14 +126,14 @@ export async function recentChapters(limit = 12): Promise<Array<Chapter & { seri
     const out: Array<Chapter & { series: Series }> = [];
     for (const chapter of items) {
       const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      // Une série archivée ne génère plus aucune sortie publique (§9.2).
+      // Une série archivée ne génère plus aucune sortie publique.
       if (series && series.statut !== "archive") out.push({ ...chapter, series: mapSeries(series) });
     }
     return out;
   });
 }
 
-/** Numéro du premier chapitre publié de chaque série (héros de l'accueil, §6.1). */
+/** Numéro du premier chapitre publié de chaque série (héros de l'accueil). */
 export async function firstChapterNumbers(seriesIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (seriesIds.length === 0) return out;
@@ -159,7 +159,7 @@ export interface ReleaseItem extends Chapter {
 }
 
 /**
- * « Nouveautés » (§6.2) : chapitres publiés sur les `days` derniers jours
+ * « Nouveautés » : chapitres publiés sur les `days` derniers jours
  * (7 au maximum), du plus récent au plus ancien, avec leur série.
  * Le découpage « Dernières 24 h / Hier / … » est calculé ensuite côté page.
  */
@@ -184,7 +184,7 @@ export async function listUpdates(
         ? [{ field: "classification", op: "eq" as const, value: "all" }]
         : []),
       ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
-      /* Chapitres de la graine écartés dans la requête (§6.2) : les tranches
+      /* Chapitres de la graine écartés dans la requête : les tranches
          « Dernières 24 h / Hier » ne montrent plus le jeu de démonstration. */
       ...filtresSansDemo("chapters"),
     ];
@@ -213,7 +213,7 @@ export async function listUpdates(
   });
 }
 
-/** Dernier chapitre publié d'une série (carte héros des nouveautés, §6.2). */
+/** Dernier chapitre publié d'une série (carte héros des nouveautés). */
 export async function latestPublishedChapter(seriesId: string): Promise<Chapter | null> {
   const { items } = await getDb().list<Chapter>(TABLES.chapters, {
     filters: [
@@ -227,7 +227,7 @@ export async function latestPublishedChapter(seriesId: string): Promise<Chapter 
 }
 
 /**
- * « Dernières sorties » (§6.1) : chapitres publiés les plus récents, avec leur
+ * « Dernières sorties » : chapitres publiés les plus récents, avec leur
  * série, filtrables par format (manga / manhwa / manhua) via la colonne
  * dénormalisée `series_type`, paginés côté serveur.
  */
@@ -250,7 +250,7 @@ export async function listRecentReleases(
         ? [{ field: "classification", op: "eq" as const, value: "all" }]
         : []),
       ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
-      /* Exclusion dans la requête : `total` (§6.1 « Charger plus ») doit
+      /* Exclusion dans la requête : `total` (« Charger plus ») doit
          correspondre aux lignes réellement servies. */
       ...filtresSansDemo("chapters"),
     ];
@@ -265,7 +265,7 @@ export async function listRecentReleases(
     const out: ReleaseItem[] = [];
     for (const chapter of items) {
       const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      // Série archivée : sortie retirée du catalogue public (§9.2).
+      // Série archivée : sortie retirée du catalogue public.
       if (series && series.statut !== "archive") out.push({ ...chapter, series: mapSeries(series) });
     }
     return { items: out, total, page, perPage };
@@ -273,7 +273,7 @@ export async function listRecentReleases(
 }
 
 /**
- * « Dernières sorties » groupées par œuvre (§6.1, décision client) : **une
+ * « Dernières sorties » groupées par œuvre (décision client) : **une
  * seule carte par série**, contenant ses derniers chapitres (MANGA Plus) —
  * même avec plusieurs sorties du jour. La série apparaît une fois, ordonnée
  * sur son chapitre le plus récent (ordre antéchronologique conservé).
@@ -349,7 +349,7 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
   invalidate("updates:");
   invalidate("series:");
 
-  /* Compteur dénormalisé de la série (§6.3 « One-shot ») : recalculé au vol —
+  /* Compteur dénormalisé de la série (« One-shot ») : recalculé au vol —
      et non incrémenté — pour ne jamais dériver d'une écriture ratée. */
   const movedSeries =
     data.series_id !== undefined && data.series_id !== existing?.series_id;
@@ -361,7 +361,7 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
 }
 
 /**
- * Recalcule `series.nb_chapitres` (colonne dénormalisée, §6.3). Le compteur
+ * Recalcule `series.nb_chapitres` (colonne dénormalisée). Le compteur
  * alimente le filtre « One-shot » : recalcé sur un échantillon limité, il
  * complète à la volée une ligne héritée qui en manque (graines anciennes).
  */

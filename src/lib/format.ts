@@ -21,7 +21,7 @@ export function relativeTime(iso: string | null | undefined): string {
   return `il y a ${years} an${years > 1 ? "s" : ""}`;
 }
 
-/** Date courte : relatif sous 7 jours, date complète au-delà (§6.5). */
+/** Date courte : relatif sous 7 jours, date complète au-delà. */
 export function dateOrRelative(iso: string | null | undefined): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -30,7 +30,7 @@ export function dateOrRelative(iso: string | null | undefined): string {
   return days >= 0 && days < 7 ? relativeTime(iso) || "" : date.toLocaleDateString("fr-FR");
 }
 
-/** Durée en minutes → « 45 min », « 2 h 30 » (§6.8, temps de lecture estimé). */
+/** Durée en minutes → « 45 min », « 2 h 30 » (temps de lecture estimé). */
 export function duree(minutes: number): string {
   if (!Number.isFinite(minutes) || minutes < 0) return "0 min";
   const total = Math.round(minutes);
@@ -40,7 +40,7 @@ export function duree(minutes: number): string {
   return m > 0 ? `${h} h ${m} min` : `${h} h`;
 }
 
-/** Synthèse d'un texte long pour les aperçus (synopsis du héros, §6.1). */
+/** Synthèse d'un texte long pour les aperçus (synopsis du héros). */
 export function plainText(raw: string | null | undefined, max = 180): string {
   const clean = (raw ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;

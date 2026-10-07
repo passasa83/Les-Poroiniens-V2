@@ -4,16 +4,16 @@ import { Badge } from "@/components/ui/kit";
 import { SERIES_TYPE_LABELS, type Series } from "@/lib/types";
 
 /**
- * « Populaire » (§6.1) : classement 1 à 10.
+ * « Populaire » : classement 1 à 10.
  * Le comptage par jour n'existe pas en base (les vues sont un cumul), le titre
  * reste donc « Les plus lues » plutôt qu'une promesse non tenable de « lectures
  * du jour ». Le compteur de vues n'apparaît pas ici : il est réservé à la fiche
- * série (§12.3).
+ * série.
  */
 export function RankList({
   series,
   adultAllowed = false,
-  /** 2 colonnes sur l'accueil, 1 dans la colonne latérale des nouveautés (§6.2). */
+  /** 2 colonnes sur l'accueil, 1 dans la colonne latérale des nouveautés. */
   columns = 2,
 }: {
   series: Series[];
@@ -28,7 +28,7 @@ export function RankList({
 
   return (
     /* `grid-cols-1` = minmax(0, 1fr) : sans contrainte, la piste en auto prend
-       la largeur max-content et le classement déborde de sa colonne (§6.2). */
+       la largeur max-content et le classement déborde de sa colonne. */
     <ol className={clsx("grid grid-cols-1 gap-2", columns === 2 && "sm:grid-cols-2")}>
       {rows.map((s, i) => (
         <li key={s.id}>
@@ -58,7 +58,7 @@ export function RankList({
               <p className="truncate text-sm font-semibold text-fg group-hover:text-primary">
                 {s.titre}
               </p>
-              {/* §6.1 « genre » + §6.2 « auteur en gris » : les deux sur une ligne tronquée. */}
+              {/* « genre » + « auteur en gris » : les deux sur une ligne tronquée. */}
               <p className="meta flex items-center gap-1.5">
                 <span className="truncate">
                   {s.auteurs[0] ? `${s.auteurs[0]} · ` : ""}

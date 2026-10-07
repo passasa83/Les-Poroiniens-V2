@@ -3,24 +3,24 @@ import { createHmac } from "node:crypto";
 import type { ScanPage } from "@/lib/types";
 
 /**
- * Système d'images NAS → Cloudflare (§7.4).
+ * Système d'images NAS → Cloudflare.
  *
  * Toutes les variables sont lues côté serveur : le navigateur ne reçoit que
  * des URLs publiques déjà construites (`img.` + chemin relatif + version).
  * Les chemins stockés en base sont **toujours relatifs**
  * (`public/<slug>/chapitres/0012/001.webp`) : changer de domaine ou de CDN
- * ne demande aucune migration (§5.2).
+ * ne demande aucune migration.
  */
 export function imageEnv() {
   const strip = (value: string | undefined) => (value ?? "").replace(/\/+$/, "");
   return {
-    /** Domaine public qui sert les fichiers : `img.` (§2.1). */
+    /** Domaine public qui sert les fichiers : `img.`. */
     imgBase: strip(process.env.IMG_BASE_URL || process.env.CDN_BASE_URL),
-    /** API privée de listing du NAS : `api-img.` (§4). */
+    /** API privée de listing du NAS : `api-img.`. */
     nasApiBase: strip(process.env.NAS_API_BASE || process.env.NAS_API_URL),
-    /** Signature HMAC des URLs à durée courte (§6.3). */
+    /** Signature HMAC des URLs à durée courte. */
     signingSecret: process.env.IMG_SIGNING_SECRET || process.env.AUTH_SECRET || "",
-    /** Purge ciblée du cache Cloudflare (§6.1). */
+    /** Purge ciblée du cache Cloudflare. */
     cfToken: process.env.CF_API_TOKEN || "",
     cfZone: process.env.CF_ZONE_ID || "",
     /** Transformation d'images Cloudflare (`/cdn-cgi/image/`), opt-in. */
@@ -41,14 +41,14 @@ export function imageEnvStatus(): Record<string, boolean> {
 }
 
 const REMOTE = /^https?:\/\//i;
-const SIGNED_TTL_SECONDS = 600; // 10 minutes (§6.3)
+const SIGNED_TTL_SECONDS = 600; // 10 minutes
 
 function hmac(payload: string): string {
   const key = imageEnv().signingSecret || "dev-secret-a-changer";
   return createHmac("sha256", key).update(payload).digest("base64url");
 }
 
-/** `?v=<hash 8 car.>` : l'URL change à chaque remplacement de page (§5.3). */
+/** `?v=<hash 8 car.>` : l'URL change à chaque remplacement de page. */
 function versionParam(hash?: string | null): string {
   return hash ? `v=${hash.slice(0, 8)}` : "";
 }
@@ -60,12 +60,12 @@ function withQuery(url: string, params: string[]): string {
 }
 
 /**
- * URL d'une page de scan (§7.1) :
+ * URL d'une page de scan :
  * - chemin local `/api/img/…` (démo) : servi tel quel ;
  * - chemin relatif NAS : `${IMG_BASE_URL}/${chemin}?v=<hash>` ;
  * - URL complète héritée des données existantes : conservée, versionnée ;
  * - sans CDN : proxy interne `/api/image` (jamais utilisable en prod).
- * `signed = true` ajoute `exp`/`sig` pour les chapitres non publiés (§6.3).
+ * `signed = true` ajoute `exp`/`sig` pour les chapitres non publiés.
  */
 export function pageUrl(
   page: Pick<ScanPage, "chemin" | "hash">,
@@ -97,7 +97,7 @@ export function verifySignature(path: string, exp: string, sig: string): boolean
   return hmac(`${path}|${exp}`) === sig;
 }
 
-/* ── Couvertures et bannières (§7.3) ──────────────────────────────────── */
+/* ── Couvertures et bannières ──────────────────────────────────── */
 
 /** Version d'URL dérivée de la dernière mise à jour de la série. */
 function coverVersion(version?: string | null): string {
@@ -125,7 +125,7 @@ export function resolveCover(couverture: string | null | undefined, version?: st
   return withQuery(`${env.imgBase}/${raw.replace(/^\/+/, "")}`, [v]);
 }
 
-/** Variante floue servie par le CDN pour le contenu +18 (§7.3). */
+/** Variante floue servie par le CDN pour le contenu +18. */
 export function coverBlurUrl(url: string): string | null {
   const env = imageEnv();
   if (!env.cdnTransform || !env.imgBase || !url.startsWith(`${env.imgBase}/`)) return null;

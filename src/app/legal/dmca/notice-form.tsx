@@ -10,7 +10,7 @@ type Recu = { reference: string; recuLe: string; message: string };
 
 /**
  * Formulaire de signalement (notice & takedown) → POST /api/reports (`type:
- * "legal"`, accessible sans compte, §6.13). L'accusé de réception renvoie une
+ * "legal"`, accessible sans compte). L'accusé de réception renvoie une
  * référence de dépôt ; les autres réponses restent génériques.
  */
 export function NoticeForm() {

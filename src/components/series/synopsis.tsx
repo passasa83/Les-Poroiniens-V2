@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { useState } from "react";
 
 /**
- * Synopsis tronqué à 3 lignes avec bouton « Lire la suite » (§6.5).
+ * Synopsis tronqué à 3 lignes avec bouton « Lire la suite ».
  * Le texte reste intégralement dans le HTML : seule la hauteur change.
  */
 export function Synopsis({ text, max = 220 }: { text: string; max?: number }) {

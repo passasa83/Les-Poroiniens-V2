@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 
 /**
- * Déclaration d'âge simple (§11) : aucune vérification d'identité.
+ * Déclaration d'âge simple : aucune vérification d'identité.
  * Réservée aux membres connectés : un visiteur est invité à se connecter,
  * le +18 n'est jamais accessible sans compte. Mémorisée 30 jours en cookie,
  * et dans le compte pour les membres.

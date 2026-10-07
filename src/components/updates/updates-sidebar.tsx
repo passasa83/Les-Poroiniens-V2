@@ -10,7 +10,7 @@ const SOCIALS: Array<{ key: string; label: string; icon: LucideIcon }> = [
   { key: "social_x", label: "X (Twitter)", icon: AtSign },
 ];
 
-/** Seules les URL http(s) valides deviennent des liens (saisie admin, §6.2). */
+/** Seules les URL http(s) valides deviennent des liens (saisie admin). */
 function safeUrl(raw: string | undefined): string | null {
   if (!raw) return null;
   try {
@@ -22,8 +22,8 @@ function safeUrl(raw: string | undefined): string | null {
 }
 
 /**
- * Colonne latérale « Nouveautés » (§6.2) : Communauté, annonces internes et
- * « Les plus lus ». Masquée quand rien n'a à y être affiché (§3.5).
+ * Colonne latérale « Nouveautés » : Communauté, annonces internes et
+ * « Les plus lus ». Masquée quand rien n'a à y être affiché.
  */
 export function UpdatesSidebar({
   settings,

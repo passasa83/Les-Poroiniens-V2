@@ -41,7 +41,7 @@ export async function updateProfile(
   return getDb().update<Profile>(TABLES.profiles, userId, clean);
 }
 
-/** Fusion sélective des préférences : seuls les champs connus sont retenus (§14.4). */
+/** Fusion sélective des préférences : seuls les champs connus sont retenus. */
 export async function updatePreferences(
   userId: string,
   incoming: Partial<UserPreferences>,
@@ -85,7 +85,7 @@ export async function updatePreferences(
 
   await getDb().update<Profile>(TABLES.profiles, userId, {
     preferences: merged,
-    // Révocation effective (§11) : couper l'opt-out doit refermer la porte,
+    // Révocation effective : couper l'opt-out doit refermer la porte,
     // sinon la préférence « Afficher le contenu +18 » serait décorative.
     ...(merged.adult_ok
       ? { adult_ok: true, adult_ok_at: new Date().toISOString() }
@@ -94,7 +94,7 @@ export async function updatePreferences(
   return merged;
 }
 
-/** Modification de rôle : Admin et Gérant réservés au Gérant (§9.3). */
+/** Modification de rôle : Admin et Gérant réservés au Gérant. */
 export async function setRole(userId: string, role: Role): Promise<void> {
   await getDb().update<Profile>(TABLES.profiles, userId, { role });
 }

@@ -16,7 +16,7 @@ export function SeriesCard({
   const isAdult = series.classification === "adult";
   const hidden = isAdult && !adultAllowed;
   const cover = series.couverture || `/api/img/cover/${series.slug}`;
-  // Variante floue servie par le CDN quand la transformation est activée (§7.3) ;
+  // Variante floue servie par le CDN quand la transformation est activée ;
   // sinon le flou reste appliqué en CSS sur la vignette verrouillée.
   const src = hidden ? coverBlurUrl(cover) ?? cover : cover;
 
@@ -73,7 +73,7 @@ export function SeriesGrid({
 }: {
   series: Series[];
   adultAllowed?: boolean;
-  /** Visiteur : les séries +18 sont exclues (cloisonnement §11). */
+  /** Visiteur : les séries +18 sont exclues. */
   authenticated?: boolean;
   className?: string;
 }) {

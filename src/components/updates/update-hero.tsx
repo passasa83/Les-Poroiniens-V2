@@ -16,10 +16,10 @@ export type UpdateHeroData = {
 };
 
 /**
- * Carte héros « Nouveautés » (§6.2) : coins très arrondis, contour fin,
+ * Carte héros « Nouveautés » : coins très arrondis, contour fin,
  * panneau --surface à gauche (étiquette, titre, auteur, chapitre) et visuel
  * paysage à droite, fondu vers le panneau. Le compteur de vues est réservé à la
- * fiche série (§12.3), il n'apparaît pas ici.
+ * fiche série, il n'apparaît pas ici.
  */
 export function UpdateHeroCard({ hero }: { hero: UpdateHeroData }) {
   return (

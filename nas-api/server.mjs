@@ -7,11 +7,11 @@
  *
  * Endpoints :
  * - `GET /list?path=<rel>` — fichiers d'un dossier (tableau JSON par défaut ;
- *   `?format=object` → `{ path, count, pages }` (cahier §4.2) ;
+ *   `?format=object` → `{ path, count, pages }` ;
  *   `?format=urls` → tableau d'URLs absolues (ancien format proprio)).
  * - `GET /tree?path=<rel>` — dossiers + fichiers (écran d'import Gérant).
  * - `GET /health` — `{ status, disk_free_pct, version }` (cron).
- * - `POST /move` `{ from, to }` — `staging/` → `public/` (publication §5.1).
+ * - `POST /move` `{ from, to }` — `staging/` → `public/`.
  * - `GET /file?path=<rel>` — octets d'un fichier (repli `/api/image`).
  *
  * Configuration (variables d'environnement) :
@@ -467,7 +467,7 @@ async function handleMove(req, res) {
     return;
   }
   const dst = confinedAbs(to);
-  // Publication §5.1 : seuls `staging/` et `public/` sont déplaçables.
+  // Publication : seuls `staging/` et `public/` sont déplaçables.
   const rootOf = (r) => r.split("/")[0];
   if (!dst || !["staging", "public"].includes(rootOf(src.rel)) || !["staging", "public"].includes(rootOf(dst.rel))) {
     send(res, 403, { error: "move_restricted_to_staging_public" });

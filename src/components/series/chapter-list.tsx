@@ -5,7 +5,7 @@ import { Heart, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-/** Ligne de chapitre telle que préparée côté serveur (§6.5). */
+/** Ligne de chapitre telle que préparée côté serveur. */
 export type ChapterRow = {
   id: string;
   numero: number;
@@ -25,7 +25,7 @@ export type ChapterRow = {
 
 /**
  * Liste des chapitres : recherche instantanée dans la liste, état lu/non lu
- * avec case à cocher (§6.5) et scroll interne au-delà de 100 chapitres.
+ * avec case à cocher et scroll interne au-delà de 100 chapitres.
  * L'ordre (croissant/décroissant) reste piloté par l'URL.
  */
 export function ChapterList({
@@ -124,7 +124,7 @@ export function ChapterList({
                     <Link
                       href={chapter.href}
                       /* py-3 reporté sur le conteneur : la zone de clic occupe
-                         toute la hauteur de la ligne (44 px, §8.1) sans changer
+                         toute la hauteur de la ligne (44 px) sans changer
                          la hauteur de la rangée. */
                       className="block truncate text-sm text-fg hover:text-primary"
                     >

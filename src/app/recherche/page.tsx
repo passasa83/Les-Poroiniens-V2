@@ -53,7 +53,7 @@ function pick(sp: Search, key: string): string | undefined {
   return clean ? clean : undefined;
 }
 
-/** URL de la recherche : le mot-clé est conservé, les filtres changent (§6.4). */
+/** URL de la recherche : le mot-clé est conservé, les filtres changent. */
 function hrefWith(
   keep: Record<string, string>,
   patch: Record<string, string | undefined>,
@@ -91,7 +91,7 @@ export default async function RecherchePage({
 
   const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
   const adultParam = p.adult === "1";
-  // Même règle que le catalogue (§11) : +18 réservé aux membres.
+  // Même règle que le catalogue : +18 réservé aux membres.
   const includeAdult = gateOk || (adultParam && Boolean(user));
   const showGate = adultParam && !gateOk;
   const query = (p.q ?? "").trim();
@@ -107,7 +107,7 @@ export default async function RecherchePage({
   if (p.sort) keep.sort = p.sort;
   if (adultParam) keep.adult = "1";
 
-  /* ── Sans mot-clé : champ vide + suggestions populaires (§6.4) ─────── */
+  /* ── Sans mot-clé : champ vide + suggestions populaires ─────── */
   if (!query) {
     const suggestions = await popularSeries(12, includeAdult);
     return (
@@ -143,7 +143,7 @@ export default async function RecherchePage({
     );
   }
 
-  /* ── Avec mot-clé : résultats filtrables comme le catalogue (§6.4) ─── */
+  /* ── Avec mot-clé : résultats filtrables comme le catalogue ─── */
   const isOneShot = p.statut === "one_shot";
   const statut: SeriesStatus | undefined =
     p.statut && p.statut !== "one_shot" ? p.statut : undefined;

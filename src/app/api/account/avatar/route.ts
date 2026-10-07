@@ -6,7 +6,7 @@ import { updateProfile } from "@/lib/data/users";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { InputFile } from "node-appwrite/file";
 
-const MAX_BYTES = 800 * 1024; // §14.5
+const MAX_BYTES = 800 * 1024; // poids maximal de l'avatar
 const DEMO_MAX_BYTES = 200 * 1024; // data-URL stockée dans le profil
 
 /** En-tête réel du fichier : `RIFF....WEBP` (pas seulement le Content-Type envoyé). */
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     }
   };
 
-  // Identifiant imposé par le cahier des charges, avec repli si l'instance
+  // Identifiant fixe par utilisateur, avec repli si l'instance
   // Appwrite refuse les « / » dans les identifiants de fichiers.
   let fileId = `avatars/${user.id}.webp`;
   if (!(await put(fileId))) {

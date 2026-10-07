@@ -4,7 +4,7 @@ import { listSessions, revokeAllSessions } from "@/lib/data/sessions";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
- * Sessions du compte (§6.8 « Réglages : … sessions »).
+ * Sessions du compte (« Réglages : … sessions »).
  *
  * GET    — liste les sessions du compte connecté (métadonnées seules).
  * DELETE — révoque toutes les sessions, la session locale comprise : la

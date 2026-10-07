@@ -12,7 +12,7 @@ const PER_PAGE = 12;
 
 /**
  * GET /api/home/releases?type=&page=
- * Onglets et « Charger plus » des « Dernières sorties » (§6.1).
+ * Onglets et « Charger plus » des « Dernières sorties ».
  */
 export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;

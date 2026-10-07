@@ -11,7 +11,7 @@ function jsonError(error: string, code: string, status: number) {
   return Response.json({ error, code }, { status });
 }
 
-/** Cles configurables depuis l'espace Gérant (§9.6). */
+/** Cles configurables depuis l'espace Gérant. */
 const settingsInput = z.object({
   site_name: z.string().trim().min(1).max(80).optional(),
   announcement: z.string().max(500).optional(),
@@ -22,17 +22,17 @@ const settingsInput = z.object({
   social_discord: z.string().trim().max(300).optional(),
   social_x: z.string().trim().max(300).optional(),
   social_youtube: z.string().trim().max(300).optional(),
-  /** Une adresse de secours par ligne (§5.4). */
+  /** Une adresse de secours par ligne. */
   adresses_secours: z.string().max(1000).optional(),
-  /** Slug de la série mise en avant sur /nouveautés (§6.2), vide = dernier chapitre publié. */
+  /** Slug de la série mise en avant sur /nouveautés, vide = dernier chapitre publié. */
   nouveautes_serie: z.string().trim().max(120).optional(),
-  /** Bandeau compact de la dernière annonce sur l'accueil (§6.11). */
+  /** Bandeau compact de la dernière annonce sur l'accueil. */
   annonce_bandeau: z.boolean().optional(),
 });
 
 /**
  * État des secrets : **jamais la valeur**, uniquement présent / absent.
- * Les clés ne transitent pas dans la réponse (§9.6 et §14.1).
+ * Les clés ne transitent pas dans la réponse.
  */
 function secretStatus(): Record<string, { present: boolean; label: string }> {
   return {

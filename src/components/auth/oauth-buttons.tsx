@@ -4,7 +4,7 @@ import { useState } from "react";
 import { MessageCircle } from "lucide-react";
 
 /**
- * Boutons OAuth (§6.10 « Discord », « Google » ; §7.1).
+ * Boutons OAuth (« Discord », « Google »).
  *
  * Arbitrage du client : les boutons sont livrés **en état « à configurer »**.
  * Ils restent cliquables et affichent un message sobre annonçant que la

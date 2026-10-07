@@ -1,6 +1,6 @@
 const SKELETON = Array.from({ length: 16 });
 
-/** Squelette du catalogue : titre, barre d'onglets + menus, grille (§6.3). */
+/** Squelette du catalogue : titre, barre d'onglets + menus, grille. */
 export default function CatalogueLoading() {
   return (
     <div className="container-site space-y-5 py-8" aria-busy="true" aria-live="polite">

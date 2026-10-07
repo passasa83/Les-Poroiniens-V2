@@ -14,7 +14,7 @@ import {
 
 type Patch = Record<string, string | undefined>;
 
-/** Lecture/écriture des filtres du catalogue directement dans l'URL (§6.3). */
+/** Lecture/écriture des filtres du catalogue directement dans l'URL. */
 function useCatalogueUrl() {
   const router = useRouter();
   const pathname = usePathname();
@@ -46,7 +46,7 @@ const SORTS: Array<{ key: string; label: string }> = [
 const TYPES: SeriesType[] = ["manga", "manhwa", "manhua"];
 const STATUTS: SeriesStatus[] = ["en_cours", "termine", "hiatus", "abandonne"];
 
-/** Menu déroulant « Tri » (§6.3) : contour fin, ordre A → Z en tête. */
+/** Menu déroulant « Tri » : contour fin, ordre A → Z en tête. */
 export function SortMenu() {
   const { sp, set } = useCatalogueUrl();
   const sort = sp.get("sort") || "popularite";
@@ -78,7 +78,7 @@ export function SortMenu() {
 
 /**
  * Menu « Filtrer » : dropdown sur grand écran, tiroir plein écran sur mobile,
- * avec compteur de résultats et bouton « Réinitialiser » (§6.3).
+ * avec compteur de résultats et bouton « Réinitialiser ».
  */
 export function FilterDrawer({
   genres,

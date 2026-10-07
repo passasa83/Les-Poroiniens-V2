@@ -21,7 +21,7 @@ function csvCell(value: string | number | boolean | null): string {
 
 /**
  * GET /api/account/library/export?format=json|csv — export de la bibliothèque
- * (§7.3). Identité lue dans la session serveur, jamais dans l'URL.
+ * Identité lue dans la session serveur, jamais dans l'URL.
  */
 export async function GET(request: Request) {
   const user = await getCurrentUser();

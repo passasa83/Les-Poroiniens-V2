@@ -43,7 +43,7 @@ function formatDate(iso: string): string {
   });
 }
 
-/** File de signalements + historique des décisions (§9.4). */
+/** File de signalements + historique des décisions. */
 export function ReportsQueue({
   items,
   initialStatut,

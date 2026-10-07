@@ -21,7 +21,7 @@ const Body = z.object({
     .max(20),
 });
 
-/** Envoi par lots de la progression de lecture (§14.8). */
+/** Envoi par lots de la progression de lecture. */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {

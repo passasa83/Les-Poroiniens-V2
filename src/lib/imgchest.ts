@@ -11,7 +11,7 @@ import { cached } from "@/lib/db";
  * l'ancien worker Cloudflare) pour ne pas re-scrapé la page à chaque lecture.
  *
  * Les URLs stockées en base sont des URLs **complètes** : `pageUrl()` les
- * transmet telles quelles (§7.1, cas « URL héritée »).
+ * transmet telles quelles (cas « URL héritée »).
  *
  * Tout est appelé depuis le serveur : le navigateur ne parle jamais à
  * ImgChest, et la clé d'API (si fournie) ne quitte jamais Vercel.

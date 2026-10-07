@@ -4,7 +4,7 @@ import { dataMode } from "@/lib/db";
 export const runtime = "nodejs";
 
 /**
- * Health check public et minimal (§14.1) : aucun secret, aucune configuration,
+ * Health check public et minimal : aucun secret, aucune configuration,
  * aucune donnée interne n'est exposée — seulement le mode de données, l'uptime
  * du process et l'horloge serveur.
  */

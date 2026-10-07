@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * Répertoire des séries (Gérant) — création, édition, archivage et
  * suppression définitive : le CRUD vit ici, l'espace Admin ne garde qu'une
- * vue de consultation (§4.2 / §10).
+ * vue de consultation.
  */
 export default async function GerantSeriesPage({
   searchParams,

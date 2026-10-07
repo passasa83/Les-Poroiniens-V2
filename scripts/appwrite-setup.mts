@@ -3,8 +3,8 @@
  *
  *   npx tsx scripts/appwrite-setup.mts
  *
- * Crée (de façon idempotente) : la base, les tables, les colonnes, les index
- * décrits au §13 du cahier des charges, le bucket d'avatars, et — optionnellement
+ * Crée (de façon idempotente) : la base, les tables, les colonnes, les index,
+ * le bucket d'avatars, et — optionnellement
  * — le profil « Gérant » du compte désigné par APPWRITE_OWNER_EMAIL.
  *
  * Variables lues dans .env.local / l'environnement :
@@ -90,7 +90,7 @@ const TABLES: Table[] = [
       { key: "couverture", type: "varchar", size: 512 },
       { key: "banniere", type: "varchar", size: 512 },
       // `archive` : suppression douce — la série quitte le catalogue public
-      // sans perdre ses chapitres (complétée par le script, §9.2).
+      // sans perdre ses chapitres (complétée par le script).
       { key: "statut", type: "enum", elements: ["en_cours", "termine", "hiatus", "abandonne", "archive"] },
       { key: "type", type: "enum", elements: ["manga", "manhwa", "manhua"] },
       { key: "annee", type: "integer" },
@@ -103,10 +103,10 @@ const TABLES: Table[] = [
       { key: "nbVotes", type: "integer", def: 0 },
       { key: "vues", type: "integer", def: 0 },
       { key: "populaire", type: "integer", def: 0 },
-      // Compteur dénormalisé (§6.3) : alimenté à la création/suppression d'un
+      // Compteur dénormalisé : alimenté à la création/suppression d'un
       // chapitre, il permet de filtrer « One-shot » sans jointure.
       { key: "nb_chapitres", type: "integer", def: 0 },
-      // Texte de recherche concaténé (§6.4) : `Query.search()` refuse les
+      // Texte de recherche concaténé : `Query.search()` refuse les
       // colonnes array (`titresAlt`, `auteurs`), on indexe donc leur copie
       // en chaîne dans un index fulltext dédié.
       { key: "recherche_alt", type: "varchar", size: 512 },
@@ -156,7 +156,7 @@ const TABLES: Table[] = [
       { key: "likes", type: "integer", def: 0 },
       { key: "classification", type: "enum", elements: ["all", "adult"], def: "all" },
       // Format d'origine de la série (manga/manhwa/manhua), dénormalisé pour
-      // filtrer les sorties sans jointure — Appwrite TablesDB n'en opère pas (§6.1)
+      // filtrer les sorties sans jointure — Appwrite TablesDB n'en opère pas
       { key: "series_type", type: "enum", elements: ["manga", "manhwa", "manhua"], def: "manga" },
       { key: "vues", type: "integer", def: 0 },
       { key: "created_by", ...ID64 },
@@ -166,7 +166,7 @@ const TABLES: Table[] = [
       { key: "idx_series_numero", type: "key", columns: ["series_id", "numero"] },
       { key: "idx_statut", type: "key", columns: ["statut"] },
       { key: "idx_publish", type: "key", columns: ["publish_at"], orders: ["desc"] },
-      // filtres « Dernières sorties » par format (§6.1)
+      // filtres « Dernières sorties » par format
       { key: "idx_type_publish", type: "key", columns: ["series_type", "publish_at"], orders: ["asc", "desc"] },
       // requis par SEARCH_FIELDS.chapters (recherche plein texte)
       { key: "idx_titre_ft", type: "fulltext", columns: ["titre"] },
@@ -179,7 +179,7 @@ const TABLES: Table[] = [
       { key: "chapter_id", ...ID64 },
       // `index` est un mot réservé SQL : stocké sous `ordre` (mapping dans src/lib/db/appwrite.ts)
       { key: "ordre", type: "integer" },
-      // Chemin **relatif** au CDN : `${IMG_BASE_URL}/${chemin}?v=${hash}` (§5.2)
+      // Chemin **relatif** au CDN : `${IMG_BASE_URL}/${chemin}?v=${hash}`
       { key: "chemin", type: "varchar", size: 512 },
       { key: "largeur", type: "integer" },
       { key: "hauteur", type: "integer" },
@@ -389,7 +389,7 @@ const TABLES: Table[] = [
     indexes: [{ key: "idx_cle", type: "unique", columns: ["cle"] }],
   },
   {
-    // Annonces de l'équipe (§6.11) : liste datée + page de détail, dernière
+    // Annonces de l'équipe : liste datée + page de détail, dernière
     // annonce mise en avant sur l'accueil. Table créée uniquement si besoin.
     id: "annonces",
     name: "Annonces",

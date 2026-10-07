@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Cloudflare Turnstile (§7.1 « protection anti-bot », §14.3 « compenser
+ * Cloudflare Turnstile (« protection anti-bot », « compenser
  * l'absence de mails »).
  *
  * Deux variables sont nécessaires au fonctionnement complet :

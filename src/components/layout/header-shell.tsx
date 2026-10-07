@@ -3,13 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 /**
- * Barre supérieure fixe (DA §5.1) : elle se masque au défilement vers le bas
+ * Barre supérieure fixe (DA) : elle se masque au défilement vers le bas
  * et réapparaît au défilement vers le haut. Sous les 120 premiers pixels elle
  * reste toujours visible, et `prefers-reduced-motion` supprime la transition.
  */
 export function HeaderShell({ children }: { children: ReactNode }) {
   const [hidden, setHidden] = useState(false);
-  /** Immersion du lecteur (§6.6) : le lecteur masque l'en-tête du site. */
+  /** Immersion du lecteur : le lecteur masque l'en-tête du site. */
   const [immersive, setImmersive] = useState(false);
 
   useEffect(() => {

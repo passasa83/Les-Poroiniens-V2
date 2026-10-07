@@ -11,16 +11,16 @@ export type UpdateCardData = {
   type: SeriesType;
   isAdult: boolean;
   numero: number;
-  /** Chapitre déjà ouvert par le membre connecté (§6.2 : indicateur « lu »). */
+  /** Chapitre déjà ouvert par le membre connecté (indicateur « lu »). */
   lu: boolean;
 };
 
 /**
- * Carte de nouveauté (§6.2) : couverture 2:3, étiquette rouge « 24 h » collée
+ * Carte de nouveauté : couverture 2:3, étiquette rouge « 24 h » collée
  * au coin supérieur gauche sur les sorties du jour, titre sur une ligne puis
  * chapitre en gras et format en gris. Carte entière cliquable → fiche série
- * (décision §12.6 : un seul comportement de clic, titre compris). Le compteur
- * de vues, réservé à la fiche série (§12.3), n'est pas affiché.
+ * (un seul comportement de clic, titre compris). Le compteur
+ * de vues, réservé à la fiche série, n'est pas affiché.
  */
 export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boolean }) {
   return (

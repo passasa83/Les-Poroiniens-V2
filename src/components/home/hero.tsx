@@ -38,10 +38,10 @@ function usePrefersReducedMotion(): boolean {
 }
 
 /**
- * Héros « À la une » (§6.1) : visuel, titre, genres, synopsis court, accès au
+ * Héros « À la une » : visuel, titre, genres, synopsis court, accès au
  * premier chapitre et suivi. Défilement automatique toutes les 7 s, en pause au
  * survol / au focus, désactivé sous `prefers-reduced-motion` et par le bouton
- * de pause (§3.4, §8.1).
+ * de pause.
  */
 export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean }) {
   const [index, setIndex] = useState(0);
@@ -110,7 +110,7 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
                 width={1280}
                 height={720}
                 loading={i === 0 ? "eager" : "lazy"}
-                /* LCP de l'accueil (§8.2) : la première diapositive est
+                /* LCP de l'accueil : la première diapositive est
                    prioritaire, les suivantes sont différées. */
                 fetchPriority={i === 0 ? "high" : "auto"}
                 decoding={i === 0 ? "sync" : "async"}

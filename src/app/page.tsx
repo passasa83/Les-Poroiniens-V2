@@ -24,13 +24,13 @@ import type { ReleaseItem } from "@/lib/data/chapters";
 import type { ReleaseDto } from "@/lib/dto";
 import { SERIES_TYPE_LABELS, type Annonce, type Chapter, type Series } from "@/lib/types";
 
-/** Sections facultatives : masquées quand elles n'ont rien à montrer (§3.5). */
+/** Sections facultatives : masquées quand elles n'ont rien à montrer. */
 export default async function HomePage() {
   const [user, adult, recos, settings, annonce] = await Promise.all([
     getCurrentUser(),
     adultGateAccepted(),
     // Section facultative : une panne du backend ne doit pas faire tomber la
-    // page d'accueil, le héros repart alors des séries les plus lues (§6.1).
+    // page d'accueil, le héros repart alors des séries les plus lues.
     activeRecommendations("home").catch(() => []),
     getSettings().catch(() => ({}) as Record<string, string>),
     derniereAnnonce().catch(() => null),
@@ -38,14 +38,14 @@ export default async function HomePage() {
 
   const [popular, releases, nouveautes, library] = await Promise.all([
     popularSeries(10, adult),
-    // Une carte par série (12 séries × 3 derniers chapitres, §6.1) : le
+    // Une carte par série (12 séries × 3 derniers chapitres) : le
     // total reste le décompte des chapitres (bouton « Charger plus »).
     listRecentReleasesGrouped({ series: 12, perSeries: 3, includeAdult: adult }),
     listSeries({ sort: "nouveautes", perPage: 6, includeAdult: adult }),
     user ? listLibrary(user.id) : Promise.resolve([]),
   ]);
 
-  /* ── Héros « À la une » (§6.1) : sélection de la rédaction, sinon les plus lues ── */
+  /* ── Héros « À la une » : sélection de la rédaction, sinon les plus lues ── */
   const editorial: Series[] = [];
   for (const rec of recos.slice(0, 12)) {
     const s = await getSeriesById(rec.series_id);
@@ -71,7 +71,7 @@ export default async function HomePage() {
     followed: followedIds.has(s.id),
   }));
 
-  /* ── « Ajouts récents » et recommandations (§6.1) ─────────────────────── */
+  /* ── « Ajouts récents » et recommandations ─────────────────────── */
   let recoSeries: Series[] = [];
   let recoForVisitor = true;
   if (user) {
@@ -107,7 +107,7 @@ export default async function HomePage() {
         </div>
       )}
 
-      {/* Dernière annonce de l'équipe (§6.11) : carte, ou bandeau si le
+      {/* Dernière annonce de l'équipe : carte, ou bandeau si le
           Gérant a basculé le réglage « bandeau » (annonce_bandeau). */}
       {annonce && <AnnonceALaUne annonce={annonce} bandeau={settings.annonce_bandeau === "1"} />}
 
@@ -136,7 +136,7 @@ export default async function HomePage() {
       {/* Continuer la lecture */}
       {continueReading}
 
-      {/* Dernières sorties : onglets + « Charger plus » (§6.1) */}
+      {/* Dernières sorties : onglets + « Charger plus » */}
       {releases.seriesCount > 0 && (
         <ReleasesSection
           initialItems={releases.items.map((ch) => toReleaseDto(ch))}
@@ -145,7 +145,7 @@ export default async function HomePage() {
         />
       )}
 
-      {/* Les plus lues (§6.1) : classement 1 à 10 sur deux colonnes */}
+      {/* Les plus lues : classement 1 à 10 sur deux colonnes */}
       {popular.length > 0 && (
         <section>
           <SectionHeader
@@ -159,7 +159,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Ajouts récents (§6.1) */}
+      {/* Ajouts récents */}
       {nouveautes.items.length > 0 && (
         <section>
           <SectionHeader
@@ -173,7 +173,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Recommandations (§6.1) */}
+      {/* Recommandations */}
       {recoSeries.length > 0 && (
         <section>
           <SectionHeader
@@ -241,7 +241,7 @@ function SectionHeader({
 }
 
 /**
- * Dernière annonce mise en avant sur l'accueil (§6.11). Le Gérant choisit la
+ * Dernière annonce mise en avant sur l'accueil. Le Gérant choisit la
  * présentation : carte détaillée par défaut, bandeau compact quand la clé
  * `annonce_bandeau` vaut « 1 ». Le bloc n'apparaît que si une annonce existe.
  */
@@ -311,7 +311,7 @@ async function continueBlock(userId: string) {
   return (
     <section>
       <h2 className="section-title">Continuer la lecture</h2>
-      {/* §12.6 : la carte (couverture, titre) mène à la fiche série ; la reprise
+      {/* la carte (couverture, titre) mène à la fiche série ; la reprise
           de lecture reste un bouton explicite, distinct du clic carte. */}
       <div className="card mt-4 flex flex-wrap items-center gap-4 p-4">
         <Link

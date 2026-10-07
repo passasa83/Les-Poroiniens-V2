@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * ── Direction artistique (cahier_des_charges_ui_ux_da.md §3) ────────────────
+ * ── Direction artistique ────────────────
  * Fond anthracite neutre (MANGA Plus), un seul accent : rouge corail.
  * Les accents sont déclinés en deux valeurs pour rester conformes WCAG AA :
  *   --accent       → fonds pleins porteurs de texte blanc (4,5:1 minimum)
@@ -52,7 +52,7 @@
   --on-accent: #ffffff;
   --ok: #147a4f;
   --warn: #b45309;
-  --adult: #b8122a; /* +18 en fond translucide : 4,7:1 sur --surface (AA §3.3) */
+  --adult: #b8122a; /* +18 en fond translucide : 4,7:1 sur --surface (AA) */
   --on-adult: #ffffff;
   --shadow: 0 18px 40px -28px rgb(20 22 31 / 0.35);
 
@@ -85,13 +85,13 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
 
-  /* Typographie (§3.3) : Poppins, secours système et CJK pour les titres originaux */
+  /* Typographie : Poppins, secours système et CJK pour les titres originaux */
   --font-sans:
     var(--font-poppins), "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
     "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, "Malgun Gothic",
     "Microsoft YaHei", sans-serif;
 
-  /* Rayons (§3.4) : 8 px pour cartes et champs, 999 px pour badges et chips */
+  /* Rayons : 8 px pour cartes et champs, 999 px pour badges et chips */
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -138,13 +138,13 @@
   background: color-mix(in oklab, var(--accent) 45%, transparent);
 }
 
-/* Focus visible : anneau d'accent de 2 px (§8.1) */
+/* Focus visible : anneau d'accent de 2 px */
 :focus-visible {
   outline: 2px solid var(--accent-text);
   outline-offset: 2px;
 }
 
-/* Respect strict de prefers-reduced-motion (§3.4, §8.1) */
+/* Respect strict de prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -157,15 +157,15 @@
 }
 
 @layer components {
-  /* Conteneur centré : 1280 px, 1440 px au-delà de 1440 px (§4) */
+  /* Conteneur centré : 1280 px, 1440 px au-delà de 1440 px */
   .container-site {
     @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 min-[1440px]:max-w-[1440px];
   }
 
-  /* ── Bouton (§7) : M = 44 px de haut, cible tactile ≥ 44 px ─────────── */
+  /* ── Bouton : M = 44 px de haut, cible tactile ≥ 44 px ─────────── */
   /* `min-w-11` complète la règle : un bouton réduit à une icône (thème,
      réglages du lecteur, favori…) conserve une zone de clic de 44 px de
-     large comme de haut (§8.1). */
+     large comme de haut. */
   .btn,
   .btn-primary,
   .btn-secondary,
@@ -193,9 +193,9 @@
     @apply bg-adult text-adultfg hover:opacity-90;
   }
 
-  /* ── Champs (§7) ───────────────────────────────────────────────────── */
+  /* ── Champs ───────────────────────────────────────────────────── */
   /* `focus:outline-none` est retiré : l'anneau `:focus-visible` de 2 px
-     (§8.1) doit rester visible sur les champs, au clavier comme au clic. */
+     doit rester visible sur les champs, au clavier comme au clic. */
   .input {
     @apply w-full min-h-11 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-accent;
   }
@@ -208,11 +208,11 @@
     box-shadow: var(--shadow);
   }
 
-  /* Badges, chips et étiquettes : rayon 999 px (§3.4) */
+  /* Badges, chips et étiquettes : rayon 999 px */
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
-  /* Cible tactile ≥ 44 px (§8.1) : les chips servent d'onglets et de filtres
+  /* Cible tactile ≥ 44 px : les chips servent d'onglets et de filtres
      au doigt, elles ne peuvent pas rester à 36 px. */
   .chip {
     @apply inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line px-3 text-xs font-medium text-muted hover:border-accent hover:text-fg;
@@ -233,17 +233,17 @@
     @apply h-px w-full bg-line;
   }
 
-  /* Couverture 2:3 sans déformation, coins à 8 px (§3.4) */
+  /* Couverture 2:3 sans déformation, coins à 8 px */
   .cover {
     @apply aspect-[2/3] w-full rounded-lg bg-surface2 object-cover;
   }
 
-  /* Métadonnées : 13 px en --muted (§3.3) */
+  /* Métadonnées : 13 px en --muted */
   .meta {
     @apply text-[13px] leading-snug text-muted;
   }
 
-  /* Squelette de chargement à la forme de l'élément (§3.5) */
+  /* Squelette de chargement à la forme de l'élément */
   .skeleton {
     border-radius: 8px;
     background: linear-gradient(
@@ -256,7 +256,7 @@
     animation: lp-shimmer 1.4s ease infinite;
   }
 
-  /* Barres des graphiques de statistiques (§6.8) : elles montent depuis la
+  /* Barres des graphiques de statistiques : elles montent depuis la
      ligne de base au premier rendu. Aucune dépendance au JavaScript, et
      l'animation est neutralisée si l'utilisateur réduit les animations. */
   .chart-bar {
@@ -275,7 +275,7 @@
   }
 }
 
-/* §8.1 « prefers-reduced-motion » : les graphiques restent immobiles. */
+/* « prefers-reduced-motion » : les graphiques restent immobiles. */
 @media (prefers-reduced-motion: reduce) {
   .chart-bar {
     animation: none !important;
@@ -320,7 +320,7 @@
   cursor: pointer;
 }
 
-/* Thème « noir » du lecteur (§6.6) : appliqué au seul lecteur, après les
+/* Thème « noir » du lecteur : appliqué au seul lecteur, après les
    thèmes du site pour l'emporter sur eux. */
 [data-reader-theme="noir"] {
   --bg: #000000;

@@ -209,7 +209,7 @@ export function SettingsForm({
             </label>
           </div>
           <p className="text-xs text-muted">
-            La dernière annonce publiée (§6.11) s&apos;affiche sur l&apos;accueil : en bandeau
+            La dernière annonce publiée s&apos;affiche sur l&apos;accueil : en bandeau
             compact si cette case est cochée, sinon en carte avec titre, date et extrait. Décochez
             pour n&apos;afficher que la bannière d&apos;annonce ci-dessus.
           </p>
@@ -275,7 +275,7 @@ export function SettingsForm({
           <Field
             label="Domaines alternatifs"
             htmlFor="st-adresses"
-            hint="Une adresse par ligne. Elles sont publiées sur la page « Adresse de secours » (§5.4)."
+            hint="Une adresse par ligne. Elles sont publiées sur la page « Adresse de secours »."
           >
             <Textarea
               id="st-adresses"
@@ -364,7 +364,7 @@ export function SettingsForm({
           <KeyRound className="size-4 text-primary" /> Réinitialisation d&apos;un mot de passe
         </h2>
         <p className="text-xs text-muted">
-          Aucun mail n&apos;est envoyé au lancement (§14.3) : communiquez le nouveau mot de passe
+          Aucun mail n&apos;est envoyé au lancement : communiquez le nouveau mot de passe
           hors ligne. La valeur n&apos;est ni journalisée ni affichée.
         </p>
 

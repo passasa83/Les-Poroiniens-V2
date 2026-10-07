@@ -103,7 +103,7 @@ function reviveJson(value: unknown): unknown {
  * `appwrite:setup` crée ces index (`idx_titre`, `idx_slug_ft`, …).
  */
 const SEARCH_FIELDS: Record<string, string[]> = {
-  // `recherche_*` : copies concaténées de `titresAlt` / `auteurs` (§6.4),
+  // `recherche_*` : copies concaténées de `titresAlt` / `auteurs`,
   // seules colonnes array-unfriendly utilisables par `Query.search()`.
   series: ["titre", "slug", "recherche_alt", "recherche_auteurs"],
   profiles: ["pseudo"],

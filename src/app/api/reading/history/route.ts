@@ -7,7 +7,7 @@ import type { HistoryEntry } from "@/lib/types";
 
 /**
  * DELETE /api/reading/history — suppression d'une entrée (`?entry={chapter_id}`)
- * ou de tout l'historique (§7.3). L'appartenance est vérifiée côté serveur :
+ * ou de tout l'historique. L'appartenance est vérifiée côté serveur :
  * l'identifiant est préfixé par l'identité de session, jamais par le client.
  */
 export async function DELETE(request: Request) {

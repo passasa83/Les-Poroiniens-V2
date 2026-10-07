@@ -4,7 +4,7 @@ import { revokeSession } from "@/lib/data/sessions";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
- * DELETE /api/account/sessions/[id] — révoque une session du compte (§6.8).
+ * DELETE /api/account/sessions/[id] — révoque une session du compte.
  * Identifiant inconnu → 404 ; la session courante referme aussi le cookie de
  * l'appareil. L'identité vient de la session serveur, jamais du client.
  */

@@ -22,7 +22,7 @@ services:
       IMG_ROOT: /images
       PORT: "8660"
     volumes:
-      # `:rw` requis pour `POST /move` (`staging/` → `public/`, §5.1).
+      # `:rw` requis pour `POST /move` (`staging/` → `public/`).
       # Le montage `:ro` du conteneur nginx reste inchangé.
       - ${IMAGES_PATH:?Renseigne IMAGES_PATH dans nas-api/.env}:/images:rw
     ports:

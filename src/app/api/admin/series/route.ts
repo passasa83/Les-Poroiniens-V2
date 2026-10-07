@@ -65,7 +65,7 @@ async function uniqueSlug(base: string): Promise<string> {
   return slug;
 }
 
-/** POST /api/admin/series — création d'une fiche série (admin+, §9.2). */
+/** POST /api/admin/series — création d'une fiche série (admin+). */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return jsonError("Authentification requise.", "unauthorized", 401);

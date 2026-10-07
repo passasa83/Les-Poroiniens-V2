@@ -9,7 +9,7 @@ import { ReportsQueue, type EnrichedReport } from "./_components/reports-queue";
 
 export const dynamic = "force-dynamic";
 
-/** File de modération (§9.4) : signalements de commentaires, chapitres, séries. */
+/** File de modération : signalements de commentaires, chapitres, séries. */
 export default async function ModerationPage({
   searchParams,
 }: {
@@ -102,7 +102,7 @@ export default async function ModerationPage({
       <div>
         <h1 className="section-title">Modération</h1>
         <p className="mt-1 text-sm text-muted">
-          File de signalements et historique des décisions (§9.4). Chaque action est tracée au
+          File de signalements et historique des décisions. Chaque action est tracée au
           journal d&apos;audit.
         </p>
       </div>

@@ -4,7 +4,7 @@ import { exclureDemo, idDeDemo } from "@/lib/demo-gate";
 import type { Annonce } from "@/lib/types";
 
 /**
- * Annonces de l'équipe (§6.11) : liste datée (`/annonces`), page de détail
+ * Annonces de l'équipe : liste datée (`/annonces`), page de détail
  * (`/annonces/[slug]`) et dernière annonce mise en avant sur l'accueil.
  *
  * Aucun cache mémoire : les annonces sont rares et la recette crée/supprime
@@ -28,7 +28,7 @@ export async function listAnnonces(limit = 50): Promise<Annonce[]> {
   );
 }
 
-/** Dernière annonce publiée (bloc de l'accueil, §6.11). */
+/** Dernière annonce publiée (bloc de l'accueil). */
 export async function derniereAnnonce(): Promise<Annonce | null> {
   const [derniere] = await listAnnonces(1);
   return derniere ?? null;

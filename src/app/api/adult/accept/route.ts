@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { acceptAdultGate, getCurrentUser } from "@/lib/auth";
 
 /**
- * POST /api/adult/accept — validation de la porte +18 (§11).
+ * POST /api/adult/accept — validation de la porte +18.
  * Réservé aux membres connectés (le +18 n'est jamais accessible sans
  * compte) : mémorisé 30 jours en cookie et dans le compte.
  */

@@ -4,7 +4,7 @@ export const DAY_MS = 86_400_000;
 
 /**
  * Découpe les sorties des sept derniers jours en tranches glissantes
- * (§6.2 « Nouveautés ») : `0` = dernières 24 h, `1` = hier, … `7`.
+ * (« Nouveautés ») : `0` = dernières 24 h, `1` = hier, … `7`.
  * L'horloge est lue ici, hors composant React (règle de pureté).
  */
 export function bucketByDay(items: ReleaseItem[]): {

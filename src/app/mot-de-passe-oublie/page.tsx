@@ -20,7 +20,7 @@ export default function MotDePasseOubliePage() {
           </p>
         </header>
 
-        {/* §6.10 / §14.3 : sans fournisseur de mails, le parcours renvoie au support. */}
+        {/* Sans fournisseur de mails, le parcours renvoie au support. */}
         <section className="card space-y-3 p-5 text-sm">
           <p className="section-title">
             <LifeBuoy className="mr-1.5 inline size-5 align-[-3px] text-primary" aria-hidden />

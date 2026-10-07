@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 const Params = z.object({ id: z.string().min(1).max(64) });
 
 /**
- * Listing des pages d'un chapitre (§7.1) : l'index est lu en base, jamais
+ * Listing des pages d'un chapitre : l'index est lu en base, jamais
  * sur le NAS. Renvoie les dimensions connues à l'avance (aucun décalage de
  * mise en page), les chapitres voisins, et met en cache 60 s les chapitres
  * publiés. Les URLs sont publiques et versionnées (`?v=<hash>`).

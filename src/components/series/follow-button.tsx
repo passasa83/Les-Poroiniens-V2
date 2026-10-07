@@ -21,7 +21,7 @@ export interface FollowState {
 
 /**
  * Suivi de la série (bibliothèque) + notation 1-10.
- * Toutes les écritures passent par POST /api/reading/follow (§14.1).
+ * Toutes les écritures passent par POST /api/reading/follow.
  */
 export function FollowButton({
   seriesId,

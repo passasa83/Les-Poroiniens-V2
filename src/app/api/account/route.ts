@@ -25,7 +25,7 @@ async function deleteAvatarFile(avatar: string | null): Promise<void> {
 }
 
 /**
- * DELETE /api/account — suppression de compte en libre-service (§7.1, RGPD §15).
+ * DELETE /api/account — suppression de compte en libre-service (RGPD).
  * Profil, bibliothèque et historique effacés ; commentaires ramenés au statut
  * « supprimé » (le fil de discussion est conservé, le contenu retiré) ; compte
  * Appwrite supprimé en mode production ; session détruite à la fin.
@@ -61,7 +61,7 @@ export async function DELETE(request: Request) {
     await db.remove(TABLES.library, rowId(user.id, entry.series_id));
   }
 
-  // 3. Commentaires : contenu retiré, structure conservée (§8)
+  // 3. Commentaires : contenu retiré, structure conservée
   const { items: comments } = await db.list<Comment>(TABLES.comments, {
     filters: [{ field: "user_id", op: "eq", value: user.id }],
     limit: 1000,

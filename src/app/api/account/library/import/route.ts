@@ -178,7 +178,7 @@ async function resolverSerie(line: LigneImport): Promise<Series | null> {
 }
 
 /**
- * POST /api/account/library/import — import d'une bibliothèque (§6.7).
+ * POST /api/account/library/import — import d'une bibliothèque.
  *
  * Fusion non destructive : seules les séries absentes de la bibliothèque sont
  * ajoutées, les entrées déjà suivies sont conservées telles quelles. Identité

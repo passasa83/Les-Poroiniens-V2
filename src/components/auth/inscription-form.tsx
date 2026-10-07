@@ -15,7 +15,7 @@ type ApiReply = { error?: string; code?: string; field?: string };
 type FieldName = "pseudo" | "email" | "password" | "confirm" | "captcha";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** Pseudo public (§6.10) : 6 à 20 caractères, lettres et chiffres seulement. */
+/** Pseudo public : 6 à 20 caractères, lettres et chiffres seulement. */
 const PSEUDO_RE = /^[\p{L}\p{N}]+$/u;
 
 function pseudoError(value: string): string | undefined {
@@ -38,8 +38,8 @@ type InscriptionFormProps = {
 };
 
 /**
- * Inscription (§6.10) : pseudo public, e-mail, mot de passe, captcha.
- * Aucun e-mail n'est vérifié au lancement (§14.3) : l'anti-bot repose sur le
+ * Inscription : pseudo public, e-mail, mot de passe, captcha.
+ * Aucun e-mail n'est vérifié au lancement : l'anti-bot repose sur le
  * captcha Turnstile (s'il est configuré), le honeypot et la limitation de débit.
  */
 export function InscriptionForm({

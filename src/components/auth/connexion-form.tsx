@@ -37,7 +37,7 @@ type ConnexionFormProps = {
 };
 
 /**
- * Connexion (§6.10) : identifiant **ou** adresse e-mail, mot de passe,
+ * Connexion : identifiant **ou** adresse e-mail, mot de passe,
  * « Se souvenir de moi », boutons Discord / Google (état « à configurer »).
  * Message d'échec unique côté serveur : rien ne révèle l'existence d'un compte.
  */

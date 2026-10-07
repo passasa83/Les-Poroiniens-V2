@@ -7,7 +7,7 @@ import type { Recommendation, Series, SeriesStatus, SeriesType } from "@/lib/typ
 /**
  * Lisibilité : la couverture et la bannière stockées en base sont des chemins
  * relatifs (`public/` sur le NAS) ou des URLs ; on renvoie toujours des URLs
- * servables, versionnées par la dernière mise à jour (§7.3). `saveSeries`
+ * servables, versionnées par la dernière mise à jour. `saveSeries`
  * applique l'opération inverse pour ne jamais réécrire une URL résolue.
  */
 export function mapSeries<T extends Series>(row: T): T {
@@ -28,7 +28,7 @@ export type SeriesSort =
 
 export interface SeriesFilters {
   q?: string;
-  /** Genre unique **ou** liste séparée par des virgules (filtre multiple, §6.3) :
+  /** Genre unique **ou** liste séparée par des virgules (filtre multiple) :
    *  chaque valeur devient un critère `genres contains` (ET). */
   genre?: string;
   tag?: string;
@@ -37,7 +37,7 @@ export interface SeriesFilters {
   annee?: number | "";
   langue?: string;
   classification?: "all" | "adult" | "";
-  /** Onglet « One-shot » (§6.3) : œuvre d'une seule publication. */
+  /** Onglet « One-shot » : œuvre d'une seule publication. */
   oneShot?: boolean;
   /** Onglets exclusifs : écarte les one-shots des listes « En cours »/« Terminés ». */
   excludeOneShot?: boolean;
@@ -50,7 +50,7 @@ export interface SeriesFilters {
 }
 
 /**
- * Séries archivées exclues du catalogue public (§9.2) : le filtre `neq` porte
+ * Séries archivées exclues du catalogue public : le filtre `neq` porte
  * sur le statut déjà stocké, il n'y a donc rien à backfiller.
  */
 function filtreArchives(include?: boolean, statut?: SeriesStatus | ""): Filter[] {
@@ -79,7 +79,7 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
   const key = `series:${JSON.stringify({ ...f, page, perPage })}`;
   return cached(key, 30_000, async () => {
     const filters: Filter[] = [];
-    /* Genre multiple (§6.3) : « a,b » = série possédant a **et** b. */
+    /* Genre multiple : « a,b » = série possédant a **et** b. */
     for (const g of (f.genre ?? "").split(",").map((v) => v.trim()).filter(Boolean)) {
       filters.push({ field: "genres", op: "contains" as const, value: g });
     }
@@ -88,7 +88,7 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
     if (f.type) filters.push({ field: "type", op: "eq" as const, value: f.type });
     if (f.annee) filters.push({ field: "annee", op: "eq" as const, value: f.annee });
     if (f.langue) filters.push({ field: "langue", op: "eq" as const, value: f.langue });
-    /* Onglets de statut exclusifs (§6.3) : une publication unique appartient
+    /* Onglets de statut exclusifs : une publication unique appartient
        à l'onglet « One-shot », pas aux listes « En cours »/« Terminés ». */
     if (f.oneShot) {
       filters.push({ field: "nb_chapitres", op: "eq" as const, value: 1 });
@@ -118,7 +118,7 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
     const visible = (rows: Series[]) =>
       (f.includeAdult ? rows : rows.filter((s) => s.classification !== "adult")).map(mapSeries);
 
-    /* Tolérance aux fautes (§6.4) : le plein texte Appwrite est strict (mots
+    /* Tolérance aux fautes : le plein texte Appwrite est strict (mots
        entiers, accents normalisés). S'il ne renvoie rien, on note en mémoire
        le jeu filtré complet (≤ 1000 lignes) sur les titre/alternatifs/auteurs. */
     if (f.q && total === 0) {
@@ -151,7 +151,7 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
   });
 }
 
-/* ── Tolérance aux fautes (§6.4) ─────────────────────────────────────── */
+/* ── Tolérance aux fautes ─────────────────────────────────────── */
 
 /** Déaccentue et minuscule : « Élite » ≈ « elite ». */
 const stripAccents = (value: string) =>
@@ -237,7 +237,7 @@ export async function allSeries(opts: { includeArchived?: boolean } = {}): Promi
   return items.map(mapSeries);
 }
 
-/** « Séries similaires » : genres puis tags en commun (§12.2). */
+/** « Séries similaires » : genres puis tags en commun. */
 export async function similarSeries(series: Series, limit = 6): Promise<Series[]> {
   const all = await allSeries();
   return all
@@ -333,14 +333,14 @@ export async function saveSeries(series: Partial<Series> & { id: string }): Prom
   const db = getDb();
   const { id, ...data } = series;
   if (typeof data.couverture === "string") {
-    // Jamais de résolution en base : on stocke un chemin relatif (§5.2).
+    // Jamais de résolution en base : on stocke un chemin relatif.
     data.couverture = storeCover(data.couverture);
   }
   if (typeof data.banniere === "string" && data.banniere) {
     data.banniere = storeCover(data.banniere);
   }
   const existing = await db.get<Series>(TABLES.series, id);
-  /* Recherche plein texte (§6.4) : les colonnes array ne sont pas indexables,
+  /* Recherche plein texte : les colonnes array ne sont pas indexables,
      on alimente la copie concaténée à chaque écriture. */
   const altText = data.titresAlt ?? existing?.titresAlt ?? [];
   const authorText = data.auteurs ?? existing?.auteurs ?? [];

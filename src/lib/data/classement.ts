@@ -5,7 +5,7 @@ import { mapSeries } from "@/lib/data/series";
 import type { Chapter, HistoryEntry, Series, SeriesType } from "@/lib/types";
 
 /**
- * Classement (§6.9) : onglets Jour / Semaine / Mois / Tout temps, filtre par
+ * Classement : onglets Jour / Semaine / Mois / Tout temps, filtre par
  * format, liste numérotée avec évolution ▲▼.
  *
  * Métrique de période — la base ne stocke **pas** de compteur de vues daté

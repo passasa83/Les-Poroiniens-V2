@@ -1,6 +1,6 @@
 import type { Role } from "@/lib/types";
 
-/** Rang minimal (section 14.6 du cahier des charges). */
+/** Rang hiérarchique croissant, du visiteur au Gérant. */
 export const ROLE_RANK: Record<Role, number> = {
   visiteur: 0,
   membre: 1,
@@ -22,7 +22,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 /**
- * Matrice des droits (section 4.3).
+ * Matrice des droits.
  * `owner` couvre tout ; les actions marquées « Gérant uniquement » ne sont
  * jamais accordées à `admin`, même quand elles semblent proches.
  */

@@ -1,5 +1,5 @@
 /**
- * Modèle de domaine — aligné sur la section 13 du cahier des charges.
+ * Modèle de domaine — tables, colonnes et index Appwrite.
  * Les mêmes types servent au back Appwrite et au jeu de démonstration.
  */
 
@@ -9,7 +9,7 @@ export type Classification = "all" | "adult";
  * Statut d'une série.
  * `archive` = retirée du catalogue public mais conservée en base (fiche,
  * chapitres, historique de lecture intacts) : c'est la « suppression douce »
- * proposée à côté de la suppression définitive (§9.2).
+ * proposée à côté de la suppression définitive.
  */
 export type SeriesStatus = "en_cours" | "termine" | "hiatus" | "abandonne" | "archive";
 export type SeriesType = "manga" | "manhwa" | "manhua";
@@ -36,9 +36,9 @@ export interface Series {
   nbVotes: number;
   vues: number;
   populaire: number;
-  /** Nombre de chapitres (dénormalisé, §6.3 « One-shot »). */
+  /** Nombre de chapitres (dénormalisé « One-shot »). */
   nb_chapitres: number;
-  /** Texte de recherche concaténé (§6.4) : titres alternatifs et auteurs,
+  /** Texte de recherche concaténé : titres alternatifs et auteurs,
    *  indexés en fulltext car `Query.search()` refuse les colonnes array. */
   recherche_alt?: string;
   recherche_auteurs?: string;
@@ -60,7 +60,7 @@ export interface Chapter {
    *  site, ordre stable) : pastilles sur les lignes de la fiche série.
    *  Absent des lignes créées avant cet attribut (lire avec `?? []`). */
   teams: string[];
-  /** Format d'origine de la série, dénormalisé à l'écriture (§6.1 : filtres de
+  /** Format d'origine de la série, dénormalisé à l'écriture (filtres de
    *  « Dernières sorties »). Absent sur les lignes créées avant cette colonne. */
   series_type?: SeriesType;
   nb_pages: number;
@@ -76,11 +76,11 @@ export interface ScanPage {
   chapter_id: string;
   index: number;
   /** Chemin **relatif** au CDN (`public/<slug>/chapitres/0012/001.webp`) ou
-   *  route locale `/api/img/…` en démonstration (§5.2). */
+   * route locale `/api/img/…` en démonstration. */
   chemin: string;
   largeur: number;
   hauteur: number;
-  /** Taille en octets et hash du fichier : la version d'URL en dérive (§5.2). */
+  /** Taille en octets et hash du fichier : la version d'URL en dérive. */
   bytes?: number | null;
   hash?: string | null;
 }
@@ -109,7 +109,7 @@ export interface UserPreferences {
 }
 
 /**
- * Session de connexion affichée dans « Mon compte › Sessions » (§6.8).
+ * Session de connexion affichée dans « Mon compte › Sessions ».
  * Métadonnées affichables uniquement : jamais de jeton ni de secret.
  */
 export interface SessionInfo {
@@ -228,7 +228,7 @@ export interface SiteSetting {
 }
 
 /**
- * Annonce de l'équipe (§6.11) : liste datée sur /annonces, page de détail et
+ * Annonce de l'équipe : liste datée sur /annonces, page de détail et
  * dernière annonce en valeur sur l'accueil. `slug` identifie la page publique,
  * `date` est la date de publication (ISO), `extrait` le chapeau affiché en
  * liste et sur l'accueil, `contenu` le corps du texte (paragraphes séparés

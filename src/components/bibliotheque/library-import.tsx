@@ -7,7 +7,7 @@ import { useState, type ChangeEvent } from "react";
 type Resultat = { ok: boolean; message: string };
 
 /**
- * Import de bibliothèque (§6.7 « Import / export de la bibliothèque »).
+ * Import de bibliothèque (« Import / export de la bibliothèque »).
  * Le fichier est lu dans le navigateur puis envoyé en JSON : aucune donnée
  * existante n'est écrasée, l'API ne crée que les entrées manquantes.
  */

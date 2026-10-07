@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ReportDialog } from "@/components/reader/reader-report";
 
 /**
- * État « chapitre indisponible » (§6.12) : le chapitre existe mais aucune page
+ * État « chapitre indisponible » : le chapitre existe mais aucune page
  * ne se charge (index de pages vide en base, fichier non publié…).
  * Message précis, bouton **Réessayer** (nouvelle lecture côté serveur) et
  * bouton **Signaler** (modale de signalement déjà utilisée par le lecteur).

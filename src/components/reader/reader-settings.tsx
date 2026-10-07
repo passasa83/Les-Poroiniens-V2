@@ -6,7 +6,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 export type ReaderMode = "vertical" | "single" | "double";
 export type ReaderSens = "ltr" | "rtl";
-/** Ajustement des pages dans la zone de lecture (§6.6). */
+/** Ajustement des pages dans la zone de lecture. */
 export type ReaderFit = "auto" | "largeur" | "hauteur" | "perso";
 /** Thème appliqué au seul lecteur, le reste de la page garde le thème du site. */
 export type ReaderTheme = "site" | "clair" | "noir";
@@ -103,7 +103,7 @@ function Segmented<T extends string>({
 }
 
 /**
- * Tiroir de réglages du lecteur (§6.6) : mode, sens, ajustement, thème,
+ * Tiroir de réglages du lecteur : mode, sens, ajustement, thème,
  * luminosité, première page seule et aide aux raccourcis.
  *
  * Le conteneur est monté en permanence (`hidden` quand il est fermé) : les

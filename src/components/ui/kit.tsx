@@ -53,7 +53,7 @@ export function Field({
   htmlFor?: string;
 }) {
   /* Les identifiants `-hint` / `-error` permettent aux champs de déclarer
-     `aria-describedby` et d'annoncer l'aide et l'erreur au bon endroit (§8.1). */
+     `aria-describedby` et d'annoncer l'aide et l'erreur au bon endroit. */
   return (
     <div>
       <label className="label" htmlFor={htmlFor}>
@@ -100,7 +100,7 @@ export function Badge({
   /* Teinte de fond à 5 % : le texte coloré doit rester lisible (AA ≥ 4,5:1)
      sur --surface (clair comme sombre). À 15 %, le fond teinté rapprochait
      trop les tons clairs (« warn », « accent ») de leur propre texte :
-     minimum mesuré 4,08:1. À 5 %, le minimum remonte à 4,68:1 (§3.3 / §6.7). */
+     minimum mesuré 4,08:1. À 5 %, le minimum remonte à 4,68:1. */
   const tones = {
     neutral: "bg-surface2 text-muted",
     primary: "bg-primary/5 text-primary",
@@ -167,7 +167,7 @@ export function Rating({ value, count }: { value: number; count?: number }) {
 }
 
 /**
- * Pagination classique (§12.8) : `←` · numéros de page · `→`, rendue en vrais
+ * Pagination classique : `←` · numéros de page · `→`, rendue en vrais
  * liens serveur (`?page=N`) : utilisable au clavier, lisible sans JavaScript et
  * combinée aux filtres / tris déjà actifs (`searchParams`, `?sort=`, `?adult=`,
  * `?statut=`…). Le numéro courant porte `aria-current="page"`, chaque cible fait

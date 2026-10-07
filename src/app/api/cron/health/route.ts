@@ -8,12 +8,12 @@ import { nasConfigured, nasHealth } from "@/lib/nas";
 
 export const runtime = "nodejs";
 
-/** Seuil d'alerte sur les erreurs d'images des 48 dernières heures (§9.2). */
+/** Seuil d'alerte sur les erreurs d'images des 48 dernières heures. */
 const IMAGE_ERROR_ALERT = Number(process.env.IMAGE_ERROR_ALERT ?? 20);
-/** Espace disque libre minimal avant alerte, en pourcentage (§9.2). */
+/** Espace disque libre minimal avant alerte, en pourcentage. */
 const DISK_FREE_MIN_PCT = 15;
 
-/** Même contrôle de secret que /api/cron/revalidate (§14.8). */
+/** Même contrôle de secret que /api/cron/revalidate. */
 function isAuthorized(request: Request): boolean | null {
   const secret = process.env.CRON_SECRET;
   if (!secret) return null;
@@ -48,7 +48,7 @@ async function notifyOwners(reason: string): Promise<number> {
 }
 
 /**
- * Supervision du système d'images (§9.1) : API du NAS (disponibilité, temps
+ * Supervision du système d'images : API du NAS (disponibilité, temps
  * de réponse, espace disque) et erreurs remontées par le lecteur.
  */
 export async function GET(request: Request) {

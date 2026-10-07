@@ -28,7 +28,7 @@ export async function SiteHeader() {
     <HeaderShell>
       {/* Barre flexible : au rendu normal rien ne se replie (mesuré 0 px de
           débordement à 1024 / 1280 / 1440 px), mais avec le texte agrandi à
-          200 % (§8.1 / WCAG 1.4.4) les items passent à la ligne au lieu de
+          200 % (WCAG 1.4.4) les items passent à la ligne au lieu de
           faire défiler horizontalement toute la page. */}
       <div className="container-site flex min-h-16 flex-wrap items-center gap-2 md:min-h-[72px] md:gap-4">
         <Link

@@ -5,7 +5,7 @@ export type CatalogueTab = { value: string; label: string; href: string };
 export type CatalogueChip = { id: string; label: string; href: string };
 
 /**
- * Onglets de statut du catalogue (§6.3) : centrés, actif en blanc souligné,
+ * Onglets de statut du catalogue : centrés, actif en blanc souligné,
  * inactifs en gris, défilables horizontalement sur mobile.
  */
 export function CatalogueTabs({ tabs, active }: { tabs: CatalogueTab[]; active: string }) {
@@ -35,7 +35,7 @@ export function CatalogueTabs({ tabs, active }: { tabs: CatalogueTab[]; active: 
   );
 }
 
-/** Filtres actifs sous forme de chips supprimables + bouton « Réinitialiser » (§6.3). */
+/** Filtres actifs sous forme de chips supprimables + bouton « Réinitialiser ». */
 export function ActiveChips({ chips, resetHref }: { chips: CatalogueChip[]; resetHref: string }) {
   if (chips.length === 0) return null;
   return (

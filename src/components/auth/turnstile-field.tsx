@@ -38,7 +38,7 @@ function loadTurnstile(): Promise<void> {
 }
 
 /**
- * Captcha d'inscription (§7.1 « protection anti-bot »).
+ * Captcha d'inscription (« protection anti-bot »).
  *
  * Deux états possibles :
  *  - clé publique fournie → widget Cloudflare Turnstile rendu explicitement ;

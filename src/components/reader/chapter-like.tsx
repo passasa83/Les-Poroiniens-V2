@@ -4,7 +4,7 @@ import { Heart } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /**
- * Like du chapitre sur l’écran de fin (§6.6) : lecture du statut via
+ * Like du chapitre sur l’écran de fin : lecture du statut via
  * `GET /api/chapters/[id]/like`, bascule optimiste via POST / DELETE
  * (même motif que les likes de commentaires).
  */

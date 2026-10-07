@@ -7,7 +7,7 @@ import { publishDueChapters } from "@/lib/publishing";
 export const runtime = "nodejs";
 
 /**
- * Cron de revalidation du catalogue (§14.8) : exécutable uniquement par le
+ * Cron de revalidation du catalogue : exécutable uniquement par le
  * cron Vercel, jamais par une route ouverte.
  * En-tête accepté : `authorization: Bearer ${CRON_SECRET}` ou `x-vercel-cron-secret`.
  */
@@ -40,11 +40,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
   }
 
-  // Chapitres programmés dont l'échéance est passée (§5.1, étape 4) : la
+  // Chapitres programmés dont l'échéance est passée (étape 4) : la
   // publication bascule les fichiers `staging/` → `public/` et trace l'audit.
   const scheduling = await publishDueChapters();
 
-  // Cache mémoire des listes/catalogues (§14.1) puis ISR des pages publiques.
+  // Cache mémoire des listes/catalogues puis ISR des pages publiques.
   invalidate("series:");
   invalidate("recent-chapters:");
   revalidatePath("/");

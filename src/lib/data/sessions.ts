@@ -5,7 +5,7 @@ import { appwriteMode, clearSessionCookie, SESSION_COOKIE } from "@/lib/auth";
 import type { SessionInfo } from "@/lib/types";
 
 /**
- * Sessions de connexion du compte (§6.8 « Réglages : … sessions »).
+ * Sessions de connexion du compte (« Réglages : … sessions »).
  *
  * Serveur uniquement : le jeton de session est lu dans le cookie httpOnly,
  * jamais dans l'URL ni dans le corps des requêtes. Aucun secret n'est

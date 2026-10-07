@@ -1,5 +1,5 @@
 /**
- * Tri et vue de la bibliothèque (§6.7).
+ * Tri et vue de la bibliothèque.
  *
  * Module **partagé** (sans directive `use client`) : les valeurs, les libellés
  * et les garde-fous sont lus par la page serveur `/bibliotheque` autant que par
@@ -7,9 +7,9 @@
  * client ne peut pas être appelée côté serveur (erreur Next 16 au rendu).
  */
 
-/** Tri de la bibliothèque (§6.7) : dernière lecture, nouveautés, titre, note. */
+/** Tri de la bibliothèque : dernière lecture, nouveautés, titre, note. */
 export type TriBiblio = "lecture" | "nouveautes" | "titre" | "note";
-/** Vue de la bibliothèque (§6.7) : liste (par défaut) ou grille. */
+/** Vue de la bibliothèque : liste (par défaut) ou grille. */
 export type VueBiblio = "liste" | "grille";
 
 export const TRIS_BIBLIO: Array<{ value: TriBiblio; label: string }> = [

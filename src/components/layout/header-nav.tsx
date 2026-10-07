@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { SearchBox } from "@/components/search/search-box";
 
-/* ── Liens de la barre supérieure (DA §5.1) ───────────────────────────── */
+/* ── Liens de la barre supérieure (DA) ───────────────────────────── */
 
 type NavItem = {
   href: string;
@@ -115,7 +115,7 @@ export function HeaderSearch() {
 
   // lg + flex-1/max-w-72 : le champ prend l'espace restant (plafonné à 288 px)
   // au lieu d'en imposer 288 px à toutes les fenêtres moyennes. Résultats
-  // instantanés + historique local (§6.4) : champ partagé avec la page
+  // instantanés + historique local : champ partagé avec la page
   // Recherche.
   return (
     <SearchBox
@@ -125,7 +125,7 @@ export function HeaderSearch() {
   );
 }
 
-/* ── Fil d'Ariane sous la barre, sur les pages de liste (DA §5.1) ─────── */
+/* ── Fil d'Ariane sous la barre, sur les pages de liste (DA) ─────── */
 
 const CRUMBS: Array<{ test: (path: string, search: string) => boolean; label: string }> = [
   { test: (p) => p === "/nouveautes", label: "Nouveautés" },

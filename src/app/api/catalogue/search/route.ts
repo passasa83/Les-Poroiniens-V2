@@ -19,9 +19,9 @@ export type SeriesSearchResult = {
 
 /**
  * GET /api/catalogue/search?q= — recherche publique légère (max 10), alimentée
- * par le champ instantané (§6.4). Utilisée aussi par les sélecteurs du
+ * par le champ instantané. Utilisée aussi par les sélecteurs du
  * back-office. Le contenu +18 n'est renvoyé qu'aux comptes admin+ ou après
- * validation du gate adulte (§11.2).
+ * validation du gate adulte.
  */
 export async function GET(request: Request) {
   const q = (new URL(request.url).searchParams.get("q") ?? "").trim();

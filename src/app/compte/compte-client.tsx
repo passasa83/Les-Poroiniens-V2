@@ -39,7 +39,7 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<{ ok: true;
   }
 }
 
-/** Redimensionne en 256×256 WebP côté client (§14.5), ≤ 800 Ko. */
+/** Redimensionne en 256×256 WebP côté client, ≤ 800 Ko. */
 async function toWebpBlob(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const size = 256;
@@ -212,7 +212,7 @@ export function CompteClient({
     router.refresh();
   }
 
-  /* ── Sessions (§6.8) ─────────────────────────────────────────────── */
+  /* ── Sessions ─────────────────────────────────────────────── */
 
   /** Révoque une session : si c'est la nôtre, la page bascule sur /connexion. */
   async function revokeOne(session: SessionInfo) {
@@ -350,7 +350,7 @@ export function CompteClient({
             </label>
             <p className="text-xs text-muted">
               L’avatar est affiché en tête de votre compte et sur votre profil public.
-              Redimensionné en WebP 256×256, 800 Ko maximum (§14.5).
+              Redimensionné en WebP 256×256, 800 Ko maximum.
             </p>
           </div>
 
@@ -456,7 +456,7 @@ export function CompteClient({
             />
             <Toggle
               label="Afficher le contenu +18"
-              hint="Retire le flou du catalogue classé adulte (§11)."
+              hint="Retire le flou du catalogue classé adulte."
               checked={prefs.adult_ok}
               onChange={(v) => void savePrefs({ ...prefs, adult_ok: v })}
             />

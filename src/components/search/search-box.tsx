@@ -24,7 +24,7 @@ type Result = {
   classification: "all" | "adult";
 };
 
-/** Historique des 10 dernières recherches (§6.4), stocké localement. */
+/** Historique des 10 dernières recherches, stocké localement. */
 const HISTORY_KEY = "poroiniens:historique-recherche";
 const HISTORY_MAX = 10;
 
@@ -46,7 +46,7 @@ function writeHistory(values: string[]): void {
 }
 
 /**
- * Champ de recherche à résultats instantanés (§6.4) : mini-couverture, titre,
+ * Champ de recherche à résultats instantanés : mini-couverture, titre,
  * type et statut ; historique local quand le champ est vide. Le formulaire
  * reste un GET classique vers `/recherche`, utilisable sans JavaScript.
  */

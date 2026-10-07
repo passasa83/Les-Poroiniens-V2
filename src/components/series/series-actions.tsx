@@ -321,7 +321,7 @@ export function SeriesForm({
           <Field
             label="Classification"
             htmlFor="s-classification"
-            hint="Le contenu +18 reste réservé aux membres connectés ayant validé la déclaration d'âge (§11)."
+            hint="Le contenu +18 reste réservé aux membres connectés ayant validé la déclaration d'âge."
           >
             <Select
               id="s-classification"

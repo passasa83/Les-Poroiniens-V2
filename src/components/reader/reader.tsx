@@ -16,7 +16,7 @@ import {
   type ReaderTheme,
 } from "./reader-settings";
 
-/* ── Clés de stockage local (§6.6 « réglages mémorisés ») ───────────── */
+/* ── Clés de stockage local (« réglages mémorisés ») ───────────── */
 /** Mode : global, le même pour toutes les séries. */
 const MODE_KEY = "lp-reader-mode";
 /** Sens : mémorisé par série (prioritaire sur la préférence du compte). */
@@ -59,7 +59,7 @@ const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * Lecteur de scans (§6.6) : chrome immersif auto-masquable (barre haute avec
+ * Lecteur de scans : chrome immersif auto-masquable (barre haute avec
  * sélecteur de chapitre, barre inférieure avec progression), modes webtoon /
  * page / double page, sens mémorisé par série, ajustement, thème et
  * luminosité, zones tactiles, molette, raccourcis clavier, plein écran,
@@ -100,7 +100,7 @@ export function Reader({
   initialLikes?: number;
   prevHref?: string | null;
   nextHref?: string | null;
-  /** Sert au préchargement de la première page du chapitre suivant (§7.2). */
+  /** Sert au préchargement de la première page du chapitre suivant. */
   nextChapterId?: string | null;
 }) {
   const total = pages.length;
@@ -132,7 +132,7 @@ export function Reader({
   const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const throttleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Pages dont le chargement a échec après reprise (§9.1), envoyées par lots. */
+  /** Pages dont le chargement a échec après reprise, envoyées par lots. */
   const failedRef = useRef<Set<number>>(new Set());
   const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -218,7 +218,7 @@ export function Reader({
     el?.scrollIntoView({ behavior: reduce ? "auto" : behavior, block: "start" });
   }, []);
 
-  /* ── Reprise à la page exacte (§6.6) ───────────────────────────────── */
+  /* ── Reprise à la page exacte ───────────────────────────────── */
   useEffect(() => {
     if (!hydrated || resumeDoneRef.current || page <= 0) return;
     resumeDoneRef.current = true;
@@ -339,7 +339,7 @@ export function Reader({
     [],
   );
 
-  /* ── Raccourcis clavier (§6.6) ─────────────────────────────────────── */
+  /* ── Raccourcis clavier ─────────────────────────────────────── */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       // Échap : tiroir > modale > plein écran
@@ -410,7 +410,7 @@ export function Reader({
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  /* ── Molette : une page par cran, débouncée à 250 ms (§6.6) ───────── */
+  /* ── Molette : une page par cran, débouncée à 250 ms ───────── */
   useEffect(() => {
     const el = pagesRef.current;
     if (!el || mode === "vertical") return;
@@ -521,7 +521,7 @@ export function Reader({
     return () => window.removeEventListener("pagehide", onHide);
   }, [canProgress, send]);
 
-  /* ── Progression locale des visiteurs (§6.6 « reprise ») ───────────── */
+  /* ── Progression locale des visiteurs (« reprise ») ───────────── */
   const saveLocalProgress = useCallback(() => {
     store.set(progressKey(chapterId), String(pageRef.current + 1));
   }, [chapterId]);
@@ -536,7 +536,7 @@ export function Reader({
     return () => window.removeEventListener("pagehide", saveLocalProgress);
   }, [saveLocalProgress]);
 
-  /* ── Échecs de chargement : remontée groupée (§9.1) ─────────────────── */
+  /* ── Échecs de chargement : remontée groupée ─────────────────── */
   const flushFailures = useCallback(async () => {
     const indexes = [...failedRef.current];
     if (indexes.length === 0) return;
@@ -593,7 +593,7 @@ export function Reader({
   /* ── Rendu ────────────────────────────────────────────────────────── */
   const isLast = page >= lastIndex;
   const showEnd = mode === "vertical" || isLast;
-  /** Une planche paysage s'affiche seule ; la première page aussi si demandé (§6.6). */
+  /** Une planche paysage s'affiche seule ; la première page aussi si demandé. */
   const soloSpread = useMemo(
     () => isLandscape(pages[page]) || (firstSolo && page === 0),
     [pages, page, firstSolo],
@@ -741,7 +741,7 @@ export function Reader({
             </div>
           )}
 
-          {/* Zones tactiles gauche / centre / droite (§6.6) : ignorées en webtoon. */}
+          {/* Zones tactiles gauche / centre / droite : ignorées en webtoon. */}
           {mode !== "vertical" && (
             <TouchZones
               sens={sens}
@@ -860,7 +860,7 @@ export function Reader({
 }
 
 /**
- * Zones tactiles gauche / centre / droite (§6.6) : les côtés tournent les
+ * Zones tactiles gauche / centre / droite : les côtés tournent les
  * pages (sens inversé en lecture droite-à-gauche), le centre montre ou masque
  * les commandes. Cibles de 44 px minimum, étiquetées pour le clavier.
  */
@@ -931,13 +931,13 @@ function Prefetch({ pages, from }: { pages: ReaderPage[]; from: number }) {
   );
 }
 
-/** Une page est paysage quand sa largeur dépasse sa hauteur (§7.2). */
+/** Une page est paysage quand sa largeur dépasse sa hauteur. */
 function isLandscape(page: ReaderPage | undefined): boolean {
   return Boolean(page?.largeur && page.hauteur && page.largeur > page.hauteur);
 }
 
 /**
- * Page de scan avec reprise (§7.2) : 2 nouvelles tentatives avec délai
+ * Page de scan avec reprise : 2 nouvelles tentatives avec délai
  * croissant, puis une page de remplacement avec bouton « Signaler un
  * problème ». Dimensions toujours transmises au DOM : aucune surprise de
  * mise en page (CLS < 0,05).

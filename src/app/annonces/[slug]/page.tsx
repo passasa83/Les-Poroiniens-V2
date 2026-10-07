@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const annonce = await getAnnonceBySlug(slug);
   if (!annonce) {
     /* `notFound()` peut être streamé en 200 (loading.tsx) : on retire la page
-       des index, exactement comme sur la fiche série (§11.2). */
+       des index, exactement comme sur la fiche série. */
     return { title: "Annonce introuvable", robots: { index: false, follow: false } };
   }
 
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-/** §6.11 détail d'une annonce : page publique, datée, en paragraphes. */
+/** détail d'une annonce : page publique, datée, en paragraphes. */
 export default async function AnnoncePage({ params }: { params: Params }) {
   const { slug } = await params;
   const annonce = await getAnnonceBySlug(slug);

@@ -74,7 +74,7 @@
  *                                                 0
  *   (dénombrement)        → nb_chapitres         chapitres importables (NAS + ImgChest)
  *   titresAlt / auteurs   → recherche_alt / recherche_auteurs
- *                                                 `join(" ")` tronqué à 512 (§6.4)
+ *                                                 `join(" ")` tronqué à 512
  *   chapters[*].last_updated (Unix)
  *                         → created_at, updated_at
  *                                                 ISO min/max du corpus, plafonné à `now`
@@ -124,7 +124,7 @@
  *   file.link             → chemin                URL CDN **complète**
  *                                                 `https://cdn.imgchest.com/…` :
  *                                                 `pageUrl()` la sert telle quelle
- *                                                 (§7.1 « URL héritée »)
+ * (« URL héritée »)
  *   entrée `NAS_API_BASE/list?path=` (URL absolue `img.`)
  *                         → chemin                **relatif** (préfixe `IMG_BASE_URL`
  *                                                 retiré, encodage `%20` conservé) :
@@ -1471,7 +1471,7 @@ async function resolvePages(): Promise<void> {
       id: rowId(chapter.chapterId, `p${index}`),
       chapter_id: chapter.chapterId,
       ordre: index,
-      // Chemin relatif : `pageUrl()` le préfixe par `IMG_BASE_URL` (§7.1).
+      // Chemin relatif : `pageUrl()` le préfixe par `IMG_BASE_URL`.
       chemin: file.chemin,
       largeur: file.width ?? 1200,
       hauteur: file.height ?? 1800,

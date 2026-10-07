@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * Titre d'un panneau d'authentification.
  * `none` : le titre est déjà porté par la modale (évite un double titre et
- * préserve « un seul `<h1>` » par page, §8.1).
+ * préserve « un seul `<h1>` » par page).
  */
 export type AuthHeadingLevel = "h1" | "h2" | "none";
 

@@ -8,7 +8,7 @@ import { listProfiles } from "@/lib/data/users";
 
 export const runtime = "nodejs";
 
-/** Signalement depuis la lecture (§8.3 / §14) : membre connecté, 5 / 10 min. */
+/** Signalement depuis la lecture : membre connecté, 5 / 10 min. */
 const LectureSchema = z.object({
   type: z.enum(["comment", "chapter", "series"]),
   targetId: z.string().min(1).max(64),
@@ -17,7 +17,7 @@ const LectureSchema = z.object({
 });
 
 /**
- * Signalement de contenu hors lecture (§6.13 « DMCA ») : déposé depuis la
+ * Signalement de contenu hors lecture (« DMCA ») : déposé depuis la
  * page légale, **sans compte** — 3 dépôts / heure / IP (cf. page DMCA).
  */
 const LegalSchema = z.object({
@@ -57,7 +57,7 @@ async function resolveSeries(value: string) {
   }
 }
 
-/** Accusé de réception communiqué à l'émetteur (§6.13). */
+/** Accusé de réception communiqué à l'émetteur. */
 function accusereception(reference: string) {
   return {
     reference,
@@ -163,7 +163,7 @@ async function signalementLecture(input: Lecture, user: { id: string }, ip: stri
   );
 }
 
-/** Signalements (§8.3 / §14) : membre connecté, 5 signalements / 10 min. */
+/** Signalements : membre connecté, 5 signalements / 10 min. */
 export async function POST(request: Request) {
   let json: unknown;
   try {

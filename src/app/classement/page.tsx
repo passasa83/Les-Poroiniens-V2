@@ -58,9 +58,9 @@ function hrefType(periode: PeriodeCle, type: SeriesType | ""): string {
 }
 
 /**
- * Évolution (§6.9) : places gagnées depuis la fenêtre précédente de même
+ * Évolution : places gagnées depuis la fenêtre précédente de même
  * longueur. `▲` monte, `▼` descend, `=` stable, `—` non comparable. Aucune
- * couleur réservée au podium et aucun point : la liste reste une liste (§6.10).
+ * couleur réservée au podium et aucun point : la liste reste une liste.
  */
 function Evolution({ rang, nouveau }: { rang: number | null; nouveau: boolean }) {
   if (nouveau) {
@@ -101,7 +101,7 @@ function Evolution({ rang, nouveau }: { rang: number | null; nouveau: boolean })
 
 function activite(r: RangClassement, periode: PeriodeCle): string {
   if (periode === "tout-temps") {
-    /* §12.3 : le compteur de vues est réservé à la fiche série. Sur « Tout
+    /* le compteur de vues est réservé à la fiche série. Sur « Tout
        temps », on annonce donc le nombre de chapitres publiés (colonne déjà
        dénormalisée en base) plutôt qu'un nombre de vues. */
     const chapitres = Math.max(Math.trunc(r.serie.nb_chapitres) || 0, 0);
@@ -125,7 +125,7 @@ function LigneClassement({ r, periode }: { r: RangClassement; periode: PeriodeCl
         href={`/serie/${serie.slug}`}
         className="card group flex items-center gap-3 p-3 transition-colors hover:border-accent"
       >
-        {/* Rang + évolution : colonne étroite, jamais de podium (§6.10) */}
+        {/* Rang + évolution : colonne étroite, jamais de podium */}
         <span className="flex w-8 shrink-0 flex-col items-center gap-0.5">
           <span className="text-base font-black tabular-nums text-fg">{r.rang}</span>
           <span
@@ -182,7 +182,7 @@ function LigneClassement({ r, periode }: { r: RangClassement; periode: PeriodeCl
 }
 
 /**
- * §6.9 « Classement » : onglets Jour / Semaine / Mois / Tout temps, filtre de
+ * « Classement » : onglets Jour / Semaine / Mois / Tout temps, filtre de
  * format, liste numérotée avec évolution. Tout est piloté par l'URL
  * (`?periode=` et `?type=`) : une valeur inconnue bascule silencieusement sur
  * le repli par défaut et les onglets restent de simples liens.

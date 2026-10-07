@@ -7,7 +7,7 @@ export const runtime = "nodejs";
  * GET /api/owner/nas/list?path= — arborescence d'un dossier du NAS (Gérant).
  *
  * L'appel part du serveur avec les identifiants Cloudflare Access / la clé
- * d'API : `api-img.` n'est jamais joignable depuis le navigateur (§4.3).
+ * d'API : `api-img.` n'est jamais joignable depuis le navigateur.
  * La réponse est normalisée ici pour que l'interface n'affiche que
  * `{ name, isDir }`, sans détail technique du NAS.
  */

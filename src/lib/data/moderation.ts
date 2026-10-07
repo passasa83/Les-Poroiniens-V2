@@ -7,7 +7,7 @@ function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/* ── Signalements (§8 / §9.4) ────────────────────────────────────────── */
+/* ── Signalements ────────────────────────────────────────── */
 
 export async function createReport(
   input: Omit<Report, "id" | "statut" | "handled_by" | "created_at">,
@@ -42,7 +42,7 @@ export async function handleReport(
   await getDb().update<Report>(TABLES.reports, id, { statut, handled_by: handlerId });
 }
 
-/* ── Journal d'audit (§9.5) ──────────────────────────────────────────── */
+/* ── Journal d'audit ──────────────────────────────────────────── */
 
 export async function audit(entry: {
   actorId: string;
@@ -113,7 +113,7 @@ export async function updateImportJob(id: string, patch: Partial<ImportJob>): Pr
   await getDb().update<ImportJob>(TABLES.importJobs, id, patch as Record<string, unknown>);
 }
 
-/* ── Notifications in-app (§7.3) ─────────────────────────────────────── */
+/* ── Notifications in-app ─────────────────────────────────────── */
 
 export async function listNotifications(userId: string): Promise<Notification[]> {
   const { items } = await getDb().list<Notification>(TABLES.notifications, {

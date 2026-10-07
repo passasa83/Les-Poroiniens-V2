@@ -18,7 +18,7 @@ const PROTECTED = [
   "/gerant",
 ];
 
-/* ── Vrai 404 (§6.12) ────────────────────────────────────────────────────── */
+/* ── Vrai 404 ────────────────────────────────────────────────────── */
 
 /**
  * Chemin volontairement non routé : Next y rend `app/not-found.tsx` (layout
@@ -34,7 +34,7 @@ const SERIE_ROUTE = /^\/serie\/([^/]+)(?:\/([^/]+))?$/;
 
 /** `10`, `8.5`, `chapitre-10`, `chapitre-8.5` → nombre fini strictement
  *  positif (`numero` est un `double` en base). Le proxy doit accepter les
- *  décimaux, sinon leurs URLs basculent en 404 réel (§6.12). */
+ * décimaux, sinon leurs URLs basculent en 404 réel. */
 function parseNumero(segment: string | null): number | null {
   if (segment === null) return null;
   const value = segment.replace(/^chapitre-/i, "");
@@ -122,7 +122,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // §11 : +18 réservé aux membres. Sans cookie de session, l'utilisateur
+  // +18 réservé aux membres. Sans cookie de session, l'utilisateur
   // est forcément visiteur → redirection immédiate vers la connexion. (Un
   // redirect() dans la page arriverait trop tard : le layout a déjà streamé
   // l'en-tête en 200.) Avec cookie, la page tranche (session expirée ou
@@ -143,7 +143,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // §6.12 : série ou chapitre inexistant → 404 réel (voir INTROUVABLE).
+  // série ou chapitre inexistant → 404 réel (voir INTROUVABLE).
   if (pathname.startsWith("/serie/") && (await ressourceAbsente(pathname))) {
     return NextResponse.rewrite(new URL(INTROUVABLE, request.url));
   }

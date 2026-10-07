@@ -42,7 +42,7 @@ function tabHref(type: string, suivies: boolean): string {
 }
 
 /**
- * §6.2 « Nouveautés » : carte héros (sélection du Gérant, sinon le dernier
+ * « Nouveautés » : carte héros (sélection du Gérant, sinon le dernier
  * chapitre publié), grille des dernières 24 heures avec étiquette rouge, puis
  * les jours précédents jusqu'à sept jours, colonne latérale Communauté /
  * Les plus lus, et fond flouté emprunté au visuel du héros.
@@ -137,7 +137,7 @@ export default async function NouveautesPage({
 
   return (
     <div className="relative isolate container-site py-6">
-      {/* Fond : couverture du héros floutée et assombrie en haut de page (§6.2) */}
+      {/* Fond : couverture du héros floutée et assombrie en haut de page */}
       {hero && (
         <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 -z-10 h-80 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -16,8 +16,8 @@ import { Badge } from "@/components/ui/kit";
 import { SideNav, type NavSection } from "@/components/backoffice/side-nav";
 
 /**
- * Espace Gérant (§10) : séries, import depuis le NAS, publication, audit
- * complet et configuration. Cloisonnement §4.2 — même les administrateurs
+ * Espace Gérant : séries, import depuis le NAS, publication, audit
+ * complet et configuration. Cloisonnement — même les administrateurs
  * sont exclus de ce rubrique.
  */
 export default async function GerantLayout({ children }: { children: ReactNode }) {

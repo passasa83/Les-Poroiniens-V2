@@ -8,7 +8,7 @@ import { audit } from "@/lib/data/moderation";
 import type { Chapter, ScanPage } from "@/lib/types";
 
 /**
- * Passage `staging/` ↔ `public/` à la publication (§3.4 et §5.1).
+ * Passage `staging/` ↔ `public/` à la publication.
  *
  * L'état d'un chapitre est **dérivé du chemin stocké en base** : tant que les
  * pages commencent par `staging/`, aucune URL publique n'existe ; à la
@@ -114,7 +114,7 @@ export async function transitionChapterFiles(
 }
 
 /**
- * Publication des chapitres programmés (§5.1, étape 4) : appelée par le cron
+ * Publication des chapitres programmés (étape 4) : appelée par le cron
  * de revalidation. Chaque publication bascule ses fichiers vers `public/` et
  * est tracée au journal d'audit avec l'acteur `cron`.
  */

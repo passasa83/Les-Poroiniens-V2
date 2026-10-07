@@ -63,7 +63,7 @@ function matches(
 }
 
 /**
- * Journal d'audit complet (§9.5) : qui, quoi, quand, IP, avant / après.
+ * Journal d'audit complet : qui, quoi, quand, IP, avant / après.
  * Visible uniquement par le Gérant et non modifiable.
  */
 export default async function GerantAuditPage({
@@ -98,8 +98,7 @@ export default async function GerantAuditPage({
           </h1>
           <p className="mt-1 text-sm text-muted">
             {filtered.length} entrée{filtered.length > 1 ? "s" : ""} affichée
-            {filtered.length > 1 ? "s" : ""} sur {entries.length} · traces des actions sensibles
-            (§9.5).
+            {filtered.length > 1 ? "s" : ""} sur {entries.length} · traces des actions sensibles.
           </p>
         </div>
         <span className="flex items-center gap-2 rounded-xl border border-line bg-surface2 px-3 py-1.5 text-xs text-muted">

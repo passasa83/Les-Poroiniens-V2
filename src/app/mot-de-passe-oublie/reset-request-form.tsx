@@ -8,7 +8,7 @@ import { Button, Field, Input } from "@/components/ui/kit";
 type ApiReply = { error?: string; message?: string };
 
 /**
- * Réinitialisation de mot de passe : manuelle au lancement (§7.1 et §14.3).
+ * Réinitialisation de mot de passe : manuelle au lancement.
  * Aucun fournisseur de mails n'est branché, la demande est simplement
  * enregistrée et notifiée au Gérant. La réponse est la même quelle que soit
  * l'adresse saisie (pas d'énumération d'e-mails).

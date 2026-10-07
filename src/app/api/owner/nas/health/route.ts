@@ -4,7 +4,7 @@ import { nasHealth } from "@/lib/nas";
 export const runtime = "nodejs";
 
 /**
- * GET /api/owner/nas/health — état du NAS pour l'espace Gérant (§9.1) :
+ * GET /api/owner/nas/health — état du NAS pour l'espace Gérant :
  * disponibilité, temps de réponse et espace disque libre.
  */
 export async function GET(request: Request) {

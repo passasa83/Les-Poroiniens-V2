@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Rate limiting en mémoire (§14.1). Par instance : suffisant pour dissuader
+ * Rate limiting en mémoire. Par instance : suffisant pour dissuader
  * la rafale, à compléter par le rate limiting du CDN / reverse proxy.
  */
 type Bucket = { count: number; reset: number };

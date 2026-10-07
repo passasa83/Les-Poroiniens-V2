@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 type ProfileRow = Profile & { banni?: boolean };
 
-/** Gestion des utilisateurs (admin+ : ban, rôles ≤ Modo — §9.3). */
+/** Gestion des utilisateurs (admin+ : ban, rôles ≤ Modo). */
 export default async function AdminUsersPage() {
   const user = await getCurrentUser();
   if (!user || !atLeast(user.role, "admin") || !can(user.role, "manage_users")) {
@@ -44,7 +44,7 @@ export default async function AdminUsersPage() {
         <h1 className="section-title">Utilisateurs</h1>
         <p className="mt-1 text-sm text-muted">
           {rows.length} profil{rows.length > 1 ? "s" : ""} · Attribution des rôles Modérateur et
-          Membre ; les rôles Administrateur et Gérant sont réservés au Gérant (§9.3).
+          Membre ; les rôles Administrateur et Gérant sont réservés au Gérant.
         </p>
       </div>
 

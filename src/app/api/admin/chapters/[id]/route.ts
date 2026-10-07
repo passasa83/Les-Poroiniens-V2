@@ -146,7 +146,7 @@ export async function PATCH(
           ? "chapter.schedule"
           : "chapter.update";
 
-  // Passage `staging/` ↔ `public/` + purge ciblée (§3.4 et §5.1, étape 5).
+  // Passage `staging/` ↔ `public/` + purge ciblée (étape 5).
   let nas: FileTransition | undefined;
   if (action === "chapter.publish") nas = await transitionChapterFiles(chapter, "publish");
   if (action === "chapter.unpublish") nas = await transitionChapterFiles(chapter, "unpublish");

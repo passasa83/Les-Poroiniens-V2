@@ -2,11 +2,11 @@ import "server-only";
 import { imageEnv } from "@/lib/media";
 
 /**
- * Client de l'API du NAS (§4) — appelé **uniquement depuis le serveur**.
+ * Client de l'API du NAS — appelé **uniquement depuis le serveur**.
  *
  * `api-img.` est privé (Cloudflare Access ou clé) : le navigateur ne l'atteint
  * jamais. Tous les chemins sont normalisés, bornés à 500 caractères et
- * interdisent `..` (§4.3), et chaque appel dispose d'un délai.
+ * interdisent `..`, et chaque appel dispose d'un délai.
  */
 export type NasPage = {
   name: string;
@@ -54,7 +54,7 @@ export function nasConfigured(): boolean {
   return Boolean(imageEnv().nasApiBase);
 }
 
-/** Contrôle anti path traversal (§4.3) : ni `..`, ni antislash, ni disque local. */
+/** Contrôle anti path traversal : ni `..`, ni antislash, ni disque local. */
 export function isSafePath(value: string): boolean {
   if (!value || value.length > 500) return false;
   if (value.includes("\0") || value.includes("\\")) return false;
@@ -63,13 +63,13 @@ export function isSafePath(value: string): boolean {
   return true;
 }
 
-/** En-têtes d'authentification : service token Access + clé d'API (§4.3). */
+/** En-têtes d'authentification : service token Access + clé d'API. */
 export function nasHeaders(): Record<string, string> {
   const out: Record<string, string> = { Accept: "application/json" };
   const id = process.env.NAS_API_CLIENT_ID;
   const secret = process.env.NAS_API_CLIENT_SECRET;
   if (id && secret) {
-    // Service token Cloudflare Access (§4.3)
+    // Service token Cloudflare Access
     out["CF-Access-Client-Id"] = id;
     out["CF-Access-Client-Secret"] = secret;
   }
@@ -160,7 +160,7 @@ function toEntry(raw: unknown, basePath: string): NasEntry | null {
     const text = raw.trim();
     if (!text) return null;
     // L'API peut renvoyer des URLs absolues (`/list?path=…` validé) : on ne
-    // garde que le chemin relatif, seul stockable (`storeCover`, §5.2).
+    // garde que le chemin relatif, seul stockable (`storeCover`).
     if (/^https?:\/\//i.test(text)) {
       try {
         const relative = new URL(text).pathname.replace(/^\/+/, "");
@@ -214,12 +214,12 @@ function toPage(raw: unknown, basePath: string): NasPage | null {
   };
 }
 
-/** Tri naturel garanti côté API : `002` avant `010` (§4.2). */
+/** Tri naturel garanti côté API : `002` avant `010`. */
 function natural(a: string, b: string): number {
   return a.localeCompare(b, "fr", { numeric: true });
 }
 
-/** `GET /list?path=` — pages d'un dossier de chapitre (§4.1).
+/** `GET /list?path=` — pages d'un dossier de chapitre.
  *  L'API renvoie un tableau d'URLs absolues `img.` (ou des objets
  *  `{ name, path, … }`) : seul le chemin relatif est conservé. */
 export async function nasList(path: string): Promise<{ path: string; count: number; pages: NasPage[] }> {
@@ -234,7 +234,7 @@ export async function nasList(path: string): Promise<{ path: string; count: numb
   return { path, count: pages.length, pages };
 }
 
-/** `GET /tree?path=` — arborescence pour l'écran d'import (§4.1). */
+/** `GET /tree?path=` — arborescence pour l'écran d'import. */
 export async function nasTree(path: string): Promise<{ path: string; entries: NasEntry[] }> {
   const safe = path && isSafePath(path) ? path : "content";
   const data = await nasRequest<unknown>("tree", { query: { path: safe } });
@@ -245,7 +245,7 @@ export async function nasTree(path: string): Promise<{ path: string; entries: Na
   return { path: safe, entries };
 }
 
-/** `GET /health` — état du NAS (§9.1). Tolère une API sans `/health`. */
+/** `GET /health` — état du NAS. Tolère une API sans `/health`. */
 export async function nasHealth(): Promise<NasHealth> {
   if (!nasConfigured()) return { ok: false, reason: "nas_not_configured" };
   const started = Date.now();
@@ -288,7 +288,7 @@ export async function nasHealth(): Promise<NasHealth> {
 }
 
 /**
- * `POST /move` — `staging/` → `public/` à la publication (§3.4).
+ * `POST /move` — `staging/` → `public/` à la publication.
  * Best effort : une API qui n'implémente pas `/move` ne bloque pas la
  * publication, l'erreur est remontée à l'appelant pour signalement.
  */

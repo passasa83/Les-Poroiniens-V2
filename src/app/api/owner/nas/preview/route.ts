@@ -20,7 +20,7 @@ function missingIndexes(names: string[]): number[] {
 
 /**
  * GET /api/owner/nas/preview?path= — aperçu d'un chapitre avant indexation
- * (§5.1, étape 2) : nombre de pages, trous de numérotation, doublons de hash
+ * (étape 2) : nombre de pages, trous de numérotation, doublons de hash
  * et pages inhabituelles (poids, proportions, dimensions absentes).
  */
 export async function GET(request: Request) {

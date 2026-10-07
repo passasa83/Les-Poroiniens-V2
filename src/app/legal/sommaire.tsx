@@ -1,7 +1,7 @@
 export type SommaireEntree = { id: string; titre: string };
 
 /**
- * Sommaire ancré des pages légales (§6.13) : liste de liens internes vers les
+ * Sommaire ancré des pages légales : liste de liens internes vers les
  * titres de sections. Chaque `id` doit exister dans la page (libellé explicite
  * pour les lecteurs d'écran, cible focusable au clavier).
  */

@@ -8,10 +8,10 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 
 /**
- * Notice & takedown (§16) : dépôt d'un signalement de contenu.
+ * Notice & takedown : dépôt d'un signalement de contenu.
  *
  * Règles :
- * - limite de débit 3 dépôts / heure / IP (§14.1) ;
+ * - limite de débit 3 dépôts / heure / IP ;
  * - validation Zod de toutes les entrées ;
  * - réponse **neutre et identique** quelle que soit l'issue (existence de la
  *   série trouvée ou non) : aucune fuite d'information sur le catalogue ;

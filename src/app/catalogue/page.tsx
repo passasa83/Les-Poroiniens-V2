@@ -88,7 +88,7 @@ export default async function CataloguePage({
   const adultParam = p.adult === "1";
   // Le contenu +18 n'apparaît qu'après validation du gate par un membre, ou
   // sur demande explicite via ?adult=1 **connecté** (auquel cas le gate
-  // s'affiche, §11). Les visiteurs ne voient jamais le +18, même sur demande :
+  // s'affiche). Les visiteurs ne voient jamais le +18, même sur demande :
   // la modale les invite à se connecter.
   const includeAdult = gateOk || (adultParam && Boolean(user));
   const showGate = adultParam && !gateOk;
@@ -106,7 +106,7 @@ export default async function CataloguePage({
       type: p.type as SeriesType | undefined,
       annee: p.annee,
       langue: p.langue || undefined,
-      // Onglets exclusifs (§6.3) : une publication unique vit dans « One-shot ».
+      // Onglets exclusifs : une publication unique vit dans « One-shot ».
       oneShot: isOneShot,
       excludeOneShot: !isOneShot && Boolean(statut),
       sort: p.sort,
@@ -139,7 +139,7 @@ export default async function CataloguePage({
 
   const resetHref = adultParam ? "/catalogue?adult=1" : "/catalogue";
 
-  /* Onglets de statut (§6.3) : les filtres du tiroir pointent vers les mêmes
+  /* Onglets de statut : les filtres du tiroir pointent vers les mêmes
      paramètres, un statut hors onglets (Hiatus, Abandonné) désactive tout onglet. */
   const tabs: CatalogueTab[] = [
     { value: "", label: "Tout", href: hrefWith(keep, { statut: undefined }) },
@@ -152,7 +152,7 @@ export default async function CataloguePage({
     { value: "one_shot", label: "One-shot", href: hrefWith(keep, { statut: "one_shot" }) },
   ];
 
-  /* Chips de filtres actifs (§6.3) : chacune retire son propre critère. */
+  /* Chips de filtres actifs : chacune retire son propre critère. */
   const chips: CatalogueChip[] = [];
   if (p.q) chips.push({ id: "q", label: `Recherche : ${p.q}`, href: hrefWith(keep, { q: undefined }) });
   for (const value of (p.genre ?? "").split(",").filter(Boolean)) {
@@ -202,7 +202,7 @@ export default async function CataloguePage({
         )}
       </div>
 
-      {/* Onglets centrés + menus déroulants à droite (§6.3) */}
+      {/* Onglets centrés + menus déroulants à droite */}
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <CatalogueTabs tabs={tabs} active={p.statut ?? ""} />
@@ -236,7 +236,7 @@ export default async function CataloguePage({
         />
       ) : (
         <>
-          {/* §12.8 : pagination en numéros, visible avant **et** après les résultats. */}
+          {/* pagination en numéros, visible avant **et** après les résultats. */}
           <Pagination
             page={result.page}
             pageCount={result.pageCount}

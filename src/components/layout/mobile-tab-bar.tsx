@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 /**
- * Barre d'onglets inférieure mobile (DA §5.2) : Accueil · Catalogue ·
+ * Barre d'onglets inférieure mobile (DA) : Accueil · Catalogue ·
  * Recherche · Bibliothèque · Compte. Cibles ≥ 44 px, onglet actif en couleur
  * d'accent, respect de la zone de sécurité (encoche et barre système).
  */

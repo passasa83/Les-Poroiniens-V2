@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 
 /**
- * Erreur serveur inattendue — 500 (§6.12).
+ * Erreur serveur inattendue — 500.
  * `retry` (Next 16) re-exécute le rendu de la route sans recharger la page ;
  * `reset` reste accepté pour compatibilité.
  */

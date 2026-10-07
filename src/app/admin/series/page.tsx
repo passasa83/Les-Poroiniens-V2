@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Catalogue en lecture seule (admin+). La création, l'édition et la
- * suppression d'une série vivent dans l'espace Gérant (§4.2 / §10) : cet
+ * suppression d'une série vivent dans l'espace Gérant : cet
  * écran reste la vue « contenu » du back-office.
  */
 export default async function AdminSeriesPage({

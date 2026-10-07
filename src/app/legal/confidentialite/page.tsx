@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 const contactEmail = process.env.NEXT_PUBLIC_CONTACT_EMAIL;
 
-/** Sommaire ancré (§6.13) : chaque entrée pointe vers l'id de la section. */
+/** Sommaire ancré : chaque entrée pointe vers l'id de la section. */
 const SOMMAIRE = [
   { id: "responsable", titre: "1. Responsable du traitement" },
   { id: "cookies", titre: "2. Cookies et stockage local" },

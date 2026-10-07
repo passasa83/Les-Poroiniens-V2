@@ -11,7 +11,7 @@ import { ImportPanel, type SeriesLite } from "./_components/import-panel";
 export const dynamic = "force-dynamic";
 
 /**
- * Import de contenu (§10) — source unique : le NAS / dossier réseau.
+ * Import de contenu — source unique : le NAS / dossier réseau.
  * Trois parcours : import par lot depuis un dossier de série, un chapitre à la
  * fois, ou un album ImgChest ; Drive ne sert qu'aux ressources de séries.
  */

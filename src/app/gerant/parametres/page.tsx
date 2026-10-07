@@ -9,7 +9,7 @@ import { SettingsForm, type SecretStatus } from "./_components/settings-form";
 
 export const dynamic = "force-dynamic";
 
-/** Paramètres du site et connexions (§9.6) — Gérant exclusif. */
+/** Paramètres du site et connexions — Gérant exclusif. */
 export default async function GerantParametresPage() {
   const user = await getCurrentUser();
   if (!can(user?.role, "site_settings")) {
@@ -53,7 +53,7 @@ export default async function GerantParametresPage() {
       key: "smtp",
       label: "SMTP / envoi de mails",
       present: Boolean(process.env.SMTP_HOST || process.env.RESEND_API_KEY),
-      hint: "Désactivé au lancement (§14.3).",
+      hint: "Désactivé au lancement.",
     },
     {
       key: "appwrite",
@@ -89,7 +89,7 @@ export default async function GerantParametresPage() {
       <div>
         <h1 className="section-title">Paramètres du site</h1>
         <p className="mt-1 text-sm text-muted">
-          Identité, bannière, inscriptions, pages légales, réseaux et connexions (§9.6). Chaque
+          Identité, bannière, inscriptions, pages légales, réseaux et connexions. Chaque
           modification est tracée au journal d&apos;audit.
         </p>
       </div>

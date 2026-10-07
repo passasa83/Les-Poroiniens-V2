@@ -5,7 +5,7 @@ import { coverBlurUrl } from "@/lib/media";
 import { SERIES_TYPE_LABELS, type Series } from "@/lib/types";
 
 /**
- * Carte du catalogue (§6.3) : couverture 2:3, titre tronqué sur une ligne,
+ * Carte du catalogue : couverture 2:3, titre tronqué sur une ligne,
  * auteur en gris et pastilles (type, « +18 » le cas échéant). Le statut est
  * porté par les onglets de la page, il n'est donc pas répété sur la carte.
  */
@@ -61,7 +61,7 @@ export function CatalogueCard({
   );
 }
 
-/** Grille du catalogue : 2 colonnes sur mobile, 8 sur grand écran (§6.3). */
+/** Grille du catalogue : 2 colonnes sur mobile, 8 sur grand écran. */
 export function CatalogueGrid({
   series,
   adultAllowed = false,
@@ -69,7 +69,7 @@ export function CatalogueGrid({
 }: {
   series: Series[];
   adultAllowed?: boolean;
-  /** Visiteur : les séries +18 sont exclues (cloisonnement §11). */
+  /** Visiteur : les séries +18 sont exclues. */
   authenticated?: boolean;
 }) {
   const visible = authenticated ? series : series.filter((s) => s.classification !== "adult");

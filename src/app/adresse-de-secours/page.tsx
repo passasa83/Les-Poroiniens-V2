@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * La liste est saisie par le Gérant (Paramètres du site, §9.6) : seules des
+ * La liste est saisie par le Gérant (Paramètres du site) : seules des
  * URL http(s) valides sont rendues cliquables, les lignes fautives sont ignorées.
  */
 function safeUrls(raw: string | undefined): string[] {
@@ -28,7 +28,7 @@ function safeUrls(raw: string | undefined): string[] {
   return [...new Set(out)];
 }
 
-/** §5.4 : page d'adresse de secours, mise à jour depuis l'administration. */
+/** page d'adresse de secours, mise à jour depuis l'administration. */
 export default async function AdresseDeSecoursPage() {
   const settings = await getSettings().catch(() => ({}) as Record<string, string>);
   const urls = safeUrls(settings.adresses_secours);

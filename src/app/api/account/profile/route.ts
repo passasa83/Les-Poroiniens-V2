@@ -16,7 +16,7 @@ const PatchSchema = z.object({
 });
 
 /**
- * PATCH /api/account/profile — pseudo, bio, options de confidentialité (§7.2).
+ * PATCH /api/account/profile — pseudo, bio, options de confidentialité.
  * L'identité vient de la session serveur ; l'unicité du pseudo est vérifiée
  * avant écriture.
  */

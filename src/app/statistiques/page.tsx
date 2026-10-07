@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/* ── Périodes des graphiques (§6.8 : « graphiques semaine / mois / année ») ─ */
+/* ── Périodes des graphiques (« graphiques semaine / mois / année ») ─ */
 
 type Periode = "semaine" | "mois" | "annee";
 
@@ -122,7 +122,7 @@ function decimal(valeur: number): string {
   return valeur.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 }
 
-/* ── Régularité (§6.8 « … régularité ») ─────────────────────────────────── */
+/* ── Régularité (« … régularité ») ─────────────────────────────────── */
 
 type Regularite = {
   /** Jours avec au moins une page, sur les 30 derniers jours. */
@@ -365,7 +365,7 @@ export default async function StatistiquesPage({
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-fg">Statistiques</h1>
-          <p className="text-sm text-muted">Vos chiffres de lecture personnels (§6.8).</p>
+          <p className="text-sm text-muted">Vos chiffres de lecture personnels.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={publiques ? "ok" : "neutral"}>

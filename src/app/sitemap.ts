@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 
-/** Routes statiques principales (§14.9). */
+/** Routes statiques principales. */
 const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }> = [
   { path: "/", changeFrequency: "daily", priority: 1 },
   { path: "/catalogue", changeFrequency: "daily", priority: 0.9 },
@@ -45,7 +45,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const publishable = series.filter((s) => s.classification !== "adult" && s.slug);
 
-  // Chapitres publiés (§14.9) : le contenu +18 reste exclu du sitemap.
+  // Chapitres publiés : le contenu +18 reste exclu du sitemap.
   let chapters: Array<{ slug: string; numero: number }> = [];
   try {
     chapters = (

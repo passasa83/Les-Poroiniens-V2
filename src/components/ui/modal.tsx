@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
-/** Éléments focalisables d'une modale (§7 : « fermeture Échap, focus piégé »). */
+/** Éléments focalisables d'une modale (« fermeture Échap, focus piégé »). */
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 

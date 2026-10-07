@@ -4,7 +4,7 @@ import { login } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
- * §6.10 : on accepte un identifiant **ou** une adresse e-mail. `email` reste
+ * on accepte un identifiant **ou** une adresse e-mail. `email` reste
  * accepté pour les clients déjà en place (recettes, anciens formulaires).
  */
 const CredentialsSchema = z
@@ -23,7 +23,7 @@ const CredentialsSchema = z
   .refine((value) => value.identifier.length > 0, { message: "identifier" });
 
 /**
- * POST /api/auth/login — connexion (§14.2).
+ * POST /api/auth/login — connexion.
  * 10 tentatives / minute / IP, message d'erreur unique : aucune distinction
  * entre un identifiant inconnu et un mot de passe incorrect.
  */

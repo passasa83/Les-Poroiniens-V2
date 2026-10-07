@@ -12,7 +12,7 @@ function jsonError(error: string, code: string, status: number) {
 /**
  * POST /api/owner/drive/sync — synchronisation Google Drive des ressources de
  * séries (couvertures / métadonnées). Google Drive ne porte jamais les pages
- * de scans (§6.5) : cette action est donc réservée au Gérant (§4.3).
+ * de scans : cette action est donc réservée au Gérant.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     ip,
   });
 
-  // Le worker Appwrite / la cron Vercel prendra ce job en charge (§5.1).
+  // Le worker Appwrite / la cron Vercel prendra ce job en charge.
   await updateImportJob(job.id, { message: `${job.message} (job ${job.id})` });
 
   return Response.json({ job }, { status: 201 });

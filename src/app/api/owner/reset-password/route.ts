@@ -19,7 +19,7 @@ const resetInput = z.object({
 
 /**
  * POST /api/owner/reset-password — réinitialisation manuelle (Gérant).
- * Aucun mail n'étant envoyé au lancement (§14.3), l'admin saisit le nouveau
+ * Aucun mail n'étant envoyé au lancement, l'admin saisit le nouveau
  * mot de passe et le communique hors ligne. Le mot de passe n'est jamais
  * journalisé.
  */

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * État de maintenance (§6.12) : message clair + lien vers les annonces, qui
+ * État de maintenance : message clair + lien vers les annonces, qui
  * restent servies pendant l'intervention. La page est atteignable à tout moment
  * (aucun verrouillage de route) : elle décrit la situation sans bloquer le site.
  */

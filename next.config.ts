@@ -17,8 +17,8 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return {
       // L'App Router n'accepte que des segments dynamiques entiers (`[n]`).
-      // L'URL publique reste « canonique » `/serie/{slug}/chapitre-{n}`
-      // (cf. cahier des charges § URL) : on la réécrit vers la route interne.
+      // L'URL publique reste « canonique » `/serie/{slug}/chapitre-{n}` :
+      // on la réécrit vers la route interne.
       beforeFiles: [
         {
           source: "/serie/:slug/chapitre-:n",

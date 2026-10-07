@@ -16,12 +16,12 @@ import { Badge } from "@/components/ui/kit";
 import { SideNav, type NavSection } from "@/components/backoffice/side-nav";
 
 /**
- * Back-office administrateur (§9) : modération et contenu en lecture.
+ * Back-office administrateur : modération et contenu en lecture.
  * Le garde de rôle est repris ici : toutes les pages `/admin/*` héritent de
  * cette vérification, complétée par un contrôle propre à chaque page/API.
  *
  * Rubriques propres à l'admin — création/édition/suppression des séries et
- * import vivent dans l'espace Gérant (§4.2).
+ * import vivent dans l'espace Gérant.
  */
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();

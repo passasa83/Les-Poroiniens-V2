@@ -2,7 +2,7 @@ import "server-only";
 import { imageEnv } from "@/lib/media";
 
 /**
- * Purge ciblée du cache Cloudflare (§6.1) — best effort.
+ * Purge ciblée du cache Cloudflare — best effort.
  *
  * Avec des URLs versionnées par hash (`?v=`), une page remplacée change déjà
  * d'URL : la purge n'est qu'un filet de sécurité. Un échec n'interrompt donc

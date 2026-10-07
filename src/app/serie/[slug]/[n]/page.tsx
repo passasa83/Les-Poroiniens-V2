@@ -41,7 +41,7 @@ function chapterHref(slug: string, numero: number): string {
 
 /** Ressource absente : `notFound()` est lancé dans une réponse streamée
  *  (loading.tsx) et laisse un statut 200 — on exclut donc la page des
- *  index (atténuation officielle Next, §11.2 « pas d'indexation parasite »). */
+ * index (atténuation officielle Next « pas d'indexation parasite »). */
 const INCOUVERT: Metadata = {
   title: "Chapitre introuvable",
   robots: { index: false, follow: false },
@@ -64,7 +64,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return {
     title,
     description,
-    // Contenu +18 : noindex + meta rating (§11.2)
+    // Contenu +18 : noindex + meta rating
     robots: isAdult ? { index: false, follow: false } : { index: true, follow: true },
     openGraph: {
       title,
@@ -86,7 +86,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   await publishDueChaptersOnDemand();
 
   const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
-  // Aperçu des brouillons réservé au Gérant (§5.1, étape 4) : les pages sont
+  // Aperçu des brouillons réservé au Gérant (étape 4) : les pages sont
   // alors servies avec des URLs signées à 10 minutes.
   const allowDraft = Boolean(user && can(user.role, "publish_chapter"));
 
@@ -112,7 +112,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   const prevHref = context.prev ? chapterHref(series.slug, context.prev.numero) : null;
   const nextHref = context.next ? chapterHref(series.slug, context.next.numero) : null;
 
-  /* Fin de chapitre (§6.6) : recommandations éditoriales « end_chapter »,
+  /* Fin de chapitre : recommandations éditoriales « end_chapter »,
      repli sur les séries similaires (jamais bloquant). */
   const adultOk = !isAdult || gateOk;
   const recommandees = needsGate
@@ -124,7 +124,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
     href: chapterHref(series.slug, c.numero),
   }));
 
-  /* §6.12 « chapitre indisponible » : le chapitre existe mais aucune page ne
+  /* « chapitre indisponible » : le chapitre existe mais aucune page ne
      se charge → message précis + Réessayer / Signaler, sans le lecteur. */
   const indisponible = !needsGate && context.pages.length === 0;
 
@@ -245,7 +245,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
 
           {navigation}
 
-          {/* Fin de chapitre (§6.6) : suite de la lecture ou suggestions. */}
+          {/* Fin de chapitre : suite de la lecture ou suggestions. */}
           {recommandees.length > 0 && (
             <section className="container-site" aria-labelledby="recommandees-titre">
               <h2 className="section-title" id="recommandees-titre">
@@ -272,7 +272,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
 }
 
 /**
- * Séries proposées en fin de chapitre (§6.6) : recommandations éditoriales
+ * Séries proposées en fin de chapitre : recommandations éditoriales
  * placées en « end_chapter », sinon repli sur les séries similaires de la
  * série en cours. Quatre suggestions au maximum, jamais la série elle-même.
  */

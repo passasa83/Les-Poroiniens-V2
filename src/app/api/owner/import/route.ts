@@ -29,19 +29,19 @@ const importInput = z.object({
   titre: z.string().trim().max(200).default(""),
   volume: z.number().int().min(1).max(999).nullable().default(null),
   classification: z.enum(["all", "adult"]).default("all"),
-  /** `upload` : noms déposés ; `nas` : dossier déjà présent sur le NAS (§5.1) ;
+  /** `upload` : noms déposés ; `nas` : dossier déjà présent sur le NAS ;
    *  `imgchest` : album ImgChest déjà publié par le Gérant. */
   source: z.enum(["upload", "nas", "imgchest"]).default("upload"),
-  /** Dossier du NAS : si renseigné, le listing est fait **côté serveur** (§4.1). */
+  /** Dossier du NAS : si renseigné, le listing est fait **côté serveur**. */
   chemin: z.string().trim().max(500).optional(),
   /** Identifiant d'album ImgChest (`qe4gwgozq7j`) : résolu côté serveur. */
   imgchest_post: z.string().trim().max(64).optional(),
   /** Noms de fichiers uniquement (les octets ne transitent pas par Vercel). */
   pages: z.array(z.string().trim().min(1).max(255)).max(5000).default([]),
-  /** Brouillon (défaut), programmé ou publié directement (§5.1, étape 4). */
+  /** Brouillon (défaut), programmé ou publié directement (étape 4). */
   statut: z.enum(["draft", "scheduled", "published"]).default("draft"),
   publish_at: z.string().datetime({ offset: true }).nullable().default(null),
-  /** Import par lot (§10.2) : chapitre rattaché au job ouvert par l'interface. */
+  /** Import par lot : chapitre rattaché au job ouvert par l'interface. */
   batch: z
     .object({
       jobId: z.string().trim().min(1).max(64),
@@ -52,7 +52,7 @@ const importInput = z.object({
     .default(null),
 });
 
-/** Tri naturel : `page 2` avant `page 10` (§10.2). */
+/** Tri naturel : `page 2` avant `page 10`. */
 function naturalSort(names: string[]): string[] {
   return [...names].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
 }
@@ -66,13 +66,13 @@ type IndexedPage = {
 };
 
 /**
- * POST /api/owner/import — import d'un chapitre (Gérant exclusif, §5).
+ * POST /api/owner/import — import d'un chapitre (Gérant exclusif).
  *
  * Trois sources d'indexation :
  * - `imgchest` : album déjà publié par le Gérant — les URLs CDN du fichier
  *   sont résolues ici puis stockées en base (la lecture n'appelle pas ImgChest) ;
  * - `chemin` renseigné : listing serveur via `GET /list` — largeurs, hauteurs,
- *   poids et hash sont lus sur le NAS puis stockés en base (§5.2) ;
+ *   poids et hash sont lus sur le NAS puis stockés en base ;
  * - sinon : indexation des seuls noms, avec pages de démonstration si le NAS
  *   n'est pas configuré (dégradé assumé pour remplir et tester le site).
  */
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // ── Indexation des pages (§5.1, étape 3) ─────────────────────────────
+  // ── Indexation des pages (étape 3) ─────────────────────────────
   let indexed: IndexedPage[];
   let storage: "nas" | "demo" | "imgchest";
 
@@ -253,7 +253,7 @@ export async function POST(request: Request) {
       statut: data.statut,
       publish_at: publishAt,
       source: (imgchestId ? "imgchest" : "nas") as Chapter["source"],
-      // dénormalisé pour les filtres de « Dernières sorties » (§6.1)
+      // dénormalisé pour les filtres de « Dernières sorties »
       series_type: series.type,
       nb_pages: indexed.length,
       classification: data.classification || series.classification,
@@ -284,7 +284,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // ── Publication immédiate : staging → public + purge (§5.1, étape 5) ──
+    // ── Publication immédiate : staging → public + purge (étape 5) ──
     let nas: FileTransition | undefined;
     if (data.statut === "published") {
       nas = await transitionChapterFiles(chapter, "publish");

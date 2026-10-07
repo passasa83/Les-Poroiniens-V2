@@ -48,7 +48,7 @@ function n(value: number): string {
   return value.toLocaleString("fr-FR");
 }
 
-/** Tableau de bord du back-office (§9.1). */
+/** Tableau de bord du back-office. */
 export default async function AdminDashboard() {
   const user = await getCurrentUser();
   if (!atLeast(user?.role, "admin")) return <AccessDenied required="admin" />;
@@ -67,7 +67,7 @@ export default async function AdminDashboard() {
 
   /* Masquage du jeu de démonstration en production : KPI et classements du
      back-office ne comptent que le catalogue réellement visible. Les séries
-     archivées sont hors catalogue public (§9.2) : elles sortent des classements. */
+     archivées sont hors catalogue public : elles sortent des classements. */
   const toutes = exclureDemo(seriesRes.items);
   const archivees = toutes.filter((s) => s.statut === "archive");
   const series = toutes.filter((s) => s.statut !== "archive");
@@ -272,7 +272,7 @@ export default async function AdminDashboard() {
           <p className="mt-3 text-xs text-muted">
             {mode === "demo"
               ? "Mesure indisponible en mode démonstration (aucun trafic réel, aucun CDN)."
-              : "Valeur par défaut : la mesure détaillée sera alimentée par le CDN devant le NAS (§5.3), avec alerte au-delà du seuil configuré. En attendant, l’affichage reste à 0 %."}
+              : "Valeur par défaut : la mesure détaillée sera alimentée par le CDN devant le NAS, avec alerte au-delà du seuil configuré. En attendant, l’affichage reste à 0 %."}
           </p>
         </Card>
       </div>
@@ -310,7 +310,7 @@ export default async function AdminDashboard() {
               value={nasConfigured ? "Configuré" : "Non connecté"}
               tone={nasConfigured ? "ok" : "neutral"}
             />
-            <HealthRow label="Dernier backup" value="Non planifié" tone="warn" hint="Sauvegarde quotidienne à mettre en place (§5.5)." />
+            <HealthRow label="Dernier backup" value="Non planifié" tone="warn" hint="Sauvegarde quotidienne à mettre en place." />
           </ul>
         </Card>
 

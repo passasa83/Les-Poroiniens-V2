@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 
 /**
- * Enregistrement discret du service worker (PWA, §5.4 « installation jamais
- * bloquante », §8.3 « PWA installable »).
+ * Enregistrement discret du service worker (PWA, « installation jamais
+ * bloquante », « PWA installable »).
  *
  * - aucun affichage, aucune invitation : l'utilisateur n'est jamais dérangé ;
  * - **production uniquement** : pendant `next dev`, aucun worker n'est

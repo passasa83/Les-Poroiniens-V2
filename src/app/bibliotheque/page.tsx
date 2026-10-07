@@ -36,7 +36,7 @@ const STATUT_LABELS: Record<LibraryStatus, string> = {
   abandonne: "Abandonné",
 };
 
-/** Onglets de la bibliothèque (§6.7) : Tout, statuts, Favoris. */
+/** Onglets de la bibliothèque : Tout, statuts, Favoris. */
 type OngletBiblio = "tout" | LibraryStatus | "favoris";
 
 const ONGLETS: Array<{ cle: OngletBiblio; label: string }> = [
@@ -65,7 +65,7 @@ function titreDe(row: LibraryDashboardRow): string {
 
 /**
  * Lien de lecture de la carte : bouton **Reprendre** en cas de reprise
- * (§6.7), sinon premier chapitre paru. Le contexte exact (chapitre, page)
+ * sinon premier chapitre paru. Le contexte exact (chapitre, page)
  * est porté par l'`aria-label`, le libellé visible reste court.
  */
 function lienChapitre(row: LibraryDashboardRow): {
@@ -96,7 +96,7 @@ function lienChapitre(row: LibraryDashboardRow): {
   };
 }
 
-/** Barre de progression + dernier chapitre lu + badge « +N non lus » (§6.7). */
+/** Barre de progression + dernier chapitre lu + badge « +N non lus ». */
 function Progression({ row }: { row: LibraryDashboardRow }) {
   const titre = titreDe(row);
   const pourcent = row.progression;
@@ -141,7 +141,7 @@ function Progression({ row }: { row: LibraryDashboardRow }) {
   );
 }
 
-/** Bouton de reprise collé à la carte (§6.7). */
+/** Bouton de reprise collé à la carte. */
 function BoutonReprendre({ row, className }: { row: LibraryDashboardRow; className?: string }) {
   const lien = lienChapitre(row);
   if (!lien) return null;
@@ -309,7 +309,7 @@ export default async function BibliothequePage({
     return row.entry.statut === ongletActif;
   });
 
-  /* Tri (§6.7) : dernière lecture, nouveautés, titre, note. */
+  /* Tri : dernière lecture, nouveautés, titre, note. */
   const comparateurs: Record<TriBiblio, (a: LibraryDashboardRow, b: LibraryDashboardRow) => number> = {
     // Les séries jamais lues ferment la marche (chaîne vide avant les dates).
     lecture: (a, b) =>
@@ -326,7 +326,7 @@ export default async function BibliothequePage({
   };
   const triRows = [...filtre].sort(comparateurs[triActif]);
 
-  /* Onglets (§6.7) : libellés du cahier des charges + compteurs. */
+  /* Onglets : libellés + compteurs. */
   const compteurs = new Map<string, number>(
     (Object.keys(STATUT_LABELS) as LibraryStatus[]).map((key) => [
       key,

@@ -1,6 +1,6 @@
 /**
  * Types échangés entre les routes serveur et les composants clients de
- * l'accueil (§6.1). Volontairement réduits au strict nécessaire : ni les
+ * l'accueil. Volontairement réduits au strict nécessaire : ni les
  * chapitres complets ni les objets séries ne quittent le serveur.
  */
 import type { Classification, SeriesType } from "@/lib/types";

@@ -104,7 +104,7 @@ function decodePath(value: string): string {
 
 /**
  * GET /api/owner/nas/scan?path=&series_id= — analyse d'un dossier de série
- * avant import par lot (§10.2).
+ * avant import par lot.
  *
  * Une seule requête vers le NAS (`/tree`) plus, au plus, une requête `/list`
  * par dossier **non encore importé** : les chapitres déjà en base sont

@@ -1,4 +1,4 @@
-/** Onglets de la page Mon compte (§6.8 « Réglages »), partagés serveur/client. */
+/** Onglets de la page Mon compte (« Réglages »), partagés serveur/client. */
 export const SECTIONS = [
   "profil",
   "preferences",

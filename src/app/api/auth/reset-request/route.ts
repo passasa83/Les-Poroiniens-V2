@@ -11,7 +11,7 @@ const RequestSchema = z.object({
 /**
  * POST /api/auth/reset-request — demande de réinitialisation de mot de passe.
  *
- * Aucun fournisseur de mails au lancement (§14.3) : la réinitialisation est
+ * Aucun fournisseur de mails au lancement : la réinitialisation est
  * manuelle, réalisée par le Gérant depuis le back-office. La demande est
  * enregistrée par une notification in-app envoyée à tous les profils `owner`
  * plus une entrée au journal d'audit.

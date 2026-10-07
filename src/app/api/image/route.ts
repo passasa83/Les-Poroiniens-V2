@@ -5,7 +5,7 @@ import { nasHeaders } from "@/lib/nas";
 export const runtime = "nodejs";
 
 /**
- * Proxy d'images vers le NAS (§5.3) : n'utilisé qu'en l'absence de CDN.
+ * Proxy d'images vers le NAS : n'utilisé qu'en l'absence de CDN.
  * Le NAS n'est jamais exposé directement : clé côté serveur, chemin validé,
  * en-tête de cache long pour que le CDN en amont puisse absorber les lectures.
  */
