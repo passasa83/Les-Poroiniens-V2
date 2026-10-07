@@ -18,7 +18,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { pseudo } = await params;
   const profile = await getProfileByPseudo(pseudo);
-  if (!profile) return { title: "Profil introuvable" };
+  if (!profile) {
+    /* `notFound()` peut être streamé en 200 (loading racine) : on retire la
+       page des index, comme sur la fiche série et l'annonce. */
+    return { title: "Profil introuvable", robots: { index: false, follow: false } };
+  }
   return {
     title: `${profile.pseudo} — profil`,
     description: profile.bio ? profile.bio.slice(0, 160) : `Profil public de ${profile.pseudo}.`,
