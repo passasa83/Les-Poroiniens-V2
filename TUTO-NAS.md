@@ -244,75 +244,123 @@ directs sont servables).
 
 ---
 
-## Étape 6 — API de listing du NAS : tout le contenu par ton NAS (15 min)
+## Étape 6 — API de listing du NAS : tout le contenu par ton NAS
 
 Le nginx statique (étape 3) sert les fichiers mais ne sait pas **lister**
 les dossiers : le site a besoin de `GET /list`, `/tree`, `/health`, `/move`
 et `/file` (cahier images §4). Le service est fourni dans le dépôt :
 `nas-api/server.mjs` (Node zéro dépendance), `Dockerfile`,
-`docker-compose.yml`.
+`docker-compose.yml`, `.env.example`.
 
-### 6.1 Récupérer les fichiers sur le NAS
+Schéma final :
 
-Si le dépôt est déjà cloné sur le NAS (annexe A) : `git pull`.
-Sinon, depuis ton PC (mot de passe SSH demandé) :
+```
+Lecteur / Gérant  →  https://img.…/Vol2.jpg        → NPM → nginx statique (:ro)
+                  →  https://img.…/api/list?path=… → NPM → nas-api (:rw, clé)
+```
+
+### 6.1 Prérequis (2 min)
+
+En SSH sur le NAS (port 2000) :
+
+```bash
+docker --version && docker compose version   # les deux répondent
+docker ps --format '{{.Names}}\t{{.Ports}}'  # repère les ports pris
+```
+
+Il faut un port LAN libre pour l'API (exemple : **8660** — remplace partout
+si pris). Vérifie aussi que le conteneur `poroiniens-images` tourne
+(étape 3) : c'est **son** dossier d'images que l'API va lire.
+
+Retrouve le chemin physique exact de tes images (à réutiliser tel quel) :
+
+```bash
+docker inspect poroiniens-images --format '{{ range .Mounts }}{{ .Source }}:{{ .Destination }} {{ end }}'
+# → /srv/dev-disk-by-uuid-xxxx-xxxx/…/poroiniens:/usr/share/nginx/html …
+#   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ = IMAGES_PATH
+```
+
+### 6.2 Copier les fichiers du service (3 min)
+
+**Option A — `scp` depuis ton PC** (mot de passe SSH demandé) :
 
 ```powershell
 scp -P 2000 -r nas-api root@IP-DU-NAS:/root/poroiniens-nas-api
 ```
 
-### 6.2 Configurer et démarrer
+**Option B — dépôt cloné sur le NAS** (annexe A) : `git pull` suffit, les
+fichiers sont dans `Les-Poroiniens-V2/nas-api`. Mises à jour suivantes :
+`git pull` + `docker compose up -d --build`.
 
-En SSH sur le NAS (port 2000) :
+Dans la suite, `DOSSIER-API` = `/root/poroiniens-nas-api` (option A) ou
+`…/Les-Poroiniens-V2/nas-api` (option B).
+
+### 6.3 Créer le `.env` (3 min, jamais commité)
 
 ```bash
-cd /root/poroiniens-nas-api   # ou le clone du dépôt : Les-Poroiniens-V2/nas-api
+cd DOSSIER-API
 cp .env.example .env
 nano .env
 ```
 
-Renseigne `IMAGES_PATH` = le dossier physique des images (le même que le
-montage `:ro` du conteneur nginx, étape 3.3), par exemple
-`/srv/dev-disk-by-uuid-xxxx-xxxx/Nas/Dev/poroiniens`.
-Génère une clé (`openssl rand -hex 24`) pour `NAS_API_KEY` et reporte la
-**même** valeur dans `.env.local` et Vercel (`NAS_API_KEY`) — sans elle, le
-site ne pourra plus interroger l'API.
+| Variable | Valeur |
+|---|---|
+| `IMAGES_PATH` | chemin physique de l'étape 6.1 (**obligatoire**, sinon le compose refuse de démarrer) |
+| `API_PORT` | `8660` (ou ton port libre) |
+| `NAS_API_KEY` | **conseillé** : génère avec `openssl rand -hex 24`. Exigée pour `POST /move`, et pour toutes les routes si définie. Reporte la **même** valeur dans `.env.local` et Vercel (`NAS_API_KEY`), sinon le site ne pourra plus interroger l'API. |
+| `RATE_LIMIT_PER_MIN` | `600` (laisse défaut : l'import liste des milliers de dossiers, ne pas descendre sous 300) |
+
+Sans `NAS_API_KEY`, les lectures restent ouvertes mais `POST /move` est
+refusé avec `403 move_requires_api_key` — jamais d'écriture anonyme sur
+tes images.
+
+### 6.4 Démarrer et vérifier en local (3 min)
 
 ```bash
+cd DOSSIER-API
 docker compose up -d --build
 docker ps --filter name=poroiniens-nas-api     # STATUS = Up
+docker logs poroiniens-nas-api --tail 5         # … "nas-api ready" …
+```
+
+Tests (remplace `TA_CLE` ; sans clé configurée, omet `-H`) :
+
+```bash
 curl -s -H "X-Api-Key: TA_CLE" http://localhost:8660/health
 # → {"status":"ok","disk_free_pct":…,"version":"nas-api/1.0.0",…}
 curl -s -H "X-Api-Key: TA_CLE" "http://localhost:8660/tree?path=/" | head -c 300
 # → [{"name":"…","path":"…","type":"dir",…}]
+curl -s -H "X-Api-Key: TA_CLE" "http://localhost:8660/list?path=UNE_SERIE%2FChapitre%201" | head -c 300
+# → [{"name":"001.png","path":"UNE_SERIE%2FChapitre%201%2F001.png","width":…,"hash":"…",…}]
 ```
 
-(Sans clé configurée, les lectures restent ouvertes mais `POST /move` est
-refusé — jamais d'écriture anonyme sur tes images.)
+Si `disk_free_pct` est sous `15`, le cron du site t'alertera : c'est le
+seuil normal, pas une erreur.
 
-### 6.3 Exposer `/api` dans Nginx Proxy Manager
+### 6.5 Exposer `/api` dans Nginx Proxy Manager (4 min)
 
-Sur l'hôte proxy **existant** `img.lesporoiniens.duckdns.org` (celui des
-images), ajoute une **Custom Location** :
+1. NPM → **Hosts → Proxy Hosts** → ⋮ sur `img.lesporoiniens.duckdns.org` →
+   **Edit**.
+2. Onglet **Custom Locations** → **Add Location** :
+   - **Location** : `/api`
+   - **Scheme** : `http`
+   - **Forward Hostname / IP** : `IP-DU-NAS` (l'IP LAN, ex. `192.168.1.x`)
+   - **Forward Port** : `8660` (ou `API_PORT`)
+   - Laisse les options cache/websocket par défaut.
+3. **Save**. Le service accepte le préfixe `/api` avec ou sans : aucune
+   réécriture à configurer.
 
-| Champ | Valeur |
-|---|---|
-| Location | `/api` |
-| Scheme | `http` |
-| Forward Hostname / IP | `IP-DU-NAS` |
-| Forward Port | `8660` (ou `API_PORT` si changé) |
-
-Le service accepte le préfixe `/api` avec ou sans (aucune réécriture à
-configurer côté NPM). Test public :
+Tests publics depuis ton PC :
 
 ```bash
 curl -s -H "X-Api-Key: TA_CLE" "https://img.lesporoiniens.duckdns.org/api/health"
-curl -s -H "X-Api-Key: TA_CLE" "https://img.lesporoiniens.duckdns.org/api/list?path=..." | head -c 300
+curl -s -H "X-Api-Key: TA_CLE" "https://img.lesporoiniens.duckdns.org/api/tree?path=/" | head -c 200
 ```
 
-Aucune collision : aucune racine de série ne commence par `api`.
+Aucune collision : aucune racine de série ne commence par `api`, et en
+nginx le préfixe le plus long (`/api`) gagne sur `/`.
 
-### 6.4 Basculer le site (c'est moi qui le fais après ton OK)
+### 6.6 Basculer le site (c'est moi qui le fais après ton OK)
 
 1. `.env.local` : `NAS_API_BASE=https://img.lesporoiniens.duckdns.org/api`
    (+ `NAS_API_KEY=…`), puis recettes locales (import Gérant, `/api/image`,
@@ -321,6 +369,19 @@ Aucune collision : aucune racine de série ne commence par `api`.
    `NAS_API_BASE` et `NAS_API_KEY`, puis **Redeploy**.
 3. Recette visuelle de prod : une fiche série + un chapitre + écran
    d'import Gérant.
+
+### 6.7 Dépannage
+
+| Symptôme | Cause / solution |
+|---|---|
+| `docker compose` : `IMAGES_PATH … is not set` | `.env` absent ou mal renseigné → revoir 6.3 (le fichier doit être à côté du compose). |
+| Port déjà pris (`bind: address already in use`) | `docker ps` pour repérer, changer `API_PORT` dans `.env` (et reporter dans NPM). |
+| `curl` local → `401 unauthorized` | Mauvaise `X-Api-Key` (ou oubliée) → comparer avec `NAS_API_KEY` du `.env`. |
+| `/api/health` public → 404 du nginx | Custom Location mal posée (vérifier `/api`, scheme `http`, port) ou conteneur arrêté. |
+| `/list` → `500 ENOENT` | `path` inexistant (normal : dossier absent) ou `IMAGES_PATH` qui ne pointe pas sur les images → comparer avec `docker inspect` (6.1). |
+| `/move` → `403 move_requires_api_key` | Normal sans `NAS_API_KEY` côté service → en générer une (6.3). |
+| `/move` → `403 move_restricted_to_staging_public` | Normal : seuls `staging/` et `public/` sont déplaçables (§5.1). |
+| Logs en direct | `docker logs -f poroiniens-nas-api` (une ligne JSON par appel). |
 
 ---
 
