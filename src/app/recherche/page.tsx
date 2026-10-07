@@ -12,7 +12,7 @@ import {
 import { CatalogueGrid } from "@/components/series/catalogue-card";
 import { FilterDrawer, SortMenu } from "@/components/series/catalogue-controls";
 import { EmptyState, Pagination } from "@/components/ui/kit";
-import { adultGateAccepted } from "@/lib/auth";
+import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { allSeries, listSeries, popularSeries } from "@/lib/data/series";
 import {
   SERIES_STATUT_LABELS,
@@ -89,9 +89,10 @@ export default async function RecherchePage({
   });
   const p = parsed.success ? parsed.data : {};
 
-  const gateOk = await adultGateAccepted();
+  const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
   const adultParam = p.adult === "1";
-  const includeAdult = gateOk || adultParam;
+  // Même règle que le catalogue (§11) : +18 réservé aux membres.
+  const includeAdult = gateOk || (adultParam && Boolean(user));
   const showGate = adultParam && !gateOk;
   const query = (p.q ?? "").trim();
 
@@ -111,7 +112,7 @@ export default async function RecherchePage({
     const suggestions = await popularSeries(12, includeAdult);
     return (
       <div className="container-site space-y-5 py-8">
-        {showGate && <AdultGate open next="/recherche" />}
+        {showGate && <AdultGate open next="/recherche" authenticated={Boolean(user)} />}
         <div>
           <h1 className="section-title text-2xl">Recherche</h1>
           <p className="mt-1 text-sm text-muted">
@@ -125,7 +126,7 @@ export default async function RecherchePage({
             Suggestions populaires
           </h2>
           {suggestions.length > 0 ? (
-            <CatalogueGrid series={suggestions} adultAllowed={gateOk} />
+            <CatalogueGrid series={suggestions} adultAllowed={gateOk} authenticated={Boolean(user)} />
           ) : (
             <EmptyState
               title="Aucune suggestion"
@@ -223,7 +224,7 @@ export default async function RecherchePage({
 
   return (
     <div className="container-site space-y-5 py-8">
-      {showGate && <AdultGate open next="/recherche" />}
+      {showGate && <AdultGate open next="/recherche" authenticated={Boolean(user)} />}
 
       <div className="space-y-3">
         <div>
@@ -268,7 +269,7 @@ export default async function RecherchePage({
         />
       ) : (
         <>
-          <CatalogueGrid series={result.items} adultAllowed={gateOk} />
+          <CatalogueGrid series={result.items} adultAllowed={gateOk} authenticated={Boolean(user)} />
           <Pagination
             page={result.page}
             pageCount={result.pageCount}

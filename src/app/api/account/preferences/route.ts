@@ -1,6 +1,7 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
+import { ADULT_COOKIE, getCurrentUser } from "@/lib/auth";
 import { getProfile, updatePreferences } from "@/lib/data/users";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DEFAULT_PREFERENCES, type UserPreferences } from "@/lib/types";
@@ -76,5 +77,10 @@ export async function PATCH(request: Request) {
   }
 
   const preferences: UserPreferences = await updatePreferences(user.id, parsed.data);
+  // Opt-out §11 : le cookie visiteur ne doit pas rouvrir la porte coupée
+  // côté compte (voir `updatePreferences`, révocation effective).
+  if (parsed.data.adult_ok === false) {
+    (await cookies()).set(ADULT_COOKIE, "", { path: "/", maxAge: 0 });
+  }
   return NextResponse.json({ ok: true, preferences });
 }

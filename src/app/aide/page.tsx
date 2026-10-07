@@ -142,8 +142,9 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
           .
         </li>
         <li>
-          <strong className="text-fg">Contenu +18 invisible :</strong> la porte d&apos;accès
-          +18 doit être validée pour afficher ce catalogue.
+          <strong className="text-fg">Contenu +18 invisible :</strong> il faut un
+          compte, puis valider la porte d&apos;accès +18 (une seule fois, dans
+          vos préférences ou à l&apos;ouverture d&apos;un contenu adulte).
         </li>
       </ul>
     ),

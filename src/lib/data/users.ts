@@ -85,7 +85,11 @@ export async function updatePreferences(
 
   await getDb().update<Profile>(TABLES.profiles, userId, {
     preferences: merged,
-    ...(merged.adult_ok ? { adult_ok: true, adult_ok_at: new Date().toISOString() } : {}),
+    // Révocation effective (§11) : couper l'opt-out doit refermer la porte,
+    // sinon la préférence « Afficher le contenu +18 » serait décorative.
+    ...(merged.adult_ok
+      ? { adult_ok: true, adult_ok_at: new Date().toISOString() }
+      : { adult_ok: false, adult_ok_at: null }),
   });
   return merged;
 }

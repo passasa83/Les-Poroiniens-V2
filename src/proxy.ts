@@ -122,6 +122,27 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // §11 : +18 réservé aux membres. Sans cookie de session, l'utilisateur
+  // est forcément visiteur → redirection immédiate vers la connexion. (Un
+  // redirect() dans la page arriverait trop tard : le layout a déjà streamé
+  // l'en-tête en 200.) Avec cookie, la page tranche (session expirée ou
+  // membre sans opt-in → modale adaptée, jamais de contenu servi).
+  if (pathname.startsWith("/serie/") && !request.cookies.has("lp_session")) {
+    const match = SERIE_ROUTE.exec(pathname);
+    const slug = match ? decode(match[1]) : "";
+    if (slug) {
+      try {
+        const serie = await getSeriesBySlug(slug);
+        if (serie && serie.classification === "adult") {
+          const next = encodeURIComponent(`${pathname}${request.nextUrl.search}`);
+          return NextResponse.redirect(new URL(`/connexion?next=${next}`, request.url));
+        }
+      } catch {
+        // Fail-open : sans base, on sert la page (qui affichera son propre état).
+      }
+    }
+  }
+
   // §6.12 : série ou chapitre inexistant → 404 réel (voir INTROUVABLE).
   if (pathname.startsWith("/serie/") && (await ressourceAbsente(pathname))) {
     return NextResponse.rewrite(new URL(INTROUVABLE, request.url));

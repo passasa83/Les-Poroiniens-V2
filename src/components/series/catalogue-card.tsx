@@ -65,13 +65,17 @@ export function CatalogueCard({
 export function CatalogueGrid({
   series,
   adultAllowed = false,
+  authenticated = false,
 }: {
   series: Series[];
   adultAllowed?: boolean;
+  /** Visiteur : les séries +18 sont exclues (cloisonnement §11). */
+  authenticated?: boolean;
 }) {
+  const visible = authenticated ? series : series.filter((s) => s.classification !== "adult");
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
-      {series.map((s) => (
+      {visible.map((s) => (
         <CatalogueCard key={s.id} series={s} adultAllowed={adultAllowed} />
       ))}
     </div>

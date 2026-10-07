@@ -12,7 +12,7 @@ import {
 import { CatalogueGrid } from "@/components/series/catalogue-card";
 import { FilterDrawer, SortMenu } from "@/components/series/catalogue-controls";
 import { EmptyState, Pagination } from "@/components/ui/kit";
-import { adultGateAccepted } from "@/lib/auth";
+import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { allSeries, listSeries } from "@/lib/data/series";
 import { SERIES_STATUT_LABELS, SERIES_TYPE_LABELS, type SeriesStatus, type SeriesType } from "@/lib/types";
 
@@ -84,14 +84,13 @@ export default async function CataloguePage({
   });
   const p = parsed.success ? parsed.data : {};
 
-  const gateOk = await adultGateAccepted();
+  const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
   const adultParam = p.adult === "1";
-  // Le contenu +18 n'apparaît qu'après validation du gate, ou sur demande
-  // explicite via ?adult=1 (auquel cas le gate s'affiche, §11). Tant que le
-  // gate n'est pas validé, les cartes restent listées mais **floutées**
-  // (adultAllowed={gateOk}, §10 « couverture floutée tant que le gate n'est
-  // pas validé »).
-  const includeAdult = gateOk || adultParam;
+  // Le contenu +18 n'apparaît qu'après validation du gate par un membre, ou
+  // sur demande explicite via ?adult=1 **connecté** (auquel cas le gate
+  // s'affiche, §11). Les visiteurs ne voient jamais le +18, même sur demande :
+  // la modale les invite à se connecter.
+  const includeAdult = gateOk || (adultParam && Boolean(user));
   const showGate = adultParam && !gateOk;
 
   const isOneShot = p.statut === "one_shot";
@@ -186,7 +185,7 @@ export default async function CataloguePage({
 
   return (
     <div className="container-site space-y-5 py-8">
-      {showGate && <AdultGate open next="/catalogue" />}
+      {showGate && <AdultGate open next="/catalogue" authenticated={Boolean(user)} />}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -245,7 +244,7 @@ export default async function CataloguePage({
             searchParams={keep}
             className="mt-6"
           />
-          <CatalogueGrid series={result.items} adultAllowed={gateOk} />
+          <CatalogueGrid series={result.items} adultAllowed={gateOk} authenticated={Boolean(user)} />
           <Pagination
             page={result.page}
             pageCount={result.pageCount}

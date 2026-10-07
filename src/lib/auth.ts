@@ -332,11 +332,17 @@ export async function logout() {
 
 /* ── Porte +18 ───────────────────────────────────────────────────────── */
 
+/**
+ * Porte +18 (§11) : réservée aux **membres connectés** ayant validé la
+ * déclaration d'âge (cookie 30 jours ou préférence `adult_ok` du compte).
+ * Les visiteurs n'y ont jamais accès, même avec un ancien cookie.
+ */
 export async function adultGateAccepted(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
   const store = await cookies();
   if (store.get(ADULT_COOKIE)?.value === "1") return true;
-  const user = await getCurrentUser();
-  return Boolean(user?.adult_ok);
+  return Boolean(user.adult_ok);
 }
 
 /** Mémorise le choix du gate : cookie (visiteur) + préférence du compte (membre). */

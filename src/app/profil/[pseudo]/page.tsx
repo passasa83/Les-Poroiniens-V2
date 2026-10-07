@@ -132,7 +132,7 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
             }
           />
         ) : (
-          <SeriesGrid series={series} adultAllowed={adult} />
+          <SeriesGrid series={series} adultAllowed={adult} authenticated={Boolean(viewer)} />
         )}
       </section>
 

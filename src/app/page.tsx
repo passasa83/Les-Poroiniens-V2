@@ -166,7 +166,7 @@ export default async function HomePage() {
             icon={<Sparkles className="size-4" />}
           />
           <div className="mt-4">
-            <SeriesGrid series={nouveautes.items} adultAllowed={adult} />
+            <SeriesGrid series={nouveautes.items} adultAllowed={adult} authenticated={Boolean(user)} />
           </div>
         </section>
       )}
@@ -180,7 +180,7 @@ export default async function HomePage() {
             icon={<Sparkles className="size-4" />}
           />
           <div className="mt-4">
-            <SeriesGrid series={recoSeries} adultAllowed={adult} />
+            <SeriesGrid series={recoSeries} adultAllowed={adult} authenticated={Boolean(user)} />
           </div>
         </section>
       )}

@@ -192,7 +192,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
 
       {needsGate ? (
         <div className="container-site space-y-4">
-          <AdultGate open next={href} />
+          <AdultGate open next={href} authenticated={Boolean(user)} />
           <div className="card flex flex-col items-center gap-3 p-8 text-center">
             <Lock className="size-8 text-adult" />
             <p className="section-title">Contenu réservé aux adultes</p>
@@ -252,7 +252,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
                 Séries recommandées
               </h2>
               <div className="mt-4">
-                <SeriesGrid series={recommandees} adultAllowed={adultOk} />
+                <SeriesGrid series={recommandees} adultAllowed={adultOk} authenticated={Boolean(user)} />
               </div>
             </section>
           )}

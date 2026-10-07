@@ -68,12 +68,16 @@ export function SeriesCard({
 export function SeriesGrid({
   series,
   adultAllowed = false,
+  authenticated = false,
   className,
 }: {
   series: Series[];
   adultAllowed?: boolean;
+  /** Visiteur : les séries +18 sont exclues (cloisonnement §11). */
+  authenticated?: boolean;
   className?: string;
 }) {
+  const visible = authenticated ? series : series.filter((s) => s.classification !== "adult");
   return (
     <div
       className={clsx(
@@ -81,7 +85,7 @@ export function SeriesGrid({
         className,
       )}
     >
-      {series.map((s) => (
+      {visible.map((s) => (
         <SeriesCard key={s.id} series={s} adultAllowed={adultAllowed} />
       ))}
     </div>

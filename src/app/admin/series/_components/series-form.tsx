@@ -295,7 +295,7 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
           <Field
             label="Classification"
             htmlFor="s-classification"
-            hint="Le contenu +18 reste masqué derrière la déclaration d'âge (§11)."
+            hint="Le contenu +18 reste réservé aux membres connectés ayant validé la déclaration d'âge (§11)."
           >
             <Select
               id="s-classification"

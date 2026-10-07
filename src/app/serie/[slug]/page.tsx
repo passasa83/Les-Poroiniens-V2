@@ -182,7 +182,7 @@ export default async function SeriePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       {isAdult && <meta name="rating" content="adult" />}
-      {needsGate && <AdultGate open next={`/serie/${series.slug}`} />}
+      {needsGate && <AdultGate open next={`/serie/${series.slug}`} authenticated={Boolean(user)} />}
 
       <div className={needsGate ? "adult-blur space-y-8" : "space-y-8"}>
         {/* ── Bannière floutée : couverture, identité, bouton principal ─── */}
@@ -424,7 +424,7 @@ export default async function SeriePage({
         {similar.length > 0 && (
           <section className="space-y-4">
             <h2 className="section-title">Séries similaires</h2>
-            <SeriesGrid series={similar} adultAllowed={gateOk} />
+            <SeriesGrid series={similar} adultAllowed={gateOk} authenticated={Boolean(user)} />
           </section>
         )}
       </div>
