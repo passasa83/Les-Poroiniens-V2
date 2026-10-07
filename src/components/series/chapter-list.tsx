@@ -4,6 +4,8 @@ import clsx from "clsx";
 import { Heart, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { libelleCourt, libelleUnite, libelleUniteSingulier, titreUnite } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 /** Ligne de chapitre telle que préparée côté serveur. */
 export type ChapterRow = {
@@ -31,12 +33,15 @@ export type ChapterRow = {
 export function ChapterList({
   chapters,
   seriesId,
+  unite,
   orderHref,
   orderLabel,
   canMark,
 }: {
   chapters: ChapterRow[];
   seriesId: string;
+  /** Organisation de la série : « Tome 3 » au lieu de « Chapitre 3 ». */
+  unite?: Unite | null;
   orderHref: string;
   orderLabel: string;
   canMark: boolean;
@@ -93,8 +98,8 @@ export function ChapterList({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher un chapitre"
-            aria-label="Rechercher un chapitre"
+            placeholder={`Rechercher un ${libelleUniteSingulier(unite).toLowerCase()}`}
+            aria-label={`Rechercher un ${libelleUniteSingulier(unite).toLowerCase()}`}
             className="input w-full min-h-11 pl-9"
           />
         </div>
@@ -104,7 +109,9 @@ export function ChapterList({
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-sm text-muted">Aucun chapitre ne correspond à « {query} ».</p>
+        <p className="text-sm text-muted">
+          Aucun {libelleUniteSingulier(unite).toLowerCase()} ne correspond à « {query} ».
+        </p>
       ) : (
         <ul
           className={clsx(
@@ -117,8 +124,8 @@ export function ChapterList({
             return (
               <li key={chapter.id}>
                 <div className="flex items-center gap-3 px-4 transition-colors hover:bg-surface2">
-                  <span className="w-14 shrink-0 text-sm font-bold text-primary">
-                    Ch. {chapter.numero}
+                  <span className="w-16 shrink-0 text-sm font-bold text-primary">
+                    {libelleCourt(chapter.numero, unite)}
                   </span>
                   <div className="min-w-0 flex-1 py-3">
                     <Link
@@ -128,7 +135,7 @@ export function ChapterList({
                          la hauteur de la rangée. */
                       className="block truncate text-sm text-fg hover:text-primary"
                     >
-                      {chapter.titre || `Chapitre ${chapter.numero}`}
+                      {titreUnite(chapter.numero, chapter.titre, unite)}
                       {chapter.volume !== null && (
                         <span className="ml-2 text-xs text-muted">Vol. {chapter.volume}</span>
                       )}
@@ -167,7 +174,7 @@ export function ChapterList({
                         checked={lu}
                         onChange={(event) => toggle(chapter, event.target.checked)}
                         className="size-4 accent-primary"
-                        aria-label={`Marquer le chapitre ${chapter.numero} comme lu`}
+                        aria-label={`Marquer ${libelleUnite(chapter.numero, unite)} comme lu`}
                       />
                       <span className="hidden sm:inline">{lu ? "Lu" : "Non lu"}</span>
                     </label>

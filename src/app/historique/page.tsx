@@ -54,6 +54,7 @@ export default async function HistoriquePage() {
         titre: series?.titre ?? entry.series_id,
         slug: series?.slug ?? null,
         numero: chapter?.numero ?? null,
+        unite: series?.unite ?? "chapitre",
         couverture: series?.couverture ?? null,
       };
     }),
@@ -73,7 +74,7 @@ export default async function HistoriquePage() {
       {groupes.length === 0 && (
         <EmptyState
           title="Aucune lecture enregistrée"
-          description="Ouvrez un chapitre : votre progression sera sauvegardée ici, page par page."
+          description="Ouvrez un chapitre ou un tome : votre progression sera sauvegardée ici, page par page."
           action={
             <Link href="/catalogue" className="btn-primary">
               Parcourir le catalogue

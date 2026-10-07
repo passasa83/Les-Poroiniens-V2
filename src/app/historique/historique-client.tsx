@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Play, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
+import { libelleUnite } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 export type HistoriqueEntree = {
   key: string;
@@ -17,6 +19,8 @@ export type HistoriqueEntree = {
   titre: string;
   slug: string | null;
   numero: number | null;
+  /** Chapitres ou tomes : « Tome 3 · page 12 ». */
+  unite: Unite;
   couverture: string | null;
 };
 
@@ -151,7 +155,9 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
                       {entry.completed && <Badge tone="ok">Terminé</Badge>}
                     </div>
                     <p className="text-xs text-muted">
-                      {entry.numero !== null ? `Chapitre ${entry.numero} · ` : ""}
+                      {entry.numero !== null
+                        ? `${libelleUnite(entry.numero, entry.unite)} · `
+                        : ""}
                       page {Math.max(entry.page, 1)} ·{" "}
                       {new Date(entry.readAt).toLocaleTimeString("fr-FR", {
                         hour: "2-digit",
@@ -165,7 +171,7 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
                       <Link
                         href={`/serie/${entry.slug}/chapitre-${entry.numero}`}
                         className="btn-ghost text-sm"
-                        aria-label={`Reprendre ${entry.titre} au chapitre ${entry.numero}, page ${Math.max(entry.page, 1)}`}
+                        aria-label={`Reprendre ${entry.titre} ${libelleUnite(entry.numero, entry.unite).toLowerCase()}, page ${Math.max(entry.page, 1)}`}
                       >
                         <Play aria-hidden className="size-4" />
                         Reprendre

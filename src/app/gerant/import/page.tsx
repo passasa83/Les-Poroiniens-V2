@@ -34,6 +34,7 @@ export default async function GerantImportPage({
     titre: s.titre,
     slug: s.slug,
     classification: s.classification,
+    unite: s.unite ?? "chapitre",
   }));
 
   if (lite.length === 0) {
@@ -44,8 +45,9 @@ export default async function GerantImportPage({
           <ListChecks className="size-8 text-primary" />
           <p className="section-title">Créez d&apos;abord une série</p>
           <p className="max-w-md text-sm text-muted">
-            Un chapitre s&apos;attache toujours à une fiche série : créez-la (titre, slug,
-            classification), puis revenez importer ses chapitres depuis le NAS.
+            Une unité de lecture (chapitre ou tome) s&apos;attache toujours à une fiche série :
+            créez-la (titre, slug, classification), puis revenez importer son contenu depuis le
+            NAS.
           </p>
           <Link href="/gerant/series/nouvelle" className="btn-primary">
             <FolderPlus className="size-4" /> Créer une série
@@ -61,7 +63,7 @@ export default async function GerantImportPage({
         <h1 className="section-title">Import de contenu</h1>
         <p className="mt-1 text-sm text-muted">
           Source unique : le NAS. Les octets ne transitent jamais par le site — seul l&apos;index
-          des planches est enregistré en base. Chaque chapitre est créé en{" "}
+          des planches est enregistré en base. Chaque chapitre ou tome est créé en{" "}
           <span className="text-fg">brouillon</span>, sauf mention contraire.
         </p>
         <p className="mt-2 flex items-center gap-2 text-xs text-muted">

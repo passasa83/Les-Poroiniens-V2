@@ -8,6 +8,7 @@ import { Badge, Card } from "@/components/ui/kit";
 import { ChapterActions, DeleteSeriesButton, ArchiveSeriesButton, SeriesForm } from "@/components/series/series-actions";
 import { listChapters } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
+import { compteUnites, libelleUniteSingulier, libelleUnitesPluriel, titreUnite } from "@/lib/format";
 import { SERIES_STATUT_LABELS, type Chapter, type SeriesStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -71,9 +72,7 @@ export default async function GerantSeriePage({
             <span>
               Slug <code className="font-mono">{series.slug}</code>
             </span>
-            <span>
-              {chapters.length} chapitre{chapters.length > 1 ? "s" : ""}
-            </span>
+            <span>{compteUnites(chapters.length, series.unite)}</span>
           </div>
         </div>
 
@@ -82,17 +81,20 @@ export default async function GerantSeriePage({
             href={`/gerant/import?series=${encodeURIComponent(series.id)}`}
             className="btn-primary"
           >
-            <FolderUp className="size-4" /> Importer des chapitres
+            <FolderUp className="size-4" /> Importer des{" "}
+            {libelleUnitesPluriel(series.unite).toLowerCase()}
           </Link>
           <ArchiveSeriesButton
             id={series.id}
             titre={series.titre}
+            unite={series.unite}
             archived={archived}
             returnTo="/gerant/series"
           />
           <DeleteSeriesButton
             id={series.id}
             titre={series.titre}
+            unite={series.unite}
             returnTo="/gerant/series"
           />
         </div>
@@ -101,7 +103,8 @@ export default async function GerantSeriePage({
       {archived && (
         <p className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
           Cette série est archivée : invisible du catalogue public et des listes de sorties, mais
-          ses chapitres et leurs planches sont intacts. « Déarchiver » la remet en ligne.
+          ses {libelleUnitesPluriel(series.unite).toLowerCase()} et leurs planches sont intacts. «
+          Déarchiver » la remet en ligne.
         </p>
       )}
 
@@ -109,7 +112,7 @@ export default async function GerantSeriePage({
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="section-title">Chapitres</h2>
+          <h2 className="section-title">{libelleUnitesPluriel(series.unite)}</h2>
           <p className="text-sm text-muted">
             {chapters.filter((c) => c.statut === "published").length} publié
             {chapters.filter((c) => c.statut === "published").length > 1 ? "s" : ""} ·{" "}
@@ -133,7 +136,9 @@ export default async function GerantSeriePage({
               {chapters.map((chapter) => (
                 <tr key={chapter.id} className="border-b border-line last:border-0">
                   <td className="px-4 py-3 tabular-nums text-muted">{chapter.numero}</td>
-                  <td className="px-4 py-3 text-fg">{chapter.titre}</td>
+                  <td className="px-4 py-3 text-fg">
+                    {titreUnite(chapter.numero, chapter.titre, series.unite)}
+                  </td>
                   <td className="px-4 py-3">
                     <Badge
                       tone={
@@ -159,6 +164,7 @@ export default async function GerantSeriePage({
                     <ChapterActions
                       chapterId={chapter.id}
                       numero={chapter.numero}
+                      unite={series.unite}
                       statut={chapter.statut}
                       publishAt={chapter.publish_at}
                       canPublish={canPublish}
@@ -169,7 +175,8 @@ export default async function GerantSeriePage({
               {chapters.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-muted">
-                    Aucun chapitre pour l&apos;instant — lancez un{" "}
+                    Aucun {libelleUniteSingulier(series.unite).toLowerCase()} pour
+                    l&apos;instant — lancez un{" "}
                     <a href={`/gerant/import?series=${encodeURIComponent(series.id)}`} className="link-muted">
                       import depuis le NAS
                     </a>

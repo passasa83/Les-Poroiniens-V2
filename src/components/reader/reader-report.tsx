@@ -3,6 +3,8 @@
 import { Flag, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
+import { libelleUnite } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 const REPORT_REASONS: Array<{ value: string; label: string }> = [
   { value: "page_manquante", label: "Page manquante" },
@@ -22,12 +24,15 @@ export function ReportDialog({
   onClose,
   chapterId,
   chapterNumero,
+  unite,
   page,
 }: {
   open: boolean;
   onClose: () => void;
   chapterId: string;
   chapterNumero: number;
+  /** Organisation de la série (« Page 3 du tome 2 »). */
+  unite?: Unite | null;
   page: number | null;
 }) {
   const [raison, setRaison] = useState(
@@ -35,7 +40,7 @@ export function ReportDialog({
   );
   const [details, setDetails] = useState(
     typeof page === "number"
-      ? `Page ${page + 1} du chapitre ${chapterNumero} : impossible à charger malgré les reprises automatiques.`
+      ? `Page ${page + 1} du ${libelleUnite(chapterNumero, unite).toLowerCase()} : impossible à charger malgré les reprises automatiques.`
       : "",
   );
   const [busy, setBusy] = useState(false);

@@ -15,6 +15,8 @@ import {
   type ReaderSens,
   type ReaderTheme,
 } from "./reader-settings";
+import { libelleUnite, libelleUniteSingulier, libelleVoisin } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 /* ── Clés de stockage local (« réglages mémorisés ») ───────────── */
 /** Mode : global, le même pour toutes les séries. */
@@ -72,6 +74,7 @@ export function Reader({
   serieId,
   serieSlug,
   serieTitre,
+  unite,
   chapitres,
   initialMode,
   initialSens,
@@ -89,6 +92,8 @@ export function Reader({
   serieId: string;
   serieSlug: string;
   serieTitre: string;
+  /** Organisation de la série : « Tome 3 » au lieu de « Chapitre 3 ». */
+  unite?: Unite | null;
   /** Chapitres de la série, pour le sélecteur de la barre haute. */
   chapitres: Array<{ numero: number; href: string }>;
   initialMode?: ReaderMode;
@@ -628,6 +633,7 @@ export function Reader({
         hidden={chromeHidden}
         serieHref={`/serie/${serieSlug}`}
         serieTitre={serieTitre}
+        unite={unite}
         chapitres={chapitres}
         courant={`/serie/${serieSlug}/chapitre-${chapterNumero}`}
         settingsOpen={settingsOpen}
@@ -656,7 +662,7 @@ export function Reader({
                   key={`${index}:${item.url}`}
                   page={item}
                   index={index}
-                  chapterNumero={chapterNumero}
+                  chapterNumero={chapterNumero} unite={unite}
                   eager={index === 0}
                   onFailed={onPageFailed}
                   onReport={openReport}
@@ -672,7 +678,7 @@ export function Reader({
                 key={`${page}:${pages[page].url}`}
                 page={pages[page]}
                 index={page}
-                chapterNumero={chapterNumero}
+                chapterNumero={chapterNumero} unite={unite}
                 eager
                 onFailed={onPageFailed}
                 onReport={openReport}
@@ -695,7 +701,7 @@ export function Reader({
                   key={`${page}:${pages[page]?.url ?? ""}`}
                   page={pages[page]}
                   index={page}
-                  chapterNumero={chapterNumero}
+                  chapterNumero={chapterNumero} unite={unite}
                   eager
                   onFailed={onPageFailed}
                   onReport={openReport}
@@ -711,7 +717,7 @@ export function Reader({
                         }`}
                         page={pages[sens === "rtl" ? page + 1 : page]}
                         index={sens === "rtl" ? page + 1 : page}
-                        chapterNumero={chapterNumero}
+                        chapterNumero={chapterNumero} unite={unite}
                         eager={page <= 2}
                         onFailed={onPageFailed}
                         onReport={openReport}
@@ -727,7 +733,7 @@ export function Reader({
                         }`}
                         page={pages[sens === "rtl" ? page : page + 1]}
                         index={sens === "rtl" ? page : page + 1}
-                        chapterNumero={chapterNumero}
+                        chapterNumero={chapterNumero} unite={unite}
                         eager={page <= 2}
                         onFailed={onPageFailed}
                         onReport={openReport}
@@ -758,7 +764,7 @@ export function Reader({
           <NavButton
             href={page > 0 ? null : prevHref}
             onClick={() => step(-1)}
-            label={page > 0 ? "Page précédente" : "Chapitre précédent"}
+            label={page > 0 ? "Page précédente" : libelleVoisin("précédent", unite)}
             icon={<ChevronLeft className="size-4" />}
             disabled={page <= 0 && !prevHref}
           />
@@ -768,7 +774,7 @@ export function Reader({
           <NavButton
             href={isLast ? nextHref : null}
             onClick={() => step(1)}
-            label={isLast ? "Chapitre suivant" : "Page suivante"}
+            label={isLast ? libelleVoisin("suivant", unite) : "Page suivante"}
             icon={<ChevronRight className="size-4" />}
             disabled={!isLast ? false : nextHref === null}
             align="right"
@@ -781,34 +787,34 @@ export function Reader({
             aria-labelledby="reader-fin-titre"
           >
             <p className="section-title" id="reader-fin-titre">
-              Chapitre terminé
+              {libelleUniteSingulier(unite)} terminé
             </p>
             <p className="mt-1 text-sm text-muted">
-              {serieTitre} — chapitre {chapterNumero}
+              {serieTitre} — {libelleUnite(chapterNumero, unite).toLowerCase()}
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               {nextHref ? (
                 <Link href={nextHref} className="btn-primary">
-                  Chapitre suivant <ChevronRight className="size-4" />
+                  {libelleVoisin("suivant", unite)} <ChevronRight className="size-4" />
                 </Link>
               ) : (
                 <span className="btn-primary opacity-50" aria-disabled="true">
-                  Dernier chapitre
+                  Dernier {libelleUniteSingulier(unite).toLowerCase()}
                 </span>
               )}
               {prevHref ? (
                 <Link href={prevHref} className="btn-secondary">
-                  <ChevronLeft className="size-4" /> Chapitre précédent
+                  <ChevronLeft className="size-4" /> {libelleVoisin("précédent", unite)}
                 </Link>
               ) : (
                 <span className="btn-secondary opacity-50" aria-disabled="true">
-                  Chapitre précédent
+                  {libelleVoisin("précédent", unite)}
                 </span>
               )}
               <a href="#commentaires" className="btn-ghost">
-                Commentaires du chapitre
+                Commentaires du {libelleUniteSingulier(unite).toLowerCase()}
               </a>
-              <ChapterLike chapterId={chapterId} initialLikes={initialLikes} />
+              <ChapterLike chapterId={chapterId} initialLikes={initialLikes} unite={unite} />
               <button type="button" className="btn-ghost" onClick={() => openReport(null)}>
                 <Flag className="size-4" /> Signaler un problème
               </button>
@@ -824,6 +830,7 @@ export function Reader({
         onSeek={goTo}
         prevHref={prevHref}
         nextHref={nextHref}
+        unite={unite}
       />
 
       <ReaderSettings
@@ -852,7 +859,7 @@ export function Reader({
         open={reportOpen}
         onClose={() => setReportOpen(false)}
         chapterId={chapterId}
-        chapterNumero={chapterNumero}
+        chapterNumero={chapterNumero} unite={unite}
         page={reportPage}
       />
     </div>
@@ -948,6 +955,7 @@ function ReaderImage({
   page,
   index,
   chapterNumero,
+  unite,
   eager,
   onFailed,
   onReport,
@@ -956,6 +964,8 @@ function ReaderImage({
   page: ReaderPage;
   index: number;
   chapterNumero: number;
+  /** Organisation de la série (texte alternatif : « du tome 3 »). */
+  unite?: Unite | null;
   eager: boolean;
   onFailed: (index: number) => void;
   onReport: (index: number) => void;
@@ -977,7 +987,7 @@ function ReaderImage({
 
   const src =
     attempt === 0 ? page.url : `${page.url}${page.url.includes("?") ? "&" : "?"}retry=${attempt}`;
-  const alt = `Page ${index + 1} du chapitre ${chapterNumero}`;
+  const alt = `Page ${index + 1} du ${libelleUnite(chapterNumero, unite).toLowerCase()}`;
 
   function onError() {
     if (failed || timerRef.current) return;

@@ -19,7 +19,7 @@ import { Badge, EmptyState } from "@/components/ui/kit";
 import { Hero, type HeroSlide } from "@/components/home/hero";
 import { ReleasesSection } from "@/components/home/releases-section";
 import { RankList } from "@/components/home/rank-list";
-import { plainText } from "@/lib/format";
+import { libelleUnite, plainText } from "@/lib/format";
 import type { ReleaseItem } from "@/lib/data/chapters";
 import type { ReleaseDto } from "@/lib/dto";
 import { SERIES_TYPE_LABELS, type Annonce, type Chapter, type Series } from "@/lib/types";
@@ -67,6 +67,7 @@ export default async function HomePage() {
     genres: s.genres.slice(0, 3),
     synopsis: plainText(s.synopsis),
     chapitre: firstChapters.get(s.id) ?? null,
+    unite: s.unite ?? "chapitre",
     isAdult: s.classification === "adult",
     followed: followedIds.has(s.id),
   }));
@@ -214,6 +215,7 @@ function toReleaseDto(ch: ReleaseItem): ReleaseDto {
       couverture: ch.series.couverture || `/api/img/cover/${ch.series.slug}`,
       type: ch.series.type,
       classification: ch.series.classification,
+      unite: ch.series.unite ?? "chapitre",
     },
   };
 }
@@ -336,12 +338,13 @@ async function continueBlock(userId: string) {
             {series.titre}
           </Link>
           <p className="text-sm text-muted">
-            Chapitre {chapter.numero} — page {Math.max(entry.page, 1)}/{chapter.nb_pages}
+            {libelleUnite(chapter.numero, series.unite)} — page {Math.max(entry.page, 1)}/
+            {chapter.nb_pages}
           </p>
           <div
             className="h-1.5 w-full overflow-hidden rounded-full bg-surface2"
             role="progressbar"
-            aria-label={`Progression de lecture — ${series.titre}, chapitre ${chapter.numero}`}
+            aria-label={`Progression de lecture — ${series.titre}, ${libelleUnite(chapter.numero, series.unite).toLowerCase()}`}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.min(
@@ -360,7 +363,7 @@ async function continueBlock(userId: string) {
         <Link
           href={`/serie/${series.slug}/chapitre-${chapter.numero}`}
           className="btn-primary w-full shrink-0 justify-center sm:w-auto"
-          aria-label={`Reprendre la lecture de ${series.titre} — chapitre ${chapter.numero}, page ${Math.max(entry.page, 1)}`}
+          aria-label={`Reprendre la lecture de ${series.titre} — ${libelleUnite(chapter.numero, series.unite).toLowerCase()}, page ${Math.max(entry.page, 1)}`}
         >
           <Play className="size-4" aria-hidden />
           Reprendre

@@ -159,7 +159,9 @@ export async function SeriesDirectory({
                 <th className="px-4 py-3 font-semibold">Statut</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
                 <th className="px-4 py-3 font-semibold">Classification</th>
-                <th className="px-4 py-3 text-right font-semibold">Chapitres</th>
+                <th className="px-4 py-3 text-right font-semibold" title="Chapitres ou tomes publiés">
+                  Contenus
+                </th>
                 <th className="px-4 py-3 text-right font-semibold">Vues</th>
                 <th className="px-4 py-3 font-semibold">Mise à jour</th>
                 {canManage && (
@@ -217,6 +219,7 @@ export async function SeriesDirectory({
                           <ArchiveSeriesButton
                             id={s.id}
                             titre={s.titre}
+                            unite={s.unite}
                             archived={archived}
                             showLabels={false}
                           />

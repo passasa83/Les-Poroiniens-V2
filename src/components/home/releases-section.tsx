@@ -5,9 +5,9 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/kit";
-import { relativeTime } from "@/lib/format";
+import { libelleUnite, relativeTime } from "@/lib/format";
 import type { ReleaseDto } from "@/lib/dto";
-import type { SeriesType } from "@/lib/types";
+import type { SeriesType, Unite } from "@/lib/types";
 
 type Tab = "" | SeriesType;
 
@@ -24,6 +24,8 @@ type ReleaseCard = {
   titre: string;
   cover: string;
   isAdult: boolean;
+  /** Chapitres ou tomes : « Tome 3 » sur chaque ligne. */
+  unite: Unite;
   publishAt: string | null;
   chapters: Array<{ id: string; numero: number }>;
 };
@@ -48,6 +50,7 @@ function groupReleases(items: ReleaseDto[]): ReleaseCard[] {
       titre: it.series.titre,
       cover: it.series.couverture,
       isAdult: it.series.classification === "adult" || it.classification === "adult",
+      unite: it.series.unite,
       publishAt: it.publishAt,
       chapters: [{ id: it.id, numero: it.numero }],
     });
@@ -168,7 +171,7 @@ export function ReleasesSection({
                       href={`/serie/${card.slug}/chapitre-${ch.numero}`}
                       className="meta underline-offset-2 hover:text-fg hover:underline"
                     >
-                      Chapitre {ch.numero}
+                      {libelleUnite(ch.numero, card.unite)}
                     </Link>
                   </li>
                 ))}

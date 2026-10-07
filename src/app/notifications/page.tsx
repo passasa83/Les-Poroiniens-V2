@@ -19,7 +19,7 @@ function texte(notification: Notification): string {
   const payload = notification.payload ?? {};
   if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
   if (typeof payload.titre === "string" && payload.titre.trim()) return payload.titre;
-  if (notification.type === "chapter") return "Nouveau chapitre disponible";
+  if (notification.type === "chapter") return "Nouveau contenu disponible";
   if (notification.type === "mention") return "Vous avez été mentionné";
   return "Notification du site";
 }

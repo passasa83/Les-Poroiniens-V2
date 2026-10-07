@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, Check, Plus, Trash2, X } from "lucide-react";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
+import { libelleUnite, libelleUniteSingulier, libelleUnitesPluriel } from "@/lib/format";
 import {
   SERIES_STATUT_LABELS,
   type ChapterStatus,
@@ -12,6 +13,7 @@ import {
   type Series,
   type SeriesStatus,
   type SeriesType,
+  type Unite,
 } from "@/lib/types";
 
 /**
@@ -28,6 +30,8 @@ type SeriesPayload = {
   banniere: string;
   statut: SeriesStatus;
   type: SeriesType;
+  /** Chapitres ou tomes : commande les libellés affichés sur le site. */
+  unite: Unite;
   annee: number | null;
   langue: string;
   classification: Classification;
@@ -139,6 +143,7 @@ export function SeriesForm({
   const [banniere, setBanniere] = useState(series?.banniere ?? "");
   const [statut, setStatut] = useState<SeriesStatus>(series?.statut ?? "en_cours");
   const [type, setType] = useState<SeriesType>(series?.type ?? "manga");
+  const [unite, setUnite] = useState<Unite>(series?.unite ?? "chapitre");
   const [annee, setAnnee] = useState(series?.annee ? String(series.annee) : "");
   const [langue, setLangue] = useState(series?.langue ?? "FR");
   const [classification, setClassification] = useState<Classification>(
@@ -168,6 +173,7 @@ export function SeriesForm({
       banniere: banniere.trim(),
       statut,
       type,
+      unite,
       annee: annee.trim() ? Number(annee) : null,
       langue: langue.trim() || "FR",
       classification,
@@ -272,7 +278,9 @@ export function SeriesForm({
         <Field
           label="Statut"
           htmlFor="s-statut"
-          hint="« Archivée » retire la série du catalogue public sans supprimer ses chapitres."
+          hint={`« Archivée » retire la série du catalogue public sans supprimer ses ${libelleUnitesPluriel(
+            unite,
+          ).toLowerCase()}.`}
         >
           <Select
             id="s-statut"
@@ -292,6 +300,17 @@ export function SeriesForm({
             <option value="manga">Manga</option>
             <option value="manhwa">Manhwa</option>
             <option value="manhua">Manhua</option>
+          </Select>
+        </Field>
+
+        <Field
+          label="Organisation"
+          htmlFor="s-unite"
+          hint="Décide des libellés : « Tome 3 » ou « Chapitre 3 »."
+        >
+          <Select id="s-unite" value={unite} onChange={(e) => setUnite(e.target.value as Unite)}>
+            <option value="chapitre">Chapitres</option>
+            <option value="tome">Tomes</option>
           </Select>
         </Field>
 
@@ -390,12 +409,15 @@ const RESTORE_STATUTS: SeriesStatus[] = ["en_cours", "termine", "hiatus", "aband
 export function ArchiveSeriesButton({
   id,
   titre,
+  unite,
   archived = false,
   returnTo,
   showLabels = true,
 }: {
   id: string;
   titre: string;
+  /** Organisation de la série (« ses tomes sont conservés »). */
+  unite?: Unite;
   archived?: boolean;
   returnTo?: string;
   showLabels?: boolean;
@@ -466,7 +488,8 @@ export function ArchiveSeriesButton({
             ) : (
               <>
                 <span className="font-semibold text-fg">{titre}</span> quitte le catalogue public :
-                fiche, chapitres, favoris et historiques sont conservés. Rien n&apos;est supprimé, et
+                fiche, {libelleUnitesPluriel(unite).toLowerCase()}, favoris et historiques sont
+                conservés. Rien n&apos;est supprimé, et
                 l&apos;opération est réversible depuis cette même page.
               </>
             )}
@@ -525,11 +548,14 @@ export function ArchiveSeriesButton({
 export function DeleteSeriesButton({
   id,
   titre,
+  unite,
   returnTo = "/gerant/series",
   showLabels = true,
 }: {
   id: string;
   titre: string;
+  /** Organisation de la série (« ses tomes, leurs planches »). */
+  unite?: Unite;
   returnTo?: string;
   showLabels?: boolean;
 }) {
@@ -580,8 +606,9 @@ export function DeleteSeriesButton({
       >
         <div className="space-y-3 text-sm text-muted">
           <p>
-            La fiche <span className="font-semibold text-fg">{titre}</span>, ses chapitres, leurs
-            pages, ses recommandations et les erreurs d&apos;images associées seront supprimés
+            La fiche <span className="font-semibold text-fg">{titre}</span>, ses{" "}
+            {libelleUnitesPluriel(unite).toLowerCase()}, leurs pages, ses recommandations et les
+            erreurs d&apos;images associées seront supprimés
             définitivement. <span className="font-semibold text-adult">Sans retour possible.</span>
           </p>
           <p className="text-xs">
@@ -629,12 +656,15 @@ function toLocalInput(iso: string | null): string {
 export function ChapterActions({
   chapterId,
   numero,
+  unite,
   statut,
   publishAt,
   canPublish,
 }: {
   chapterId: string;
   numero: number;
+  /** Organisation de la série : « Tome 3 » au lieu de « Chapitre 3 ». */
+  unite?: Unite;
   statut: ChapterStatus;
   publishAt: string | null;
   canPublish: boolean;
@@ -650,7 +680,7 @@ export function ChapterActions({
     return (
       <span
         className="block text-right text-xs text-muted"
-        title="Publication, planification et suppression d'un chapitre sont réservées au Gérant (matrice 4.3)."
+        title="Publication, planification et suppression d'une unité de lecture sont réservées au Gérant."
       >
         Réservé au Gérant
       </span>
@@ -766,10 +796,10 @@ export function ChapterActions({
       <Modal
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Supprimer le chapitre ?"
+        title={`Supprimer ${libelleUniteSingulier(unite).toLowerCase()} ${numero} ?`}
       >
         <p className="text-sm text-muted">
-          Le chapitre {numero} et l&apos;index de ses pages seront supprimés définitivement.
+          {libelleUnite(numero, unite)} et l&apos;index de ses pages seront supprimés définitivement.
         </p>
         {error && <p className="mt-3 text-sm text-adult">{error}</p>}
         <div className="mt-5 flex justify-end gap-3">

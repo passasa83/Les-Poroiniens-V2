@@ -2,19 +2,25 @@
 
 import { Heart } from "lucide-react";
 import { useEffect, useState } from "react";
+import { libelleUniteSingulier } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 /**
- * Like du chapitre sur l’écran de fin : lecture du statut via
+ * Like de l'unité lue sur l’écran de fin : lecture du statut via
  * `GET /api/chapters/[id]/like`, bascule optimiste via POST / DELETE
  * (même motif que les likes de commentaires).
  */
 export function ChapterLike({
   chapterId,
   initialLikes,
+  unite,
 }: {
   chapterId: string;
   initialLikes: number;
+  /** Organisation de la série : « aimer ce tome » au lieu de « ce chapitre ». */
+  unite?: Unite | null;
 }) {
+  const sing = libelleUniteSingulier(unite).toLowerCase();
   const [likes, setLikes] = useState(initialLikes);
   const [liked, setLiked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,13 +59,13 @@ export function ChapterLike({
       if (res.status === 401) {
         setLiked(before.liked);
         setLikes(before.likes);
-        setMessage("Connectez-vous pour aimer ce chapitre.");
+        setMessage(`Connectez-vous pour aimer ce ${sing}.`);
         return;
       }
       if (res.status === 403) {
         setLiked(before.liked);
         setLikes(before.likes);
-        setMessage("Ce chapitre est réservé aux adultes.");
+        setMessage(`Ce ${sing} est réservé aux adultes.`);
         return;
       }
       if (!res.ok) {
@@ -87,7 +93,7 @@ export function ChapterLike({
         type="button"
         className="btn-secondary"
         aria-pressed={liked}
-        aria-label={liked ? "Retirer mon like du chapitre" : "Aimer ce chapitre"}
+        aria-label={liked ? `Retirer mon like du ${sing}` : `Aimer ce ${sing}`}
         onClick={() => void toggle()}
       >
         <Heart className={liked ? "size-4 fill-current text-adult" : "size-4"} />

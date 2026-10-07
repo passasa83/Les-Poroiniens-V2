@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Bookmark, BookOpen, Check, Loader2, Pause, Play } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/kit";
+import { libelleUnite } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 export type HeroSlide = {
   id: string;
@@ -16,6 +18,8 @@ export type HeroSlide = {
   synopsis: string;
   /** Numéro du premier chapitre publié, ou `null` si la série n'en a pas. */
   chapitre: number | null;
+  /** Chapitres ou tomes : « Lire le tome 3 ». */
+  unite: Unite;
   isAdult: boolean;
   /** Série déjà présente dans la bibliothèque du membre connecté. */
   followed: boolean;
@@ -146,7 +150,7 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
                       {s.chapitre !== null && (
                         <Link href={`/serie/${s.slug}/chapitre-${s.chapitre}`} className="btn-primary">
                           <BookOpen className="size-4" />
-                          Lire le chapitre {s.chapitre}
+                          Lire {libelleUnite(s.chapitre, s.unite)}
                         </Link>
                       )}
                       {authed ? (

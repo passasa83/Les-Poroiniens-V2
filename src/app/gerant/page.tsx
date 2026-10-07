@@ -116,7 +116,7 @@ export default async function GerantHomePage() {
           <h1 className="section-title">Suivi des imports</h1>
           <p className="text-sm text-muted">
             {jobs.length} job{jobs.length > 1 ? "s" : ""} enregistré{jobs.length > 1 ? "s" : ""} ·
-            cadence prévue : ~10 chapitres / semaine
+            cadence prévue : ~10 publications / semaine
           </p>
         </div>
         <Link href="/gerant/import" className="btn-primary">
@@ -131,7 +131,7 @@ export default async function GerantHomePage() {
           hint="Archivées incluses"
         />
         <Kpi
-          label="Chapitres en attente"
+          label="Contenus en attente"
           value={enAttente.length}
           hint={`${publies.length} publié(s)`}
           tone={enAttente.length > 0 ? "warn" : "fg"}
@@ -192,7 +192,7 @@ export default async function GerantHomePage() {
         {jobs.length === 0 ? (
           <EmptyState
             title="Aucun import pour le moment"
-            description="Lancez votre premier import : un dossier de série entier (import par lot) ou un chapitre précis."
+            description="Lancez votre premier import : un dossier de série entier (import par lot), ou une unité à la fois."
             action={
               <Link href="/gerant/import" className="btn-primary">
                 <FolderUp className="size-4" /> Lancer un import
@@ -277,7 +277,7 @@ export default async function GerantHomePage() {
             <HardHat className="size-4 text-primary" /> Règles en vigueur
           </h2>
           <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li>• Cadence éditoriale : environ <span className="text-fg">10 chapitres / semaine</span>.</li>
+            <li>• Cadence éditoriale : environ <span className="text-fg">10 publications / semaine</span>.</li>
             <li>• Brouillon → Programmé → Publié : seul le Gérant publie, dépublie ou supprime.</li>
             <li>• Archiver retire une série du catalogue sans rien supprimer ; la suppression définitive exige la saisie du titre.</li>
             <li>• Les planches vivent sur le NAS, servies par le CDN ; aucun octet ne passe par le site.</li>

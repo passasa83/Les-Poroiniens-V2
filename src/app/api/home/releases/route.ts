@@ -50,6 +50,7 @@ export async function GET(request: Request) {
       couverture: ch.series.couverture || `/api/img/cover/${ch.series.slug}`,
       type: ch.series.type,
       classification: ch.series.classification,
+      unite: ch.series.unite ?? "chapitre",
     },
   }));
 

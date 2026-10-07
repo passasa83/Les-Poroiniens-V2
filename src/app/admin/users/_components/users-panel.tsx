@@ -27,7 +27,7 @@ function formatDate(iso: string): string {
 
 /**
  * Table des profils : changement de rôle et bannissement.
- * Cloisonnement (matrice 4.3) : un admin ne touche pas aux rôles Admin/Gérant
+ * Cloisonnement : un admin ne touche pas aux rôles Admin/Gérant
  * et ne se modifie jamais lui-même — le serveur revérifie de toute façon.
  */
 export function UsersPanel({ rows, me }: { rows: UserRow[]; me: { id: string; role: Role } }) {
@@ -130,7 +130,7 @@ export function UsersPanel({ rows, me }: { rows: UserRow[]; me: { id: string; ro
               const tooltip = isSelf
                 ? "Impossible de modifier son propre compte."
                 : targetIsHigh && !meIsOwner
-                  ? "Seul le Gérant peut modifier un Administrateur ou un Gérant (matrice 4.3)."
+                  ? "Seul le Gérant peut modifier un Administrateur ou un Gérant."
                   : undefined;
 
               return (

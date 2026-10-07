@@ -3,7 +3,7 @@
  * l'accueil. Volontairement réduits au strict nécessaire : ni les
  * chapitres complets ni les objets séries ne quittent le serveur.
  */
-import type { Classification, SeriesType } from "@/lib/types";
+import type { Classification, SeriesType, Unite } from "@/lib/types";
 
 export type ReleaseDto = {
   id: string;
@@ -16,5 +16,7 @@ export type ReleaseDto = {
     couverture: string;
     type: SeriesType;
     classification: Classification;
+    /** Chapitres ou tomes : pilote le libellé de chaque ligne. */
+    unite: Unite;
   };
 };

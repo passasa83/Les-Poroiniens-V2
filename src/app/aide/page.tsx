@@ -47,15 +47,15 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
           <Link className="link-muted underline" href="/bibliotheque">
             ma bibliothèque
           </Link>{" "}
-          et les nouveaux chapitres dans vos{" "}
+          et les nouvelles publications dans vos{" "}
           <Link className="link-muted underline" href="/notifications">
             notifications
           </Link>
           .
         </li>
         <li>
-          Votre progression (chapitre et page) est enregistrée automatiquement : la fiche série et
-          le lecteur proposent de reprendre là où vous vous êtes arrêté.
+          Votre progression est enregistrée automatiquement : la fiche série et le lecteur
+          proposent de reprendre là où vous vous êtes arrêté.
         </li>
       </ol>
     ),
@@ -125,14 +125,14 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
           .
         </li>
         <li>
-          <strong className="text-fg">Chapitre introuvable ou non publié :</strong> il n&apos;est
-          peut-être pas encore disponible ; revenez plus tard ou vérifiez la liste des chapitres
-          sur la fiche série.
+          <strong className="text-fg">Contenu introuvable ou non publié :</strong> il n&apos;est
+          peut-être pas encore disponible ; revenez plus tard ou vérifiez la liste publiée sur la
+          fiche série.
         </li>
         <li>
           <strong className="text-fg">Page manquante, mauvaise qualité, ordre incorrect :</strong>{" "}
           utilisez le bouton « Signaler un problème » du lecteur : le signalement indique la série,
-          le chapitre et la page concernés.
+          l&apos;unité lue et la page concernée.
         </li>
         <li>
           <strong className="text-fg">Droit d&apos;auteur :</strong> suivez la{" "}

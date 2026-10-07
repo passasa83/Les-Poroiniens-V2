@@ -2,7 +2,8 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
-import { SERIES_TYPE_LABELS, type SeriesType } from "@/lib/types";
+import { libelleCourt } from "@/lib/format";
+import { SERIES_TYPE_LABELS, type SeriesType, type Unite } from "@/lib/types";
 
 export type UpdateCardData = {
   slug: string;
@@ -11,6 +12,8 @@ export type UpdateCardData = {
   type: SeriesType;
   isAdult: boolean;
   numero: number;
+  /** Chapitres ou tomes : « Tome 3 » au lieu de « Ch. 3 ». */
+  unite: Unite;
   /** Chapitre déjà ouvert par le membre connecté (indicateur « lu »). */
   lu: boolean;
 };
@@ -53,7 +56,7 @@ export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boole
           {item.titre}
         </p>
         <p className={clsx("meta truncate", item.lu && "opacity-70")}>
-          <span className="font-semibold text-fg/85">Ch. {item.numero}</span>
+          <span className="font-semibold text-fg/85">{libelleCourt(item.numero, item.unite)}</span>
           {" · "}
           {SERIES_TYPE_LABELS[item.type]}
           {item.isAdult && (

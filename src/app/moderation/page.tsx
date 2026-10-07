@@ -4,6 +4,7 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { listReports } from "@/lib/data/moderation";
 import { allSeries } from "@/lib/data/series";
 import { getDb, TABLES } from "@/lib/db";
+import { libelleCourt, libelleUnite } from "@/lib/format";
 import type { Chapter, Comment, Profile } from "@/lib/types";
 import { ReportsQueue, type EnrichedReport } from "./_components/reports-queue";
 
@@ -65,7 +66,7 @@ export default async function ModerationPage({
           const serie = chapter ? seriesById.get(chapter.series_id) : null;
           if (chapter && serie) {
             cibleHref = `/serie/${serie.slug}/chapitre-${chapter.numero}`;
-            cibleLabel = `Commentaire de ${comment.pseudo} sur ${serie.titre} ch. ${chapter.numero}`;
+            cibleLabel = `Commentaire de ${comment.pseudo} sur ${serie.titre} ${libelleCourt(chapter.numero, serie.unite)}`;
           }
         }
       } else {
@@ -81,7 +82,7 @@ export default async function ModerationPage({
       const chapter = chapterById.get(report.target_id);
       const serie = chapter ? seriesById.get(chapter.series_id) : null;
       if (chapter && serie) {
-        cibleLabel = `Chapitre ${chapter.numero} — ${serie.titre}`;
+        cibleLabel = `${libelleUnite(chapter.numero, serie.unite)} — ${serie.titre}`;
         cibleHref = `/serie/${serie.slug}/chapitre-${chapter.numero}`;
       }
     }

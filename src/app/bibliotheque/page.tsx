@@ -21,6 +21,12 @@ import {
   type LibraryDashboardRow,
 } from "@/lib/data/library";
 import { atLeast } from "@/lib/roles";
+import {
+  libelleCourt,
+  libelleUnite,
+  libelleUniteSingulier,
+  libelleUnitesPluriel,
+} from "@/lib/format";
 import { SERIES_STATUT_LABELS, type LibraryStatus } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -75,18 +81,19 @@ function lienChapitre(row: LibraryDashboardRow): {
 } | null {
   const slug = row.series?.slug;
   if (!slug) return null;
+  const unite = row.series?.unite;
   if (row.reprise) {
     return {
       href: `/serie/${slug}/chapitre-${row.reprise.numero}`,
       label: "Reprendre",
-      aria: `Reprendre au chapitre ${row.reprise.numero}, page ${row.reprise.page}`,
+      aria: `Reprendre à ${libelleUnite(row.reprise.numero, unite)}, page ${row.reprise.page}`,
     };
   }
   if (row.premierNumero !== null) {
     return {
       href: `/serie/${slug}/chapitre-${row.premierNumero}`,
-      label: `Lire le chapitre ${row.premierNumero}`,
-      aria: `Lire le chapitre ${row.premierNumero}`,
+      label: `Lire ${libelleUnite(row.premierNumero, unite)}`,
+      aria: `Lire ${libelleUnite(row.premierNumero, unite)}`,
     };
   }
   return {
@@ -122,7 +129,10 @@ function Progression({ row }: { row: LibraryDashboardRow }) {
         <span>
           {row.reprise ? (
             <>
-              Dernier chapitre lu : <span className="font-semibold text-fg">ch. {row.reprise.numero}</span>
+              Dernier {libelleUniteSingulier(row.series?.unite).toLowerCase()} lu :{" "}
+              <span className="font-semibold text-fg">
+                {libelleCourt(row.reprise.numero, row.series?.unite)}
+              </span>
               {row.reprise.page > 1 && <> · page {row.reprise.page}</>}
             </>
           ) : (
@@ -130,7 +140,9 @@ function Progression({ row }: { row: LibraryDashboardRow }) {
           )}
         </span>
         {row.totalChapitres === 0 ? (
-          <Badge tone="neutral">Aucun chapitre publié</Badge>
+          <Badge tone="neutral">
+            Aucun {libelleUniteSingulier(row.series?.unite).toLowerCase()} publié
+          </Badge>
         ) : row.nonLus > 0 ? (
           <Badge tone="primary">+{row.nonLus} non lus</Badge>
         ) : (
@@ -222,7 +234,7 @@ function CarteBiblio({ row, vue }: { row: LibraryDashboardRow; vue: VueBiblio })
             </dd>
           </div>
           <div>
-            <dt className="inline">Chapitres : </dt>
+            <dt className="inline">{libelleUnitesPluriel(serie?.unite)} : </dt>
             <dd className="inline font-semibold text-fg">{row.totalChapitres}</dd>
           </div>
           <div>

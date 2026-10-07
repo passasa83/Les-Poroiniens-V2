@@ -17,6 +17,7 @@ import { Badge, Card } from "@/components/ui/kit";
 import { appwriteEnabled, dataMode, getDb, TABLES } from "@/lib/db";
 import { listImportJobs, listReports } from "@/lib/data/moderation";
 import { exclureDemo, serieDeDemo } from "@/lib/demo-gate";
+import { libelleCourt } from "@/lib/format";
 import type { Comment, Profile, Series } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -89,14 +90,14 @@ export default async function AdminDashboard() {
       values: WINDOWS.map((w) => rowsSince(series, "created_at", w.ms)) as [number, number, number],
     },
     {
-      label: "Chapitres publiés",
+      label: "Contenus publiés",
       values: WINDOWS.map((w) => rowsSince(publishedChapters, "publish_at", w.ms)) as [
         number,
         number,
         number,
       ],
     },
-    { label: "Chapitres en brouillon", values: [total(draftChapters), total(draftChapters), total(draftChapters)], global: true },
+    { label: "Contenus en brouillon", values: [total(draftChapters), total(draftChapters), total(draftChapters)], global: true },
     {
       label: "Commentaires",
       values: WINDOWS.map((w) => rowsSince(comments, "created_at", w.ms)) as [
@@ -236,10 +237,10 @@ export default async function AdminDashboard() {
           </Link>
         </Card>
 
-        {/* Derniers chapitres */}
+        {/* Dernières publications */}
         <Card className="p-5">
           <h2 className="section-title flex items-center gap-2">
-            <BookOpen className="size-4 text-primary" /> Derniers chapitres
+            <BookOpen className="size-4 text-primary" /> Dernières publications
           </h2>
           <ul className="mt-4 space-y-3">
             {recentChapters.map((chapter) => {
@@ -250,7 +251,7 @@ export default async function AdminDashboard() {
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate link-muted">{serie?.titre ?? "Série supprimée"}</span>
                     <span className="shrink-0 text-muted">
-                      ch. {String(chapter.numero)}
+                      {libelleCourt(Number(chapter.numero), serie?.unite)}
                     </span>
                   </span>
                   <Badge tone={statut === "published" ? "ok" : statut === "scheduled" ? "warn" : "neutral"}>
@@ -259,7 +260,9 @@ export default async function AdminDashboard() {
                 </li>
               );
             })}
-            {recentChapters.length === 0 && <li className="text-sm text-muted">Aucun chapitre.</li>}
+            {recentChapters.length === 0 && (
+              <li className="text-sm text-muted">Aucune publication.</li>
+            )}
           </ul>
         </Card>
 
@@ -357,7 +360,7 @@ export default async function AdminDashboard() {
             <li className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-2">
                 <Clock3 className="size-4 text-muted" />
-                Chapitres planifiés
+                Contenus planifiés
               </span>
               <Badge tone="neutral">
                 {chapters.filter((c) => c.statut === "scheduled").length}

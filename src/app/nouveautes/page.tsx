@@ -16,7 +16,7 @@ import { bucketByDay, dayLabel, isWithin24h } from "@/lib/updates";
 export const metadata: Metadata = {
   title: "Nouveautés",
   description:
-    "Les derniers chapitres publiés sur Les Poroiniens : les 24 dernières heures, puis les sept jours écoulés, en manga, manhwa et manhua.",
+    "Les dernières publications sur Les Poroiniens : les 24 dernières heures, puis les sept jours écoulés, en manga, manhwa et manhua.",
 };
 
 const TYPES = ["manga", "manhwa", "manhua"] as const;
@@ -102,6 +102,7 @@ export default async function NouveautesPage({
           series.banniere || series.couverture || `/api/img/cover/${series.slug}`,
         label: fresh ? "Dernières 24 h" : "À la une",
         numero: chapter.numero,
+        unite: series.unite ?? "chapitre",
         isAdult: series.classification === "adult",
         fresh,
       };
@@ -115,6 +116,7 @@ export default async function NouveautesPage({
     type: item.series.type,
     isAdult: item.series.classification === "adult",
     numero: item.numero,
+    unite: item.series.unite ?? "chapitre",
     lu: readIds.has(item.id),
   });
 

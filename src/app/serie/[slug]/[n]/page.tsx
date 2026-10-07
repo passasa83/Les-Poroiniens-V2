@@ -17,6 +17,13 @@ import {
   similarSeries,
 } from "@/lib/data/series";
 import { publishDueChaptersOnDemand } from "@/lib/publishing";
+import {
+  libelleUnite,
+  libelleUniteSingulier,
+  libelleUnitesPluriel,
+  libelleVoisin,
+  titreUnite,
+} from "@/lib/format";
 import { can } from "@/lib/roles";
 import type { Series } from "@/lib/types";
 
@@ -43,7 +50,6 @@ function chapterHref(slug: string, numero: number): string {
  *  (loading.tsx) et laisse un statut 200 — on exclut donc la page des
  * index (atténuation officielle Next « pas d'indexation parasite »). */
 const INCOUVERT: Metadata = {
-  title: "Chapitre introuvable",
   robots: { index: false, follow: false },
 };
 
@@ -51,15 +57,24 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const { slug, n } = await params;
   const numero = parseNumero(n);
   const series = await getSeriesBySlug(slug);
-  if (!series || !numero) return INCOUVERT;
+  if (!series) return { title: "Série introuvable", ...INCOUVERT };
+  if (!numero) return { title: `${libelleUniteSingulier(series.unite)} introuvable`, ...INCOUVERT };
 
   const chapter = await getChapter(series.id, numero);
   // Chapitre inexistant : on renvoie le même titre que la page 404.
-  if (!chapter) return INCOUVERT;
+  if (!chapter)
+    return {
+      title: `${libelleUniteSingulier(series.unite)} introuvable`,
+      robots: { index: false, follow: false },
+    };
 
   const isAdult = series.classification === "adult" || chapter.classification === "adult";
-  const title = `${series.titre} — Chapitre ${numero}`;
-  const description = chapter?.titre ? `${title} : ${chapter.titre}` : title;
+  const title = `${series.titre} — ${libelleUnite(numero, series.unite)}`;
+  /* Titre additionnel : seulement s'il est réellement personnalisé (un titre
+     par défaut comme « Chapitre 8 » est déjà repris par `title`). */
+  const sousTitre = titreUnite(chapter.numero, chapter.titre, series.unite);
+  const custom = sousTitre !== libelleUnite(numero, series.unite);
+  const description = custom ? `${title} : ${sousTitre}` : title;
 
   return {
     title,
@@ -132,20 +147,24 @@ export default async function ChapitrePage({ params }: { params: Params }) {
     <div className="container-site flex items-center justify-between gap-2">
       {prevHref ? (
         <Link href={prevHref} className="btn-secondary text-sm">
-          <ChevronLeft className="size-4" /> Chapitre précédent
+          <ChevronLeft className="size-4" /> {libelleVoisin("précédent", series.unite)}
         </Link>
       ) : (
-        <span className="btn-secondary text-sm opacity-50">Chapitre précédent</span>
+        <span className="btn-secondary text-sm opacity-50">
+          {libelleVoisin("précédent", series.unite)}
+        </span>
       )}
       <Link href={`/serie/${series.slug}#chapitres`} className="btn-ghost text-sm">
-        Tous les chapitres
+        Tous les {libelleUnitesPluriel(series.unite).toLowerCase()}
       </Link>
       {nextHref ? (
         <Link href={nextHref} className="btn-primary text-sm">
-          Chapitre suivant <ChevronRight className="size-4" />
+          {libelleVoisin("suivant", series.unite)} <ChevronRight className="size-4" />
         </Link>
       ) : (
-        <span className="btn-primary text-sm opacity-50">Dernier chapitre</span>
+        <span className="btn-primary text-sm opacity-50">
+          Dernier {libelleUniteSingulier(series.unite).toLowerCase()}
+        </span>
       )}
     </div>
   );
@@ -160,9 +179,10 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             ← {series.titre}
           </Link>
           <h1 className="mt-1 text-lg font-bold text-fg">
-            Chapitre {context.chapter.numero}
-            {context.chapter.titre && context.chapter.titre !== `Chapitre ${context.chapter.numero}`
-              ? ` — ${context.chapter.titre}`
+            {libelleUnite(context.chapter.numero, series.unite)}
+            {titreUnite(context.chapter.numero, context.chapter.titre, series.unite) !==
+            libelleUnite(context.chapter.numero, series.unite)
+              ? ` — ${titreUnite(context.chapter.numero, context.chapter.titre, series.unite)}`
               : ""}
           </h1>
         </div>
@@ -184,7 +204,10 @@ export default async function ChapitrePage({ params }: { params: Params }) {
       {context.preview && (
         <div className="container-site">
           <div className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
-            <strong>Aperçu d&apos;un chapitre non publié.</strong> Ce lien n&apos;est visible que
+            <strong>
+              Aperçu d&apos;un {libelleUniteSingulier(series.unite).toLowerCase()} non publié.
+            </strong>{" "}
+            Ce lien n&apos;est visible que
             pour vous (Gérant) et les URLs des pages expirent au bout de 10 minutes.
           </div>
         </div>
@@ -197,7 +220,8 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             <Lock className="size-8 text-adult" />
             <p className="section-title">Contenu réservé aux adultes</p>
             <p className="max-w-md text-sm text-muted">
-              Validez la déclaration d&apos;âge pour afficher les pages de ce chapitre.
+              Validez la déclaration d&apos;âge pour afficher les pages de ce{" "}
+              {libelleUniteSingulier(series.unite).toLowerCase()}.
             </p>
           </div>
         </div>
@@ -207,6 +231,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             chapterId={context.chapter.id}
             chapterNumero={context.chapter.numero}
             serieTitre={series.titre}
+            unite={series.unite}
           />
           {navigation}
 
@@ -230,6 +255,7 @@ export default async function ChapitrePage({ params }: { params: Params }) {
               serieId={series.id}
               serieSlug={series.slug}
               serieTitre={series.titre}
+              unite={series.unite}
               chapitres={chapitres}
               initialMode={user?.preferences.mode_lecture}
               initialSens={user?.preferences.sens_lecture}

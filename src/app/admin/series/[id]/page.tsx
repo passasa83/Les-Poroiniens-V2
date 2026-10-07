@@ -8,6 +8,7 @@ import { Badge, Card } from "@/components/ui/kit";
 import { ChapterActions } from "@/components/series/series-actions";
 import { listChapters } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
+import { compteUnites, libelleUniteSingulier, libelleUnitesPluriel, titreUnite } from "@/lib/format";
 import { SERIES_STATUT_LABELS, type Chapter, type SeriesStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -80,9 +81,7 @@ export default async function ViewSeriePage({
             <span>
               Slug <code className="font-mono">{series.slug}</code>
             </span>
-            <span>
-              {chapters.length} chapitre{chapters.length > 1 ? "s" : ""}
-            </span>
+            <span>{compteUnites(chapters.length, series.unite)}</span>
           </div>
         </div>
         {canEdit ? (
@@ -99,7 +98,7 @@ export default async function ViewSeriePage({
       {archived && (
         <p className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
           Cette série est archivée : elle est invisible du catalogue public, de la recherche et des
-          listes de sorties. Ses chapitres restent intacts.
+          listes de sorties. Ses {libelleUnitesPluriel(series.unite).toLowerCase()} restent intacts.
         </p>
       )}
 
@@ -128,7 +127,7 @@ export default async function ViewSeriePage({
           <Ligne label="Statistiques">
             {series.vues.toLocaleString("fr-FR")} vues · note{" "}
             {series.noteMoy.toFixed(1)}/5 ({series.nbVotes} votes) ·{" "}
-            {series.nb_chapitres} chapitre{series.nb_chapitres > 1 ? "s" : ""}
+            {compteUnites(series.nb_chapitres, series.unite)}
           </Ligne>
           <Ligne label="Mise à jour">{formatDate(series.updated_at)}</Ligne>
         </dl>
@@ -141,11 +140,12 @@ export default async function ViewSeriePage({
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="section-title">Chapitres</h2>
+          <h2 className="section-title">{libelleUnitesPluriel(series.unite)}</h2>
           {!canPublish && (
             <p className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs text-warn">
-              Publication, planification et suppression d&apos;un chapitre sont réservées au Gérant
-              (matrice 4.3) : ces actions sont en lecture seule pour un administrateur.
+              Publication, planification et suppression d&apos;un{" "}
+              {libelleUniteSingulier(series.unite).toLowerCase()} sont réservées au Gérant : ces
+              actions sont en lecture seule pour un administrateur.
             </p>
           )}
         </div>
@@ -166,7 +166,9 @@ export default async function ViewSeriePage({
               {chapters.map((chapter) => (
                 <tr key={chapter.id} className="border-b border-line last:border-0">
                   <td className="px-4 py-3 tabular-nums text-muted">{chapter.numero}</td>
-                  <td className="px-4 py-3 text-fg">{chapter.titre}</td>
+                  <td className="px-4 py-3 text-fg">
+                    {titreUnite(chapter.numero, chapter.titre, series.unite)}
+                  </td>
                   <td className="px-4 py-3">
                     <Badge
                       tone={
@@ -192,6 +194,7 @@ export default async function ViewSeriePage({
                     <ChapterActions
                       chapterId={chapter.id}
                       numero={chapter.numero}
+                      unite={series.unite}
                       statut={chapter.statut}
                       publishAt={chapter.publish_at}
                       canPublish={canPublish}
@@ -202,7 +205,8 @@ export default async function ViewSeriePage({
               {chapters.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-muted">
-                    Aucun chapitre. Importez-en depuis l&apos;espace Gérant
+                    Aucun {libelleUniteSingulier(series.unite).toLowerCase()}. Importez-en depuis
+                    l&apos;espace Gérant
                     {canEdit ? (
                       <>
                         {" "}

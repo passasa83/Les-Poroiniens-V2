@@ -14,7 +14,13 @@ import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
 import { listChapters } from "@/lib/data/chapters";
 import { getLibraryEntry, listHistory } from "@/lib/data/library";
 import { getSeriesBySlug, seriesStats, similarSeries } from "@/lib/data/series";
-import { dateOrRelative, plainText } from "@/lib/format";
+import {
+  dateOrRelative,
+  libelleUnite,
+  libelleUniteSingulier,
+  libelleUnitesPluriel,
+  plainText,
+} from "@/lib/format";
 import { publishDueChaptersOnDemand } from "@/lib/publishing";
 import {
   SERIES_STATUT_LABELS,
@@ -112,10 +118,13 @@ export default async function SeriePage({
   const cta = repriseChapitre
     ? {
         href: chapterHref(repriseChapitre.numero),
-        label: `Reprendre au chapitre ${repriseChapitre.numero}, page ${Math.max(1, reprise.page)}`,
+        label: `Reprendre à ${libelleUnite(repriseChapitre.numero, series.unite)}, page ${Math.max(1, reprise.page)}`,
       }
     : firstChapter
-      ? { href: chapterHref(firstChapter.numero), label: `Lire le chapitre ${firstChapter.numero}` }
+      ? {
+          href: chapterHref(firstChapter.numero),
+          label: `Lire ${libelleUnite(firstChapter.numero, series.unite)}`,
+        }
       : null;
 
   const rawOnglet = Array.isArray(sp.onglet) ? sp.onglet[0] : sp.onglet;
@@ -170,7 +179,7 @@ export default async function SeriePage({
   const couverture = series.couverture || `/api/img/cover/${series.slug}`;
 
   const tabs: Array<{ id: Onglet; label: string; count?: number }> = [
-    { id: "chapitres", label: "Chapitres", count: chapters.length },
+    { id: "chapitres", label: libelleUnitesPluriel(series.unite), count: chapters.length },
     { id: "commentaires", label: "Commentaires" },
     { id: "infos", label: "Infos" },
   ];
@@ -273,7 +282,11 @@ export default async function SeriePage({
               label="Note moyenne"
               value={`${stats.noteMoy.toFixed(1)}/10 (${stats.nbVotes})`}
             />
-            <StatTile icon={<BookOpen className="size-4" />} label="Chapitres" value={String(stats.nb_chapitres)} />
+            <StatTile
+              icon={<BookOpen className="size-4" />}
+              label={libelleUnitesPluriel(series.unite)}
+              value={String(stats.nb_chapitres)}
+            />
             <StatTile
               icon={<Flag className="size-4" />}
               label="Statut"
@@ -336,17 +349,19 @@ export default async function SeriePage({
           {onglet === "chapitres" && (
             <section aria-labelledby="chapitres" className="space-y-4">
               <h2 id="chapitres" className="section-title">
-                Chapitres <span className="text-sm font-normal text-muted">({chapters.length})</span>
+                {libelleUnitesPluriel(series.unite)}{" "}
+                <span className="text-sm font-normal text-muted">({chapters.length})</span>
               </h2>
               {ordered.length === 0 ? (
                 <EmptyState
-                  title="Aucun chapitre publié"
-                  description="Le premier chapitre arrive bientôt."
+                  title={`Aucun ${libelleUniteSingulier(series.unite).toLowerCase()} publié`}
+                  description={`Le premier arrive bientôt.`}
                 />
               ) : (
                 <ChapterList
                   chapters={rows}
                   seriesId={series.id}
+                  unite={series.unite}
                   orderHref={`/serie/${series.slug}?ordre=${asc ? "desc" : "asc"}#contenu`}
                   orderLabel={asc ? "Dernier → Premier" : "Premier → Dernier"}
                   canMark={Boolean(user) && !needsGate}

@@ -450,7 +450,7 @@ export function CompteClient({
           <div className="space-y-3">
             <Toggle
               label="Notifications in-app"
-              hint="Nouveaux chapitres des séries suivies et mentions."
+              hint="Nouveaux contenus des séries suivies et mentions."
               checked={prefs.notifications}
               onChange={(v) => void savePrefs({ ...prefs, notifications: v })}
             />

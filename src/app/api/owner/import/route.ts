@@ -4,13 +4,15 @@ import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit, createImportJob, listImportJobs, updateImportJob } from "@/lib/data/moderation";
 import { refreshSeriesChapterCount } from "@/lib/data/chapters";
-import { getSeriesById } from "@/lib/data/series";
+import { getSeriesById, saveSeries } from "@/lib/data/series";
 import { getDb, rowId, TABLES } from "@/lib/db";
 import { demoPagePath } from "@/lib/db/seed";
+import { libelleUnite } from "@/lib/format";
 import { nasErrorMessage, nasList, type NasPage } from "@/lib/nas";
 import { imgchestErrorMessage, imgchestPost as fetchImgChestPost } from "@/lib/imgchest";
 import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
-import type { Chapter, ImportJob } from "@/lib/types";
+import { detectNumero, uniteDeKind } from "@/lib/unite";
+import type { Chapter, ImportJob, Unite } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,8 @@ const importInput = z.object({
   series_id: z.string().trim().min(1).max(64),
   numero: z.number().int().min(1).max(100000),
   titre: z.string().trim().max(200).default(""),
+  /** Unité importée : absente → déduite du nom du dossier (`Tome 3`). */
+  unite: z.enum(["chapitre", "tome"]).optional(),
   volume: z.number().int().min(1).max(999).nullable().default(null),
   classification: z.enum(["all", "adult"]).default("all"),
   /** `upload` : noms déposés ; `nas` : dossier déjà présent sur le NAS ;
@@ -126,6 +130,10 @@ export async function POST(request: Request) {
   }
 
   const nasPath = data.chemin?.trim().replace(/^\/+/, "").replace(/\/+$/, "") || "";
+  /* Nature du dossier importé : `Tome 3` → tome, `Chapitre 12` → chapitre ;
+     un dossier au nom neutre (« 12 », album ImgChest, pages de démonstration)
+     laisse décider l'organisation déjà enregistrée sur la série. */
+  const folderKind = detectNumero(nasPath.split("/").pop() ?? "").kind;
   const imgchestId = data.source === "imgchest" ? (data.imgchest_post ?? "").trim() : "";
   if (data.source === "imgchest" && !imgchestId) {
     return jsonError("Sélectionnez un album ImgChest.", "invalid_body", 400);
@@ -147,6 +155,14 @@ export async function POST(request: Request) {
   const series = await getSeriesById(data.series_id);
   if (!series) return jsonError("Série introuvable.", "not_found", 404);
 
+  /* Unité importée : explicitement fournie par l'analyse, sinon déduite du
+     nom du dossier, sinon organisation de la série — titre et libellés en
+     découlent (`Tome 3` créé dans une série en tomes). */
+  const unite: Unite =
+    data.unite ??
+    (folderKind !== "dossier" ? uniteDeKind(folderKind) : undefined) ??
+    (series.unite ?? "chapitre");
+
   const db = getDb();
   const { total: duplicates } = await db.list(TABLES.chapters, {
     filters: [
@@ -157,7 +173,7 @@ export async function POST(request: Request) {
   });
   if (duplicates > 0) {
     return jsonError(
-      `Le chapitre ${data.numero} existe déjà pour cette série.`,
+      `Le numéro ${data.numero} existe déjà pour cette série.`,
       "chapter_exists",
       409,
     );
@@ -249,7 +265,7 @@ export async function POST(request: Request) {
       series_id: data.series_id,
       numero: data.numero,
       volume: data.volume,
-      titre: data.titre || `Chapitre ${data.numero}`,
+      titre: data.titre || libelleUnite(data.numero, unite),
       statut: data.statut,
       publish_at: publishAt,
       source: (imgchestId ? "imgchest" : "nas") as Chapter["source"],
@@ -268,6 +284,12 @@ export async function POST(request: Request) {
       ...(chapter as unknown as Record<string, unknown>),
     });
     await refreshSeriesChapterCount(data.series_id);
+    /* Un dépôt découpé en tomes impose ses libellés à la fiche : le premier
+       import d'un tome bascule la série en « tomes ». Jamais l'inverse — une
+       série déjà en tomes n'est pas renversée par un dossier isolé. */
+    if (unite === "tome" && series.unite !== "tome") {
+      await saveSeries({ id: series.id, unite: "tome" });
+    }
 
     for (let index = 0; index < indexed.length; index++) {
       const page = indexed[index];
@@ -291,13 +313,14 @@ export async function POST(request: Request) {
     }
 
     const warning = nas?.action === "error" ? nas.error : undefined;
+    const libelle = libelleUnite(data.numero, unite);
     const resultat = warning
-      ? `Chapitre ${data.numero} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
+      ? `${libelle} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
       : storage === "nas"
-        ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis ${nasPath}.`
+        ? `${libelle} indexé : ${indexed.length} pages depuis ${nasPath}.`
         : storage === "imgchest"
-          ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis l'album ImgChest ${imgchestId}.`
-          : `Chapitre ${data.numero} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`;
+          ? `${libelle} indexé : ${indexed.length} pages depuis l'album ImgChest ${imgchestId}.`
+          : `${libelle} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`;
 
     await updateImportJob(job.id, batchJob
       ? {
@@ -324,6 +347,7 @@ export async function POST(request: Request) {
       apres: {
         series: series.titre,
         numero: data.numero,
+        unite,
         pages: indexed.length,
         classification: chapter.classification,
         source: data.source,
@@ -338,6 +362,9 @@ export async function POST(request: Request) {
     return Response.json(
       {
         chapter,
+        /* Unité retenue (chapitre / tome) : l'interface s'en sert pour son
+           rapport, la série bascule elle aussi côté serveur. */
+        unite,
         jobId: job.id,
         nbPages: indexed.length,
         storage,

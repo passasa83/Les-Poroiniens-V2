@@ -44,6 +44,7 @@ const patchInput = z.object({
     .enum(["en_cours", "termine", "hiatus", "abandonne", "archive"])
     .optional(),
   type: z.enum(["manga", "manhwa", "manhua"]).optional(),
+  unite: z.enum(["chapitre", "tome"]).optional(),
   annee: z.number().int().min(1900).max(2100).nullable().optional(),
   langue: z.string().trim().min(2).max(10).optional(),
   classification: z.enum(["all", "adult"]).optional(),
@@ -58,6 +59,7 @@ function snapshot(series: Series): Record<string, unknown> {
     slug: series.slug,
     statut: series.statut,
     type: series.type,
+    unite: series.unite ?? "chapitre",
     classification: series.classification,
     annee: series.annee,
     langue: series.langue,

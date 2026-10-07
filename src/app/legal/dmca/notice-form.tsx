@@ -67,8 +67,8 @@ export function NoticeForm() {
             <Input id="serie" name="serie" required minLength={2} maxLength={200} autoComplete="off" />
           </Field>
         </div>
-        <Field label="Chapitre ou page concerné (facultatif)" htmlFor="chapitre">
-          <Input id="chapitre" name="chapitre" maxLength={100} autoComplete="off" placeholder="Ex. chapitre 12, page 4" />
+        <Field label="Chapitre, tome ou page concerné (facultatif)" htmlFor="chapitre">
+          <Input id="chapitre" name="chapitre" maxLength={100} autoComplete="off" placeholder="Ex. chapitre 12 ou tome 3, page 4" />
         </Field>
         <Field label="Votre e-mail de contact" htmlFor="email" hint="Pour vous répondre si besoin.">
           <Input id="email" name="email" type="email" required maxLength={200} autoComplete="email" />

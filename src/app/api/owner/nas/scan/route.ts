@@ -1,5 +1,6 @@
 import { jsonError, guardNas } from "../guard";
 import { isSafePath, nasErrorMessage, nasList, nasTree } from "@/lib/nas";
+import { detectNumero, stemCouverture, uniteDominante, type CandidateKind } from "@/lib/unite";
 import { getDb, TABLES } from "@/lib/db";
 import type { Chapter } from "@/lib/types";
 
@@ -9,8 +10,6 @@ const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
 /** bornes : un scan reste une requête unique, même sur une longue série. */
 const MAX_DIRS = 160;
 const CONCURRENCY = 6;
-
-export type CandidateKind = "chapitre" | "volume" | "dossier";
 
 export type Candidate = {
   name: string;
@@ -28,44 +27,6 @@ export type Candidate = {
   /** `true` si la case est cochée par défaut dans l'interface. */
   selectionne: boolean;
 };
-
-/**
- * Lecture du numéro de chapitre dans un nom de dossier :
- * `Chapitre 12`, `ch.12`, `Chapter 3`, `12` → entier ; `Tome 1` est signalé
- * comme volume (structure différente : les planches sont dans le dossier) ;
- * `Chapitre 8.5` est indéterminé (l'API n'accepte que des entiers).
- */
-export function detectNumero(nom: string): { numero: number | null; kind: CandidateKind } {
-  const clean = nom
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\[[^\]]*\]/g, " ")
-    .trim();
-
-  const num = (raw: string): number | null => {
-    if (raw.includes(".") || raw.includes(",")) return null; // 8.5 → à saisir
-    const n = Number(raw);
-    return Number.isInteger(n) && n >= 0 ? n : null;
-  };
-
-  const chapitre = clean.match(
-    /\b(?:chapitre|chapter|chap|ch|partie|part|episode|ep)\b\s*[-_.:#\s]*(\d{1,4}(?:[.,]\d+)?)/i,
-  );
-  if (chapitre) return { numero: num(chapitre[1]), kind: "chapitre" };
-
-  const volume = clean.match(/\b(?:tome|volume|vol|tom)\b\s*[-_.:#\s]*(\d{1,4}(?:[.,]\d+)?)/i);
-  if (volume) return { numero: num(volume[1]), kind: "volume" };
-
-  // Dossier purement numérique : `012`, `12`
-  const seul = clean.match(/^(\d{1,4})$/);
-  if (seul) return { numero: num(seul[1]), kind: "dossier" };
-
-  // Le nombre terminal reste une hypothèse : `Scan 12`, `v2 12`…
-  const terminal = clean.match(/(\d{1,4})$/);
-  if (terminal) return { numero: num(terminal[1]), kind: "dossier" };
-
-  return { numero: null, kind: "dossier" };
-}
 
 /** Exécution bornée en parallèle : le NAS ne doit pas être martelé. */
 async function mapLimit<T, R>(
@@ -147,6 +108,16 @@ export async function GET(request: Request) {
   const imagesRacine = fichiers.filter((f) => IMAGE_EXT.test(f.name)).length;
   const suspects = dirs.slice(MAX_DIRS);
 
+  /* Images posées à côté des dossiers : `Tome 1 LQ.jpg` couvre `Tome 1`,
+     ce sont des vignettes de couverture, jamais des planches. */
+  const nomsDossiers = new Set(dirs.map((d) => d.name.toLowerCase()));
+  const couvertures = fichiers.filter(
+    (f) => IMAGE_EXT.test(f.name) && nomsDossiers.has(stemCouverture(f.name)),
+  ).length;
+
+  /* Structure dominante : une série de tomes s'affiche en tomes. */
+  const unite = uniteDominante(dirs.map((d) => detectNumero(d.name).kind));
+
   const candidates: Candidate[] = await mapLimit(dirs.slice(0, MAX_DIRS), CONCURRENCY, async (dir) => {
     const chemin = decodePath(dir.path);
     const { numero, kind } = detectNumero(dir.name);
@@ -198,7 +169,8 @@ export async function GET(request: Request) {
       pages,
       dejaImporte: false,
       etat: indetermine ? "numero_a_corriger" : "pret",
-      selectionne: !indetermine && kind !== "volume",
+      // Unité identifiée (tome ou chapitre) : cochée d'office dans l'interface.
+      selectionne: !indetermine,
     } satisfies Candidate;
   });
 
@@ -208,7 +180,11 @@ export async function GET(request: Request) {
       `${suspects.length} dossier(s) non analysés : la limite de ${MAX_DIRS} dossiers par scan est atteinte.`,
     );
   }
-  if (imagesRacine > 0) {
+  if (couvertures > 0) {
+    avertissements.push(
+      `${couvertures} couverture(s) à côté des dossiers (« Tome 1 LQ.jpg ») : ignorée(s), ce ne sont pas des planches.`,
+    );
+  } else if (imagesRacine > 0) {
     avertissements.push(
       `${imagesRacine} image(s) directement dans ce dossier : elles ne font pas partie d'un chapitre et sont ignorées.`,
     );
@@ -222,6 +198,8 @@ export async function GET(request: Request) {
     dossier: path.split("/").filter(Boolean).pop() ?? path,
     candidates,
     imagesRacine,
+    couvertures,
+    unite,
     avertissements,
     total: dirs.length,
     scannes: Math.min(dirs.length, MAX_DIRS),

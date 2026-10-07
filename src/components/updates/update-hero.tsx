@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/kit";
+import { libelleCourt } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 export type UpdateHeroData = {
   slug: string;
@@ -10,6 +12,8 @@ export type UpdateHeroData = {
   visuel: string;
   label: string;
   numero: number;
+  /** Chapitres ou tomes : « Tome 3 » au lieu de « Ch. 3 ». */
+  unite: Unite;
   isAdult: boolean;
   /** Sortie dans les dernières 24 h : l'étiquette peut annoncer « Dernières 24 h ». */
   fresh: boolean;
@@ -52,7 +56,7 @@ export function UpdateHeroCard({ hero }: { hero: UpdateHeroData }) {
           {hero.auteur && <p className="meta">{hero.auteur}</p>}
         </div>
         <p className="text-sm">
-          <span className="font-semibold text-fg">Ch. {hero.numero}</span>
+          <span className="font-semibold text-fg">{libelleCourt(hero.numero, hero.unite)}</span>
         </p>
       </div>
       <div className="relative min-h-36 overflow-hidden sm:min-h-48">

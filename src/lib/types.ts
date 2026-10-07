@@ -13,6 +13,14 @@ export type Classification = "all" | "adult";
  */
 export type SeriesStatus = "en_cours" | "termine" | "hiatus" | "abandonne" | "archive";
 export type SeriesType = "manga" | "manhwa" | "manhua";
+/**
+ * Unité de lecture d'une série : la majorité des dépôts sont découpés en
+ * chapitres (`Chapitre 12`), d'autres en tomes (`Tome 3` — le tome est alors
+ * l'unité que le lecteur tourne). La colonne `series.unite` décide des
+ * libellés partout sur le site ; absente des lignes créées avant migration,
+ * on lit donc toujours avec `?? "chapitre"`.
+ */
+export type Unite = "chapitre" | "tome";
 export type ChapterStatus = "draft" | "scheduled" | "published";
 export type LibraryStatus = "en_cours" | "a_lire" | "termine" | "en_pause" | "abandonne";
 
@@ -26,6 +34,8 @@ export interface Series {
   banniere?: string;
   statut: SeriesStatus;
   type: SeriesType;
+  /** Organisation du contenu : « Tome 3 » plutôt que « Chapitre 3 ». */
+  unite?: Unite;
   annee: number | null;
   langue: string;
   classification: Classification;

@@ -19,13 +19,16 @@ import {
   Square,
 } from "lucide-react";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui/kit";
-import type { Classification } from "@/lib/types";
+import { compteUnites, libelleUnite, libelleUniteSingulier, libelleUnitesPluriel } from "@/lib/format";
+import type { Classification, Unite } from "@/lib/types";
 
 export type SeriesLite = {
   id: string;
   titre: string;
   slug: string;
   classification: Classification;
+  /** Organisation de la série : chapitres ou tomes (« Tome 3 » partout). */
+  unite: Unite;
 };
 
 type PageEntry = { name: string; preview: string | null };
@@ -33,6 +36,8 @@ type PageEntry = { name: string; preview: string | null };
 type ImportResult = {
   chapterId: string;
   numero: number;
+  /** Organisation retenue à la création (« Tome 3 créé » dans le rapport). */
+  unite: Unite;
   titre: string;
   slug: string;
   nbPages: number;
@@ -44,7 +49,7 @@ type ImportResult = {
 
 type NasItem = { name: string; isDir: boolean };
 
-/** Album ImgChest : un album = un chapitre, ses images sont servies par le CDN. */
+/** Album ImgChest : un album = une unité de lecture, ses images sont servies par le CDN. */
 type ImgPost = {
   id: string;
   title: string;
@@ -177,7 +182,7 @@ export function ImportPanel({
   const [nasItems, setNasItems] = useState<NasItem[]>([]);
   const [nasBusy, setNasBusy] = useState(false);
   const [nasError, setNasError] = useState<string | null>(null);
-  /** Dossier de chapitre retenu : le listing est alors fait côté serveur. */
+  /** Dossier d'unité (chapitre ou tome) retenu : le listing est alors fait côté serveur. */
   const [nasFolder, setNasFolder] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -186,6 +191,8 @@ export function ImportPanel({
   const [scan, setScan] = useState<ScanCandidate[] | null>(null);
   const [scanFolder, setScanFolder] = useState<string | null>(null);
   const [scanWarn, setScanWarn] = useState<string[]>([]);
+  /** Structure annoncée par la dernière analyse (tomes détectés ou non). */
+  const [scanUnite, setScanUnite] = useState<Unite>("chapitre");
   const [scanBusy, setScanBusy] = useState(false);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [numeros, setNumeros] = useState<Record<string, string>>({});
@@ -205,7 +212,7 @@ export function ImportPanel({
   const [driveMessage, setDriveMessage] = useState<string | null>(null);
   const [driveTone, setDriveTone] = useState<"ok" | "warn" | "adult">("ok");
 
-  // État ImgChest (source d'images : un album par chapitre)
+  // État ImgChest (source d'images : un album par unité de lecture)
   const [imgPosts, setImgPosts] = useState<ImgPost[]>([]);
   const [imgPage, setImgPage] = useState(1);
   const [imgMore, setImgMore] = useState(false);
@@ -216,6 +223,13 @@ export function ImportPanel({
   const [imgInfo, setImgInfo] = useState<ImgInfo | null>(null);
 
   const serie = series.find((s) => s.id === seriesId) ?? null;
+  /** Organisation de la série cible : pilote les libellés du formulaire. */
+  const serieUnite: Unite = serie?.unite ?? "chapitre";
+  const serieSing = libelleUniteSingulier(serieUnite).toLowerCase();
+  /** Structure du lot : détectée par l'analyse, sinon celle de la série. */
+  const lotUnite: Unite = scan ? scanUnite : serieUnite;
+  const lotSing = libelleUniteSingulier(lotUnite).toLowerCase();
+  const lotPlur = libelleUnitesPluriel(lotUnite).toLowerCase();
   const filteredSeries = useMemo(() => {
     const needle = seriesFilter.trim().toLowerCase();
     if (!needle) return series;
@@ -241,7 +255,7 @@ export function ImportPanel({
     }
     const numeroValue = Number(numero);
     if (!numeroValue || numeroValue < 1) {
-      setError("Indiquez un numéro de chapitre valide.");
+      setError(`Indiquez un numéro de ${serieSing} valide.`);
       return;
     }
     if (source === "imgchest") {
@@ -250,7 +264,7 @@ export function ImportPanel({
         return;
       }
     } else if (entries.length === 0 && !nasFolder) {
-      setError("Ajoutez d'abord les pages du chapitre (ou sélectionnez un dossier NAS).");
+      setError(`Ajoutez d'abord les pages du ${serieSing} (ou sélectionnez un dossier NAS).`);
       return;
     }
     if (statut === "scheduled") {
@@ -287,6 +301,8 @@ export function ImportPanel({
         | {
             error?: string;
             chapter?: { id: string; numero: number; titre: string };
+            /** Unité retenue par le serveur (dossier ou série). */
+            unite?: Unite;
             nbPages?: number;
             storage?: "nas" | "demo" | "imgchest";
             warning?: string;
@@ -306,6 +322,7 @@ export function ImportPanel({
       setResult({
         chapterId: data.chapter.id,
         numero: data.chapter.numero,
+        unite: data.unite ?? serieUnite,
         titre: data.chapter.titre,
         slug: serie?.slug ?? "",
         nbPages: data.nbPages ?? entries.length,
@@ -410,7 +427,7 @@ export function ImportPanel({
 
   /**
    * Analyse du dossier courant avant import par lot : chaque sous-dossier est
-   * testé (numéro détecté, planches présentes, chapitre déjà en base) — le
+   * testé (numéro détecté, planches présentes, unité déjà en base) — le
    * serveur se limite aux dossiers non encore importés.
    */
   async function runScan() {
@@ -432,6 +449,8 @@ export function ImportPanel({
             path?: string;
             candidates?: ScanCandidate[];
             avertissements?: string[];
+            /** Structure dominante du dossier analysé (chapitres ou tomes). */
+            unite?: Unite;
           }
         | null;
       if (!res.ok || !Array.isArray(data?.candidates)) {
@@ -442,6 +461,7 @@ export function ImportPanel({
       setScan(data.candidates);
       setScanFolder(data.path ?? nasPath);
       setScanWarn(data.avertissements ?? []);
+      setScanUnite(data.unite ?? "chapitre");
       const nextChecked: Record<string, boolean> = {};
       const nextNumeros: Record<string, string> = {};
       for (const cand of data.candidates) {
@@ -468,7 +488,7 @@ export function ImportPanel({
       return;
     }
     if (selectedCandidates.length === 0) {
-      setError("Cochez au moins un dossier avec un numéro de chapitre.");
+      setError(`Cochez au moins un dossier avec un numéro de ${lotSing}.`);
       return;
     }
     const invalide = selectedCandidates.find((c) => {
@@ -514,7 +534,7 @@ export function ImportPanel({
     let crees = 0;
     let echecs = 0;
 
-    /** Un chapitre du lot : la requête est isolée pour rester récupérable. */
+    /** Une unité du lot : la requête est isolée pour rester récupérable. */
     const postChapter = (payload: Record<string, unknown>) =>
       fetch("/api/owner/import", {
         method: "POST",
@@ -522,7 +542,7 @@ export function ImportPanel({
         body: JSON.stringify(payload),
       });
 
-    // 2. Chaînage chapitre par chapitre : chaque requête reste courte, la
+    // 2. Chaînage dossier par dossier : chaque requête reste courte, la
     //    progression est visible et une erreur n'arrête pas le lot.
     for (let i = 0; i < total; i++) {
       const cand = selectedCandidates[i];
@@ -531,7 +551,7 @@ export function ImportPanel({
       setRows((prev) => [...prev, { name: cand.name, numero: value, statut: "cours" }]);
 
       if (stopRef.current) {
-        erreurs.push(`Lot interrompu après ${i} chapitre(s).`);
+        erreurs.push(`Lot interrompu après ${compteUnites(i, scanUnite)}.`);
         break;
       }
 
@@ -545,6 +565,10 @@ export function ImportPanel({
           source: "nas",
           pages: [],
           chemin: cand.path,
+          /* Nature du dossier : l'analyse sait que « Tome 3 » n'est pas un
+             chapitre ; un nom neutre (« 12 ») laisse la série décider. */
+          unite:
+            cand.kind === "dossier" ? undefined : cand.kind === "volume" ? "tome" : "chapitre",
           statut: lotStatut,
           publish_at: null,
           batch: { jobId, index: i + 1, total },
@@ -616,7 +640,9 @@ export function ImportPanel({
     // 3. Clôture du job avec le rapport complet.
     const message =
       echecs === 0
-        ? `Import par lot terminé : ${crees} chapitre(s) créé(s).`
+        ? `Import par lot terminé : ${compteUnites(crees, scanUnite)} créé${
+            crees === 1 ? "" : "s"
+          }.`
         : `Import par lot : ${crees} créé(s), ${echecs} en erreur.`;
     try {
       await fetch("/api/owner/import/batch", {
@@ -738,7 +764,7 @@ export function ImportPanel({
 
   const tabs: Array<{ key: "lot" | "nas" | "imgchest" | "drive"; label: string }> = [
     { key: "lot", label: "Import par lot" },
-    { key: "nas", label: "Un chapitre" },
+    { key: "nas", label: `Un ${serieSing}` },
     { key: "imgchest", label: "Depuis ImgChest" },
     { key: "drive", label: "Google Drive (séries)" },
   ];
@@ -768,8 +794,8 @@ export function ImportPanel({
               <ListChecks className="size-4 text-primary" /> Import par lot — dossier de série
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Pointez le dossier qui contient les chapitres d&apos;une série : chaque sous-dossier
-              est analysé, les chapitres déjà en base sont écartés, puis les manquants sont indexés
+              Pointez le dossier qui contient les {lotPlur} d&apos;une série : chaque sous-dossier
+              est analysé, les {lotPlur} déjà en base sont écartés, puis les manquants sont indexés
               en une passe. Un seul « job » suit le lot dans le tableau de bord.
             </p>
           </div>
@@ -785,7 +811,7 @@ export function ImportPanel({
                 <Field
                   label="Filtrer les séries"
                   htmlFor="lot-filter"
-                  hint="La série cible sert à écarter les chapitres déjà importés."
+                  hint={`La série cible sert à écarter les ${lotPlur} déjà importés.`}
                 >
                   <Input
                     id="lot-filter"
@@ -888,6 +914,7 @@ export function ImportPanel({
               {scan && (
                 <BatchScanTable
                   candidates={scan}
+                  unite={lotUnite}
                   checked={checked}
                   numeros={numeros}
                   onCheck={(path, value) => setChecked((prev) => ({ ...prev, [path]: value }))}
@@ -919,7 +946,7 @@ export function ImportPanel({
 
               {scan && scan.length > 0 && (
                 <div className="flex flex-wrap items-end gap-4 rounded-xl border border-line bg-surface2 px-4 py-3">
-                  <Field label="Statut des chapitres créés" htmlFor="lot-statut">
+                  <Field label={`Statut des ${lotPlur} créés`} htmlFor="lot-statut">
                     <Select
                       id="lot-statut"
                       value={lotStatut}
@@ -941,8 +968,7 @@ export function ImportPanel({
                       ) : (
                         <Play className="size-4" />
                       )}
-                      Importer {selectedCandidates.length} chapitre
-                      {selectedCandidates.length > 1 ? "s" : ""}
+                      Importer {compteUnites(selectedCandidates.length, lotUnite)}
                     </Button>
                     {batchBusy && (
                       <Button
@@ -958,7 +984,7 @@ export function ImportPanel({
                   </div>
                   <p className="w-full text-xs text-muted">
                     {selectedCandidates.length} dossier(s) sélectionné(s) sur {scan.length}.
-                    L&apos;import se fait chapitre par chapitre : les erreurs sont listées sans
+                    L&apos;import se fait dossier par dossier : les erreurs sont listées sans
                     arrêter le lot.
                   </p>
                 </div>
@@ -974,7 +1000,11 @@ export function ImportPanel({
                       <>
                         <div className="flex items-center justify-between text-xs text-muted">
                           <span>
-                            Chapitre {Math.min(runIndex + 1, selectedCandidates.length)} /{" "}
+                            {libelleUnite(
+                              Math.min(runIndex + 1, selectedCandidates.length),
+                              lotUnite,
+                            )}{" "}
+                            /{" "}
                             {selectedCandidates.length}
                           </span>
                           <span className="tabular-nums">{Math.round(pct)}%</span>
@@ -1033,7 +1063,8 @@ export function ImportPanel({
                       : "border-ok/40 bg-ok/10 text-ok"
                   }`}
                 >
-                  Lot terminé : {batchSummary.crees} chapitre(s) créé(s)
+                  Lot terminé : {compteUnites(batchSummary.crees, lotUnite)} créé
+                  {batchSummary.crees === 1 ? "" : "s"}
                   {batchSummary.echecs > 0 && `, ${batchSummary.echecs} en erreur`}. Ouvrez le
                   tableau de bord pour le rapport détaillé.
                 </p>
@@ -1176,6 +1207,7 @@ export function ImportPanel({
                 onNumero={setNumero}
                 titre={titre}
                 onTitre={setTitre}
+                unite={serieUnite}
                 classification={classification}
                 onClassification={setClassification}
                 error={error}
@@ -1200,7 +1232,8 @@ export function ImportPanel({
               <Images className="size-4 text-primary" /> Albums ImgChest
             </h2>
             <p className="mt-1 text-xs text-muted">
-              Un album = un chapitre. Les images restent sur le CDN d&apos;ImgChest : seul l&apos;index
+              Un album = un {serieSing}. Les images restent sur le CDN d&apos;ImgChest : seul
+              l&apos;index
               des pages est enregistré en base, la lecture n&apos;appelle jamais ImgChest.
             </p>
           </div>
@@ -1305,6 +1338,7 @@ export function ImportPanel({
             onNumero={setNumero}
             titre={titre}
             onTitre={setTitre}
+            unite={serieUnite}
             classification={classification}
             onClassification={setClassification}
             error={error}
@@ -1491,6 +1525,8 @@ function ImportForm(props: {
   onNumero: (value: string) => void;
   titre: string;
   onTitre: (value: string) => void;
+  /** Organisation de la série cible : « Chapitre » ou « Tome ». */
+  unite: Unite;
   classification: Classification;
   onClassification: (value: Classification) => void;
   error: string | null;
@@ -1504,6 +1540,8 @@ function ImportForm(props: {
 }) {
   /** Sources où seuls des noms / URLs sont indexés (aucun octet transité). */
   const indexed = props.source === "nas" || props.source === "imgchest";
+  const sing = libelleUniteSingulier(props.unite).toLowerCase();
+  const plur = libelleUnitesPluriel(props.unite).toLowerCase();
   const submitLabel =
     props.statut === "published"
       ? indexed
@@ -1512,7 +1550,7 @@ function ImportForm(props: {
       : props.statut === "scheduled"
         ? "Programmer la publication"
         : indexed
-          ? "Indexer le chapitre (brouillon)"
+          ? `Indexer le ${sing} (brouillon)`
           : "Importer en brouillon";
 
   return (
@@ -1539,7 +1577,7 @@ function ImportForm(props: {
         </Field>
       </div>
 
-      <Field label="Numéro de chapitre *" htmlFor="i-numero">
+      <Field label={`Numéro de ${sing} *`} htmlFor="i-numero">
         <Input
           id="i-numero"
           type="number"
@@ -1550,7 +1588,11 @@ function ImportForm(props: {
         />
       </Field>
 
-      <Field label="Titre du chapitre" htmlFor="i-titre" hint="Facultatif (« Chapitre 25 » par défaut).">
+      <Field
+        label={`Titre du ${sing}`}
+        htmlFor="i-titre"
+        hint={`Facultatif (« ${libelleUnite(25, props.unite)} » par défaut).`}
+      >
         <Input id="i-titre" value={props.titre} onChange={(e) => props.onTitre(e.target.value)} maxLength={200} />
       </Field>
 
@@ -1566,7 +1608,7 @@ function ImportForm(props: {
       </Field>
 
       <Field label="Statut à la création" htmlFor="i-statut"
-        hint="Les chapitres programmés sont publiés automatiquement par le cron.">
+        hint={`Les ${plur} programmés sont publiés automatiquement par le cron.`}>
         <Select
           id="i-statut"
           value={props.statut}
@@ -1662,7 +1704,7 @@ function ResultPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="section-title">
-            Chapitre {result.numero} créé — {result.nbPages} pages indexées
+            {libelleUnite(result.numero, result.unite)} créé — {result.nbPages} pages indexées
           </h2>
           <p className="text-sm text-muted">
             {result.seriesTitre} ·{" "}
@@ -1767,7 +1809,7 @@ function Breadcrumbs({
   );
 }
 
-/* -- R�sultat de l'analyse d'un dossier de s�rie (import par lot) --------- */
+/* ── Résultat de l'analyse d'un dossier de série (import par lot) ───────── */
 
 const ETAT_TONE: Record<ScanCandidate["etat"], "ok" | "neutral" | "warn"> = {
   pret: "ok",
@@ -1776,8 +1818,15 @@ const ETAT_TONE: Record<ScanCandidate["etat"], "ok" | "neutral" | "warn"> = {
   numero_a_corriger: "warn",
 };
 
+/**
+ * Analyse d'un dossier de série avant import : chaque ligne est un sous-dossier
+ * du dépôt. La colonne de numéro suit l'organisation détectée (« N° de tome »
+ * pour un dépôt structuré en tomes) et le chemin complet reste affiché :
+ * un dossier « Tome 4 » est un contenu normal, pas un cas particulier.
+ */
 function BatchScanTable({
   candidates,
+  unite,
   checked,
   numeros,
   onCheck,
@@ -1785,6 +1834,8 @@ function BatchScanTable({
   onSelectAll,
 }: {
   candidates: ScanCandidate[];
+  /** Organisation détectée par l'analyse (colonne et libellés ARIA). */
+  unite: Unite;
   checked: Record<string, boolean>;
   numeros: Record<string, string>;
   onCheck: (path: string, value: boolean) => void;
@@ -1793,20 +1844,33 @@ function BatchScanTable({
 }) {
   const pret = candidates.filter((c) => c.etat === "pret").length;
   const deja = candidates.filter((c) => c.etat === "deja_importe").length;
+  const sing = libelleUniteSingulier(unite).toLowerCase();
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-semibold text-fg">
-          {candidates.length} sous-dossier(s) � {pret} � importer
-          {deja > 0 && ` � ${deja} d�j� import�(s)`}
+          {candidates.length} sous-dossier(s) — {pret} à importer
+          {deja > 0 && ` · ${deja} déjà importé(s)`}
+          {" "}
+          <span className="ml-2 text-xs font-normal text-muted">
+            structure détectée : {libelleUnitesPluriel(unite).toLowerCase()}
+          </span>
         </p>
         <div className="flex gap-2">
-          <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => onSelectAll(true)}>
+          <button
+            type="button"
+            className="btn-secondary px-2 py-1 text-xs"
+            onClick={() => onSelectAll(true)}
+          >
             Tout cocher
           </button>
-          <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onSelectAll(false)}>
-            Tout d�cocher
+          <button
+            type="button"
+            className="btn-ghost px-2 py-1 text-xs"
+            onClick={() => onSelectAll(false)}
+          >
+            Tout décocher
           </button>
         </div>
       </div>
@@ -1817,9 +1881,9 @@ function BatchScanTable({
             <tr className="border-b border-line text-left text-xs uppercase text-muted">
               <th className="px-3 py-2 font-semibold">Importer</th>
               <th className="px-3 py-2 font-semibold">Dossier</th>
-              <th className="px-3 py-2 font-semibold">N� de chapitre</th>
+              <th className="px-3 py-2 font-semibold">{`N° de ${sing}`}</th>
               <th className="px-3 py-2 text-right font-semibold">Planches</th>
-              <th className="px-3 py-2 font-semibold">�tat</th>
+              <th className="px-3 py-2 font-semibold">État</th>
             </tr>
           </thead>
           <tbody>
@@ -1841,9 +1905,7 @@ function BatchScanTable({
                     <span className="block truncate text-fg" title={cand.path}>
                       {cand.name}
                     </span>
-                    <span className="block truncate text-xs text-muted">
-                      {cand.kind === "volume" ? "volume (structure particuli�re)" : cand.path}
-                    </span>
+                    <span className="block truncate text-xs text-muted">{cand.path}</span>
                   </td>
                   <td className="px-3 py-2">
                     <input
@@ -1852,7 +1914,7 @@ function BatchScanTable({
                       className="input w-24"
                       value={numeros[cand.path] ?? ""}
                       disabled={cand.etat === "deja_importe" || cand.etat === "pas_d_image"}
-                      aria-label={`Num�ro de chapitre pour ${cand.name}`}
+                      aria-label={`Numéro de ${sing} pour ${cand.name}`}
                       onChange={(e) => onNumero(cand.path, e.target.value)}
                     />
                   </td>

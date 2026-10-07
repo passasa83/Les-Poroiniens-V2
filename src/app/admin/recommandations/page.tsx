@@ -40,7 +40,7 @@ export default async function AdminRecommandationsPage() {
       <div>
         <h1 className="section-title">Recommandations</h1>
         <p className="mt-1 text-sm text-muted">
-          Sélections manuelles affichées sur la home, les fiches séries et la fin des chapitres.
+          Sélections manuelles affichées sur la home, les fiches séries et la fin des lectures.
           Le contenu +18 respecte le gate à l&apos;affichage.
         </p>
       </div>

@@ -11,7 +11,7 @@ type SeriesLite = { id: string; titre: string; slug: string; couverture: string 
 const PLACEMENTS: Array<{ value: Recommendation["placement"]; label: string }> = [
   { value: "home", label: "Page d'accueil" },
   { value: "series", label: "Fiche série" },
-  { value: "end_chapter", label: "Fin de chapitre" },
+  { value: "end_chapter", label: "Fin de lecture" },
 ];
 
 function toLocalInput(iso: string | null): string {

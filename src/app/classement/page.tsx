@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
 import { adultGateAccepted } from "@/lib/auth";
+import { compteUnites, libelleUniteSingulier } from "@/lib/format";
 import { Badge, EmptyState, Rating } from "@/components/ui/kit";
 import {
   PERIODES,
@@ -105,8 +106,9 @@ function activite(r: RangClassement, periode: PeriodeCle): string {
        temps », on annonce donc le nombre de chapitres publiés (colonne déjà
        dénormalisée en base) plutôt qu'un nombre de vues. */
     const chapitres = Math.max(Math.trunc(r.serie.nb_chapitres) || 0, 0);
-    if (chapitres === 0) return "Aucun chapitre publié";
-    return `${chapitres} chapitre${chapitres > 1 ? "s" : ""}`;
+    if (chapitres === 0)
+      return `Aucun ${libelleUniteSingulier(r.serie.unite).toLowerCase()} publié`;
+    return compteUnites(chapitres, r.serie.unite);
   }
   const bits: string[] = [];
   if (r.sorties > 0) bits.push(`${r.sorties} sortie${r.sorties > 1 ? "s" : ""}`);

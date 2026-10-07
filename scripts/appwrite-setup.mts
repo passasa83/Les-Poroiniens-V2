@@ -93,6 +93,9 @@ const TABLES: Table[] = [
       // sans perdre ses chapitres (complétée par le script).
       { key: "statut", type: "enum", elements: ["en_cours", "termine", "hiatus", "abandonne", "archive"] },
       { key: "type", type: "enum", elements: ["manga", "manhwa", "manhua"] },
+      // Organisation du contenu : un dépôt NAS découpé en tomes affiche
+      // « Tome 3 » partout (liste, lecteur, compteurs) au lieu de « Chapitre 3 ».
+      { key: "unite", type: "enum", elements: ["chapitre", "tome"], def: "chapitre" },
       { key: "annee", type: "integer" },
       { key: "langue", type: "varchar", size: 16, def: "FR" },
       { key: "classification", type: "enum", elements: ["all", "adult"], def: "all" },

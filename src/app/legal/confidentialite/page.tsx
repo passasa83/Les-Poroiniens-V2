@@ -29,12 +29,12 @@ const DATA_ROWS: Array<[string, string, string]> = [
   ],
   [
     "Bibliothèque",
-    "Statuts de lecture (à lire, en cours, terminé…), favoris, notes, dernier chapitre et page atteints.",
+    "Statuts de lecture (à lire, en cours, terminé…), favoris, notes, dernière lecture et page atteinte.",
     "Jusqu'à la suppression du compte",
   ],
   [
     "Historique de lecture",
-    "Chapitres consultés, page atteinte, date de lecture, progression enregistrée.",
+    "Contenus consultés (chapitre ou tome), page atteinte, date de lecture, progression enregistrée.",
     "Jusqu'à la suppression du compte",
   ],
   [

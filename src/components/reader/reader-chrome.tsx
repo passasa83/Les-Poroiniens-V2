@@ -4,6 +4,8 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Flag, Maximize, Minimize, Setting
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { libelleUnite, libelleUniteSingulier, libelleVoisin } from "@/lib/format";
+import type { Unite } from "@/lib/types";
 
 /** Délai d’inactivité avant le masquage automatique des barres. */
 const IDLE_MS = 2600;
@@ -117,6 +119,7 @@ export function ReaderTopBar({
   hidden,
   serieHref,
   serieTitre,
+  unite,
   chapitres,
   courant,
   settingsOpen,
@@ -128,6 +131,8 @@ export function ReaderTopBar({
   hidden: boolean;
   serieHref: string;
   serieTitre: string;
+  /** Organisation de la série : « Tome 3 » au lieu de « Chapitre 3 ». */
+  unite?: Unite | null;
   chapitres: Array<{ numero: number; href: string }>;
   courant: string;
   settingsOpen: boolean;
@@ -158,7 +163,7 @@ export function ReaderTopBar({
 
         <select
           className="min-h-11 min-w-0 max-w-[9rem] rounded-lg border border-line bg-surface2 px-2 text-xs font-semibold text-fg sm:max-w-none"
-          aria-label="Sélecteur de chapitre"
+          aria-label={`Sélecteur de ${libelleUniteSingulier(unite).toLowerCase()}`}
           value={courant}
           onChange={(e) => {
             const href = e.target.value;
@@ -167,7 +172,7 @@ export function ReaderTopBar({
         >
           {chapitres.map((c) => (
             <option key={c.numero} value={c.href}>
-              Chapitre {c.numero}
+              {libelleUnite(c.numero, unite)}
             </option>
           ))}
         </select>
@@ -205,7 +210,7 @@ export function ReaderTopBar({
   );
 }
 
-/** Barre inférieure : numéro de page, progression cliquable, chapitre précédent / suivant. */
+/** Barre inférieure : numéro de page, progression cliquable, unité précédente / suivante. */
 export function ReaderBottomBar({
   hidden,
   page,
@@ -213,6 +218,7 @@ export function ReaderBottomBar({
   onSeek,
   prevHref,
   nextHref,
+  unite,
 }: {
   hidden: boolean;
   page: number;
@@ -220,6 +226,8 @@ export function ReaderBottomBar({
   onSeek: (index: number) => void;
   prevHref: string | null;
   nextHref: string | null;
+  /** Organisation de la série (étiquettes ARIA : « Tome suivant »). */
+  unite?: Unite | null;
 }) {
   return (
     <footer
@@ -247,7 +255,7 @@ export function ReaderBottomBar({
         />
 
         {prevHref ? (
-          <Link href={prevHref} className="btn-ghost shrink-0 px-2" aria-label="Chapitre précédent">
+          <Link href={prevHref} className="btn-ghost shrink-0 px-2" aria-label={libelleVoisin("précédent", unite)}>
             <ChevronLeft className="size-4" />
             <span className="hidden md:inline">Précédent</span>
           </Link>
@@ -255,7 +263,7 @@ export function ReaderBottomBar({
           <button
             type="button"
             className="btn-ghost shrink-0 px-2"
-            aria-label="Chapitre précédent"
+            aria-label={libelleVoisin("précédent", unite)}
             disabled
           >
             <ChevronLeft className="size-4" />
@@ -264,7 +272,7 @@ export function ReaderBottomBar({
         )}
 
         {nextHref ? (
-          <Link href={nextHref} className="btn-ghost shrink-0 px-2" aria-label="Chapitre suivant">
+          <Link href={nextHref} className="btn-ghost shrink-0 px-2" aria-label={libelleVoisin("suivant", unite)}>
             <span className="hidden md:inline">Suivant</span>
             <ChevronRight className="size-4" />
           </Link>
@@ -272,7 +280,7 @@ export function ReaderBottomBar({
           <button
             type="button"
             className="btn-ghost shrink-0 px-2"
-            aria-label="Chapitre suivant"
+            aria-label={libelleVoisin("suivant", unite)}
             disabled
           >
             <span className="hidden md:inline">Suivant</span>
