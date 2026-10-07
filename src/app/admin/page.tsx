@@ -66,8 +66,11 @@ export default async function AdminDashboard() {
   ]);
 
   /* Masquage du jeu de démonstration en production : KPI et classements du
-     back-office ne comptent que le catalogue réellement visible. */
-  const series = exclureDemo(seriesRes.items);
+     back-office ne comptent que le catalogue réellement visible. Les séries
+     archivées sont hors catalogue public (§9.2) : elles sortent des classements. */
+  const toutes = exclureDemo(seriesRes.items);
+  const archivees = toutes.filter((s) => s.statut === "archive");
+  const series = toutes.filter((s) => s.statut !== "archive");
   const chapters = chapterRows.items.filter((c) => !serieDeDemo(String(c.series_id)));
   const comments = exclureDemo(commentRes.items);
   const publishedChapters = chapters.filter((c) => c.statut === "published");
@@ -138,6 +141,35 @@ export default async function AdminDashboard() {
     <div className="space-y-8">
       <Header title="Tableau de bord" subtitle="Activité du site et santé des services." />
 
+      {/* Actions rapides */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <QuickAction
+          href="/moderation"
+          label="Signalements"
+          value={openReports.length}
+          hint="Modération en attente"
+          tone={openReports.length > 0 ? "warn" : "ok"}
+        />
+        <QuickAction
+          href="/admin/users"
+          label="Utilisateurs"
+          value={n(profileRes.items.length)}
+          hint="Comptes et rôles"
+        />
+        <QuickAction
+          href="/admin/series"
+          label="Catalogue"
+          value={n(series.length)}
+          hint={`${archivees.length} archivée(s)`}
+        />
+        <QuickAction
+          href="/admin/recommandations"
+          label="Recommandations"
+          hint="Mises en avant de la home"
+          value="Gérer"
+        />
+      </div>
+
       {mode === "demo" && (
         <div className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-xs text-warn">
           Mode démonstration : Appwrite n&apos;est pas encore configuré (clé API absente).
@@ -200,7 +232,7 @@ export default async function AdminDashboard() {
             {series.length === 0 && <li className="text-sm text-muted">Aucune série.</li>}
           </ol>
           <Link href="/admin/series" className="mt-4 inline-block text-sm link-muted">
-            Gérer le catalogue →
+            Consulter le catalogue →
           </Link>
         </Card>
 
@@ -344,6 +376,35 @@ function Header({ title, subtitle }: { title: string; subtitle?: string }) {
       <h1 className="section-title">{title}</h1>
       {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
     </div>
+  );
+}
+
+/** Carte-raccourci : une rubrique du back-office, cliquable en entier. */
+function QuickAction({
+  href,
+  label,
+  hint,
+  value,
+  tone = "fg",
+}: {
+  href: string;
+  label: string;
+  hint: string;
+  value: string | number;
+  tone?: "fg" | "warn" | "ok";
+}) {
+  const color =
+    tone === "warn" ? "text-warn" : tone === "ok" ? "text-ok" : "text-fg";
+  return (
+    <Link
+      href={href}
+      className="card block p-4 transition-colors hover:bg-surface2/70"
+      aria-label={`${label} — ${hint}`}
+    >
+      <span className="block text-xs uppercase tracking-wide text-muted">{label}</span>
+      <span className={`mt-1 block text-3xl font-bold tabular-nums ${color}`}>{value}</span>
+      <span className="mt-1 block text-xs text-muted">{hint}</span>
+    </Link>
   );
 }
 

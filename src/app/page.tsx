@@ -29,7 +29,9 @@ export default async function HomePage() {
   const [user, adult, recos, settings, annonce] = await Promise.all([
     getCurrentUser(),
     adultGateAccepted(),
-    activeRecommendations("home"),
+    // Section facultative : une panne du backend ne doit pas faire tomber la
+    // page d'accueil, le héros repart alors des séries les plus lues (§6.1).
+    activeRecommendations("home").catch(() => []),
     getSettings().catch(() => ({}) as Record<string, string>),
     derniereAnnonce().catch(() => null),
   ]);

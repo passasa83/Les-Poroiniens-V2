@@ -1,6 +1,7 @@
 import "server-only";
 import { AppwriteDriver } from "./appwrite";
 import { DemoDriver } from "./demo";
+import { isTransientNetworkError } from "./transport";
 import type { DbDriver } from "./driver";
 
 export { TABLES } from "./driver";
@@ -36,12 +37,41 @@ export function dataMode(): "appwrite" | "demo" {
  */
 const cache = new Map<string, { expires: number; value: unknown }>();
 
+/** Une seule alerte par clé pendant une panne : pas de journal noyé. */
+const staleWarned = new Set<string>();
+
+/**
+ * Lecture du catalogue avec repli « dernière valeur connue ».
+ *
+ * L'Appwrite est joignable via VPN : quand le tunnel tombe, la requête échoue
+ * après le timeout de connexion. On ressert alors la valeur déjà en cache
+ * (même périmée) plutôt que de faire tomber la page — elle est retentée à
+ * chaque appel suivant, donc la reprise est immédiate dès le retour du réseau.
+ * L'erreur remonte si aucune valeur n'a jamais été mise en cache pour cette clé.
+ */
 export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.value as T;
-  const value = await fn();
-  cache.set(key, { expires: Date.now() + ttlMs, value });
-  return value;
+
+  try {
+    const value = await fn();
+    cache.set(key, { expires: Date.now() + ttlMs, value });
+    staleWarned.delete(key);
+    return value;
+  } catch (err) {
+    if (hit && isTransientNetworkError(err)) {
+      if (!staleWarned.has(key)) {
+        console.warn(
+          `[cache] « ${key} » : backend injoignable, valeur périmée servie (${new Date(
+            hit.expires - ttlMs,
+          ).toLocaleTimeString("fr-FR")}).`,
+        );
+        staleWarned.add(key);
+      }
+      return hit.value as T;
+    }
+    throw err;
+  }
 }
 
 export function invalidate(prefix: string): void {

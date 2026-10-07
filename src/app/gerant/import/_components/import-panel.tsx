@@ -1,17 +1,22 @@
 "use client";
 
-import { useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
+  ArrowUp,
+  CheckCircle2,
+  CircleAlert,
   ExternalLink,
   FileImage,
   FolderTree,
   Images,
+  ListChecks,
   Loader2,
+  Play,
   RefreshCw,
   Rocket,
-  UploadCloud,
+  Square,
 } from "lucide-react";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui/kit";
 import type { Classification } from "@/lib/types";
@@ -67,51 +72,39 @@ type PreviewData = {
   anomalies: { name: string; reason: string }[];
 };
 
-type ImportStatut = "draft" | "scheduled" | "published";
+/** Candidat renvoyé par `/api/owner/nas/scan` (import par lot, §10.2). */
+type ScanCandidate = {
+  name: string;
+  path: string;
+  numero: number | null;
+  kind: "chapitre" | "volume" | "dossier";
+  pages: number;
+  dejaImporte: boolean;
+  etat: "pret" | "deja_importe" | "pas_d_image" | "numero_a_corriger";
+  selectionne: boolean;
+};
 
-const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
-const ARCHIVE_EXT = /\.(zip|cbz)$/i;
+/** Ligne du rapport de lot : créé, ignoré ou en erreur. */
+type BatchRow = {
+  name: string;
+  numero: number | null;
+  statut: "cours" | "ok" | "erreur";
+  pages?: number;
+  message?: string;
+};
+
+const ETAT_LABEL: Record<ScanCandidate["etat"], string> = {
+  pret: "Prêt à importer",
+  deja_importe: "Déjà importé",
+  pas_d_image: "Aucune image",
+  numero_a_corriger: "Numéro à corriger",
+};
+
+type ImportStatut = "draft" | "scheduled" | "published";
 
 /** Tri naturel : page-2 avant page-10 (§10.2). */
 function naturalSort(entries: PageEntry[]): PageEntry[] {
   return [...entries].sort((a, b) => a.name.localeCompare(b.name, "fr", { numeric: true }));
-}
-
-/**
- * Lecture du répertoire central d'une archive ZIP/CBZ : seuls les noms de
- * fichiers sont lus (aucune décompression), suffisants pour indexer les pages.
- */
-async function readZipEntries(file: File): Promise<string[]> {
-  const buffer = await file.arrayBuffer();
-  const view = new DataView(buffer);
-  const end = buffer.byteLength - 22;
-  const floor = Math.max(0, buffer.byteLength - 66_000);
-  let eocd = -1;
-  for (let i = end; i >= floor; i--) {
-    if (view.getUint32(i, true) === 0x0605_4b50) {
-      eocd = i;
-      break;
-    }
-  }
-  if (eocd < 0) throw new Error("Archive ZIP/CBZ illisible.");
-
-  const count = view.getUint16(eocd + 10, true);
-  let offset = view.getUint32(eocd + 16, true);
-  const decoder = new TextDecoder();
-  const names: string[] = [];
-
-  for (let i = 0; i < count; i++) {
-    if (offset + 46 > buffer.byteLength) break;
-    if (view.getUint32(offset, true) !== 0x0201_4b50) break;
-    const nameLen = view.getUint16(offset + 28, true);
-    const extraLen = view.getUint16(offset + 30, true);
-    const commentLen = view.getUint16(offset + 32, true);
-    const name = decoder.decode(new Uint8Array(buffer, offset + 46, nameLen));
-    if (!name.endsWith("/")) names.push(name);
-    offset += 46 + nameLen + extraLen + commentLen;
-  }
-  if (names.length === 0) throw new Error("Aucun fichier détecté dans l'archive.");
-  return names;
 }
 
 function normalizeNas(raw: unknown): NasItem[] {
@@ -152,27 +145,32 @@ export function ImportPanel({
   nasConfigured,
   driveConfigured,
   imgchestList,
+  initialSeriesId = "",
 }: {
   series: SeriesLite[];
   nasConfigured: boolean;
   driveConfigured: boolean;
   /** Vrai si `IMG_CHEST_USERNAME` est renseignée (liste des albums). */
   imgchestList: boolean;
+  /** Série pré-sélectionnée (`/gerant/import?series=…`, lien depuis une fiche). */
+  initialSeriesId?: string;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"upload" | "nas" | "imgchest" | "drive">("upload");
+  const [tab, setTab] = useState<"lot" | "nas" | "imgchest" | "drive">("lot");
 
   // État commun du formulaire d'import
   const [seriesFilter, setSeriesFilter] = useState("");
-  const [seriesId, setSeriesId] = useState("");
+  const [seriesId, setSeriesId] = useState(initialSeriesId);
   const [numero, setNumero] = useState("");
   const [titre, setTitre] = useState("");
-  const [classification, setClassification] = useState<Classification>("all");
+  // La classification hérite de la série cible (le +18 ne s'applique jamais à l'inverse).
+  const [classification, setClassification] = useState<Classification>(
+    () => series.find((s) => s.id === initialSeriesId)?.classification ?? "all",
+  );
   const [entries, setEntries] = useState<PageEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const previewsRef = useRef<string[]>([]);
 
   // État NAS
   const [nasPath, setNasPath] = useState("/");
@@ -183,6 +181,20 @@ export function ImportPanel({
   const [nasFolder, setNasFolder] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+
+  // État de l'import par lot (§10.2)
+  const [scan, setScan] = useState<ScanCandidate[] | null>(null);
+  const [scanFolder, setScanFolder] = useState<string | null>(null);
+  const [scanWarn, setScanWarn] = useState<string[]>([]);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [numeros, setNumeros] = useState<Record<string, string>>({});
+  const [lotStatut, setLotStatut] = useState<"draft" | "published">("draft");
+  const [rows, setRows] = useState<BatchRow[]>([]);
+  const [runIndex, setRunIndex] = useState(-1);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchSummary, setBatchSummary] = useState<{ crees: number; echecs: number } | null>(null);
+  const stopRef = useRef(false);
 
   // Statut à la création (§5.1, étape 4)
   const [statut, setStatut] = useState<ImportStatut>("draft");
@@ -210,55 +222,6 @@ export function ImportPanel({
     return series.filter((s) => s.titre.toLowerCase().includes(needle));
   }, [series, seriesFilter]);
 
-  function releasePreviews() {
-    for (const url of previewsRef.current) URL.revokeObjectURL(url);
-    previewsRef.current = [];
-  }
-
-  async function handleFiles(fileList: FileList | File[]) {
-    const list = Array.from(fileList);
-    const images = list.filter((f) => f.type.startsWith("image/") && IMAGE_EXT.test(f.name));
-    const archives = list.filter((f) => ARCHIVE_EXT.test(f.name));
-    const unsupported = list.length - images.length - archives.length;
-
-    setError(null);
-    releasePreviews();
-
-    const collected: PageEntry[] = images.map((file) => ({
-      name: file.name,
-      preview: URL.createObjectURL(file),
-    }));
-    previewsRef.current = collected
-      .map((e) => e.preview)
-      .filter((url): url is string => Boolean(url));
-
-    for (const archive of archives) {
-      try {
-        const names = await readZipEntries(archive);
-        collected.push(...names.map((name) => ({ name, preview: null })));
-      } catch (err) {
-        setError(
-          `Archive « ${archive.name} » ignorée : ${err instanceof Error ? err.message : "lecture impossible"}.`,
-        );
-      }
-    }
-
-    if (images.length + archives.length === 0) {
-      setError("Aucun fichier exploitable : déposez des images (jpg/png/webp) ou une archive ZIP/CBZ.");
-      return;
-    }
-    if (unsupported > 0 && images.length > 0) {
-      setError(`${unsupported} fichier(s) ignoré(s) (type non pris en charge).`);
-    }
-
-    setEntries(naturalSort(collected));
-  }
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    if (event.dataTransfer?.files?.length) void handleFiles(event.dataTransfer.files);
-  }
-
   function onPickSeries(id: string) {
     setSeriesId(id);
     const target = series.find((s) => s.id === id);
@@ -266,7 +229,7 @@ export function ImportPanel({
   }
 
   async function submitImport(
-    source: "upload" | "nas" | "imgchest",
+    source: "nas" | "imgchest",
     event?: FormEvent,
   ) {
     event?.preventDefault();
@@ -335,7 +298,6 @@ export function ImportPanel({
         return;
       }
 
-      releasePreviews();
       setEntries([]);
       setNasFolder(null);
       setPreview(null);
@@ -419,6 +381,263 @@ export function ImportPanel({
     } finally {
       setPreviewBusy(false);
     }
+  }
+
+  /** Déplacement dans l'arborescence : fil d'Ariane, montée, descente. */
+  function goTo(path: string) {
+    const clean = path || "/";
+    setNasPath(clean);
+    void listNas(clean);
+  }
+
+  function parentPath(path: string): string {
+    const clean = path.replace(/\/+$/, "");
+    const cut = clean.lastIndexOf("/");
+    return cut <= 0 ? "/" : clean.slice(0, cut);
+  }
+
+  /** Segments du fil d'Ariane, depuis la racine jusqu'au dossier courant. */
+  const crumbs = useMemo(() => {
+    const parts = nasPath.split("/").filter(Boolean);
+    const out: Array<{ label: string; path: string }> = [{ label: "Racine", path: "/" }];
+    let acc = "";
+    for (const part of parts) {
+      acc += `/${part}`;
+      out.push({ label: part, path: acc });
+    }
+    return out;
+  }, [nasPath]);
+
+  /**
+   * Analyse du dossier courant avant import par lot : chaque sous-dossier est
+   * testé (numéro détecté, planches présentes, chapitre déjà en base) — le
+   * serveur se limite aux dossiers non encore importés.
+   */
+  async function runScan() {
+    if (!nasConfigured) return;
+    setScanBusy(true);
+    setScan(null);
+    setScanFolder(null);
+    setScanWarn([]);
+    setRows([]);
+    setBatchSummary(null);
+    setNasError(null);
+    try {
+      const query = new URLSearchParams({ path: nasPath });
+      if (seriesId) query.set("series_id", seriesId);
+      const res = await fetch(`/api/owner/nas/scan?${query.toString()}`);
+      const data = (await res.json().catch(() => null)) as
+        | {
+            error?: string;
+            path?: string;
+            candidates?: ScanCandidate[];
+            avertissements?: string[];
+          }
+        | null;
+      if (!res.ok || !Array.isArray(data?.candidates)) {
+        setNasError(data?.error ?? "Analyse impossible.");
+        setScan([]);
+        return;
+      }
+      setScan(data.candidates);
+      setScanFolder(data.path ?? nasPath);
+      setScanWarn(data.avertissements ?? []);
+      const nextChecked: Record<string, boolean> = {};
+      const nextNumeros: Record<string, string> = {};
+      for (const cand of data.candidates) {
+        nextChecked[cand.path] = cand.selectionne;
+        nextNumeros[cand.path] = cand.numero === null ? "" : String(cand.numero);
+      }
+      setChecked(nextChecked);
+      setNumeros(nextNumeros);
+    } catch {
+      setNasError("Erreur réseau : réessayez.");
+      setScan([]);
+    } finally {
+      setScanBusy(false);
+    }
+  }
+
+  const selectedCandidates = (scan ?? []).filter(
+    (c) => checked[c.path] && (numeros[c.path] ?? "").trim(),
+  );
+
+  async function runBatch() {
+    if (!seriesId) {
+      setError("Sélectionnez la série cible avant de lancer le lot.");
+      return;
+    }
+    if (selectedCandidates.length === 0) {
+      setError("Cochez au moins un dossier avec un numéro de chapitre.");
+      return;
+    }
+    const invalide = selectedCandidates.find((c) => {
+      const value = Number(numeros[c.path]);
+      return !Number.isInteger(value) || value < 1;
+    });
+    if (invalide) {
+      setError(`Numéro invalide pour « ${invalide.name} » : un entier ≥ 1 est attendu.`);
+      return;
+    }
+
+    setError(null);
+    setBatchBusy(true);
+    setBatchSummary(null);
+    setRows([]);
+    stopRef.current = false;
+
+    // 1. Ouverture du suivi : un job « import par lot » pour tout le lot.
+    let jobId = "";
+    try {
+      const start = await fetch("/api/owner/import/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libelle: `Dossier ${scanFolder ?? nasPath}` }),
+      });
+      const startData = (await start.json().catch(() => null)) as
+        | { error?: string; jobId?: string }
+        | null;
+      if (!start.ok || !startData?.jobId) {
+        setError(startData?.error ?? "Ouverture du lot impossible.");
+        setBatchBusy(false);
+        return;
+      }
+      jobId = startData.jobId;
+    } catch {
+      setError("Erreur réseau : réessayez.");
+      setBatchBusy(false);
+      return;
+    }
+
+    const total = selectedCandidates.length;
+    const erreurs: string[] = [];
+    let crees = 0;
+    let echecs = 0;
+
+    /** Un chapitre du lot : la requête est isolée pour rester récupérable. */
+    const postChapter = (payload: Record<string, unknown>) =>
+      fetch("/api/owner/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+    // 2. Chaînage chapitre par chapitre : chaque requête reste courte, la
+    //    progression est visible et une erreur n'arrête pas le lot.
+    for (let i = 0; i < total; i++) {
+      const cand = selectedCandidates[i];
+      const value = Number(numeros[cand.path]);
+      setRunIndex(i);
+      setRows((prev) => [...prev, { name: cand.name, numero: value, statut: "cours" }]);
+
+      if (stopRef.current) {
+        erreurs.push(`Lot interrompu après ${i} chapitre(s).`);
+        break;
+      }
+
+      try {
+        const payload = {
+          series_id: seriesId,
+          numero: value,
+          titre: "",
+          volume: null,
+          classification,
+          source: "nas",
+          pages: [],
+          chemin: cand.path,
+          statut: lotStatut,
+          publish_at: null,
+          batch: { jobId, index: i + 1, total },
+        };
+
+        let res = await postChapter(payload);
+        let data = (await res.json().catch(() => null)) as
+          | { error?: string; nbPages?: number; warning?: string; retryAfter?: number }
+          | null;
+
+        /* Quota minute atteinte (§14.1) : on attend la fenêtre indiquée par le
+           serveur puis on réessaie une seule fois — un lot ne doit pas échouer
+           en plein parcours pour un simple compteur. */
+        if (res.status === 429 && !stopRef.current) {
+          const wait = Math.min(65, Math.max(2, Number(data?.retryAfter) || 60));
+          setRows((prev) =>
+            prev.map((row, index) =>
+              index === prev.length - 1
+                ? { ...row, message: `Quota minute atteint — attente ${wait}s…` }
+                : row,
+            ),
+          );
+          await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+          if (!stopRef.current) {
+            res = await postChapter(payload);
+            data = (await res.json().catch(() => null)) as
+              | { error?: string; nbPages?: number; warning?: string }
+              | null;
+          }
+        }
+
+        if (!res.ok) {
+          echecs += 1;
+          const message = data?.error ?? "Import impossible.";
+          erreurs.push(`${cand.name} : ${message}`);
+          setRows((prev) =>
+            prev.map((row, index) =>
+              index === prev.length - 1 ? { ...row, statut: "erreur", message } : row,
+            ),
+          );
+        } else {
+          crees += 1;
+          setRows((prev) =>
+            prev.map((row, index) =>
+              index === prev.length - 1
+                ? {
+                    ...row,
+                    statut: "ok",
+                    pages: data?.nbPages ?? 0,
+                    message: data?.warning,
+                  }
+                : row,
+            ),
+          );
+        }
+      } catch {
+        echecs += 1;
+        erreurs.push(`${cand.name} : erreur réseau.`);
+        setRows((prev) =>
+          prev.map((row, index) =>
+            index === prev.length - 1
+              ? { ...row, statut: "erreur", message: "Erreur réseau." }
+              : row,
+          ),
+        );
+      }
+    }
+
+    // 3. Clôture du job avec le rapport complet.
+    const message =
+      echecs === 0
+        ? `Import par lot terminé : ${crees} chapitre(s) créé(s).`
+        : `Import par lot : ${crees} créé(s), ${echecs} en erreur.`;
+    try {
+      await fetch("/api/owner/import/batch", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId,
+          statut: echecs > 0 ? "erreur" : "termine",
+          progression: 100,
+          message,
+          erreurs: erreurs.slice(0, 100),
+        }),
+      });
+    } catch {
+      /* le rapport local reste affiché même si la clôture échoue */
+    }
+
+    setBatchSummary({ crees, echecs });
+    setRunIndex(-1);
+    setBatchBusy(false);
+    router.refresh();
   }
 
   async function launchDriveSync() {
@@ -517,9 +736,9 @@ export function ImportPanel({
     }
   }
 
-  const tabs: Array<{ key: "upload" | "nas" | "imgchest" | "drive"; label: string }> = [
-    { key: "upload", label: "Upload direct" },
-    { key: "nas", label: "Depuis le NAS" },
+  const tabs: Array<{ key: "lot" | "nas" | "imgchest" | "drive"; label: string }> = [
+    { key: "lot", label: "Import par lot" },
+    { key: "nas", label: "Un chapitre" },
     { key: "imgchest", label: "Depuis ImgChest" },
     { key: "drive", label: "Google Drive (séries)" },
   ];
@@ -541,58 +760,286 @@ export function ImportPanel({
         ))}
       </div>
 
-      {/* ── Onglet 1 : upload direct ─────────────────────────────────── */}
-      {tab === "upload" && (
+      {/* ── Onglet 1 : import par lot depuis un dossier de série ────────── */}
+      {tab === "lot" && (
         <Card className="space-y-5 p-5">
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={onDrop}
-            className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-line bg-surface2 px-6 py-10 text-center"
-          >
-            <UploadCloud className="size-8 text-primary" />
-            <p className="text-sm font-semibold text-fg">
-              Déposez vos images ou une archive ZIP / CBZ
+          <div>
+            <h2 className="section-title flex items-center gap-2">
+              <ListChecks className="size-4 text-primary" /> Import par lot — dossier de série
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              Pointez le dossier qui contient les chapitres d&apos;une série : chaque sous-dossier
+              est analysé, les chapitres déjà en base sont écartés, puis les manquants sont indexés
+              en une passe. Un seul « job » suit le lot dans le tableau de bord.
             </p>
-            <p className="text-xs text-muted">
-              Tri naturel automatique · aucune image n&apos;est envoyée à Vercel : seuls les noms
-              de fichiers sont indexés (les octets restent sur le NAS).
-            </p>
-            <label className="btn-secondary cursor-pointer">
-              Choisir des fichiers
-              <input
-                type="file"
-                multiple
-                accept="image/*,.zip,.cbz"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.length) void handleFiles(e.target.files);
-                }}
-              />
-            </label>
           </div>
 
-          <EntryList entries={entries} onClear={() => { releasePreviews(); setEntries([]); }} />
-          <ImportForm
-            series={filteredSeries}
-            seriesFilter={seriesFilter}
-            onFilter={setSeriesFilter}
-            seriesId={seriesId}
-            onSeries={onPickSeries}
-            numero={numero}
-            onNumero={setNumero}
-            titre={titre}
-            onTitre={setTitre}
-            classification={classification}
-            onClassification={setClassification}
-            error={error}
-            busy={busy}
-            onSubmit={(e) => submitImport("upload", e)}
-            source="upload"
-            statut={statut}
-            onStatut={setStatut}
-            publishAt={publishAt}
-            onPublishAt={setPublishAt}
-          />
+          {!nasConfigured ? (
+            <p className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
+              Fonctionnalité désactivée : la variable d&apos;environnement{" "}
+              <code className="font-mono">NAS_API_BASE</code> n&apos;est pas renseignée.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field
+                  label="Filtrer les séries"
+                  htmlFor="lot-filter"
+                  hint="La série cible sert à écarter les chapitres déjà importés."
+                >
+                  <Input
+                    id="lot-filter"
+                    value={seriesFilter}
+                    onChange={(e) => setSeriesFilter(e.target.value)}
+                    placeholder="Titre de la série…"
+                  />
+                </Field>
+                <Field label="Série cible *" htmlFor="lot-series">
+                  <Select
+                    id="lot-series"
+                    value={seriesId}
+                    onChange={(e) => onPickSeries(e.target.value)}
+                  >
+                    <option value="">— Choisir une série —</option>
+                    {filteredSeries.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.titre}
+                        {s.classification === "adult" ? " (+18)" : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <Field label="Dossier de la série sur le NAS" htmlFor="lot-path">
+                    <Input
+                      id="lot-path"
+                      value={nasPath}
+                      onChange={(e) => setNasPath(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          goTo(nasPath);
+                        }
+                      }}
+                      aria-label="Chemin sur le NAS"
+                      placeholder="/scans/mon-manga"
+                    />
+                  </Field>
+                </div>
+                <Button type="button" onClick={() => goTo(nasPath)} disabled={nasBusy}>
+                  {nasBusy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Ouvrir
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void runScan()}
+                  variant="primary"
+                  disabled={scanBusy || !seriesId}
+                  title={
+                    seriesId
+                      ? "Analyser les sous-dossiers de ce dossier"
+                      : "Choisissez d'abord la série cible"
+                  }
+                >
+                  {scanBusy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ListChecks className="size-4" />
+                  )}
+                  Analyser le dossier
+                </Button>
+              </div>
+
+              <Breadcrumbs crumbs={crumbs} onGo={goTo} />
+
+              {nasError && <p className="text-sm text-adult">{nasError}</p>}
+
+              {nasItems.length > 0 && (
+                <ul className="max-h-56 overflow-auto rounded-xl border border-line divide-y divide-line">
+                  {nasItems
+                    .filter((item) => item.isDir)
+                    .slice(0, 60)
+                    .map((item) => {
+                      const childPath = `${nasPath.replace(/\/+$/, "")}/${item.name}`;
+                      return (
+                        <li key={item.name}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg hover:bg-surface2"
+                            onClick={() => goTo(childPath)}
+                          >
+                            <FolderTree className="size-4 text-muted" />
+                            <span className="truncate">{item.name}</span>
+                            <span className="ml-auto text-xs text-muted">ouvrir</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+
+              {scan && (
+                <BatchScanTable
+                  candidates={scan}
+                  checked={checked}
+                  numeros={numeros}
+                  onCheck={(path, value) => setChecked((prev) => ({ ...prev, [path]: value }))}
+                  onNumero={(path, value) => setNumeros((prev) => ({ ...prev, [path]: value }))}
+                  onSelectAll={(value) =>
+                    setChecked(() => {
+                      const next: Record<string, boolean> = {};
+                      for (const c of scan) next[c.path] = value ? c.etat === "pret" : false;
+                      return next;
+                    })
+                  }
+                />
+              )}
+
+              {scan && scan.length === 0 && (
+                <p className="rounded-xl border border-line bg-surface2 px-4 py-3 text-sm text-muted">
+                  Aucun sous-dossier dans ce dossier.
+                </p>
+              )}
+
+              {scanWarn.map((warn) => (
+                <p
+                  key={warn}
+                  className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-xs text-warn"
+                >
+                  {warn}
+                </p>
+              ))}
+
+              {scan && scan.length > 0 && (
+                <div className="flex flex-wrap items-end gap-4 rounded-xl border border-line bg-surface2 px-4 py-3">
+                  <Field label="Statut des chapitres créés" htmlFor="lot-statut">
+                    <Select
+                      id="lot-statut"
+                      value={lotStatut}
+                      onChange={(e) => setLotStatut(e.target.value as "draft" | "published")}
+                    >
+                      <option value="draft">Brouillon (à publier ensuite)</option>
+                      <option value="published">Publié immédiatement</option>
+                    </Select>
+                  </Field>
+                  <div className="flex items-end gap-2">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={() => void runBatch()}
+                      disabled={batchBusy || selectedCandidates.length === 0}
+                    >
+                      {batchBusy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Play className="size-4" />
+                      )}
+                      Importer {selectedCandidates.length} chapitre
+                      {selectedCandidates.length > 1 ? "s" : ""}
+                    </Button>
+                    {batchBusy && (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() => {
+                          stopRef.current = true;
+                        }}
+                      >
+                        <Square className="size-4" /> Interrompre
+                      </Button>
+                    )}
+                  </div>
+                  <p className="w-full text-xs text-muted">
+                    {selectedCandidates.length} dossier(s) sélectionné(s) sur {scan.length}.
+                    L&apos;import se fait chapitre par chapitre : les erreurs sont listées sans
+                    arrêter le lot.
+                  </p>
+                </div>
+              )}
+
+              {batchBusy && (
+                <div className="space-y-2">
+                  {(() => {
+                    const pct = selectedCandidates.length
+                      ? (Math.max(runIndex, 0) / selectedCandidates.length) * 100
+                      : 0;
+                    return (
+                      <>
+                        <div className="flex items-center justify-between text-xs text-muted">
+                          <span>
+                            Chapitre {Math.min(runIndex + 1, selectedCandidates.length)} /{" "}
+                            {selectedCandidates.length}
+                          </span>
+                          <span className="tabular-nums">{Math.round(pct)}%</span>
+                        </div>
+                        <div
+                          className="h-2 overflow-hidden rounded-full bg-surface2"
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.round(pct)}
+                        >
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {rows.length > 0 && (
+                <ol className="max-h-72 space-y-1 overflow-auto rounded-xl border border-line text-sm">
+                  {rows.map((row, index) => (
+                    <li
+                      key={`${row.name}-${index}`}
+                      className="flex items-center gap-2 border-b border-line px-3 py-2 last:border-0"
+                    >
+                      {row.statut === "cours" ? (
+                        <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                      ) : row.statut === "ok" ? (
+                        <CheckCircle2 className="size-4 shrink-0 text-ok" />
+                      ) : (
+                        <CircleAlert className="size-4 shrink-0 text-adult" />
+                      )}
+                      <span className="tabular-nums text-muted">n°{row.numero}</span>
+                      <span className="truncate text-fg">{row.name}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted">
+                        {row.statut === "cours"
+                          ? "indexation…"
+                          : row.statut === "ok"
+                            ? `${row.pages ?? 0} page(s)`
+                            : (row.message ?? "erreur")}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+              {batchSummary && !batchBusy && (
+                <p
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    batchSummary.echecs > 0
+                      ? "border-adult/40 bg-adult/10 text-adult"
+                      : "border-ok/40 bg-ok/10 text-ok"
+                  }`}
+                >
+                  Lot terminé : {batchSummary.crees} chapitre(s) créé(s)
+                  {batchSummary.echecs > 0 && `, ${batchSummary.echecs} en erreur`}. Ouvrez le
+                  tableau de bord pour le rapport détaillé.
+                </p>
+              )}
+            </>
+          )}
         </Card>
       )}
 
@@ -619,18 +1066,43 @@ export function ImportPanel({
             </p>
           ) : (
             <>
-              <div className="flex gap-2">
-                <Input
-                  value={nasPath}
-                  onChange={(e) => setNasPath(e.target.value)}
-                  aria-label="Chemin sur le NAS"
-                  placeholder="/scans/mon-manga"
-                />
-                <Button type="button" onClick={() => listNas(nasPath)} disabled={nasBusy}>
-                  {nasBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <Field label="Dossier sur le NAS" htmlFor="nas-path">
+                    <Input
+                      id="nas-path"
+                      value={nasPath}
+                      onChange={(e) => setNasPath(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          goTo(nasPath);
+                        }
+                      }}
+                      aria-label="Chemin sur le NAS"
+                      placeholder="/scans/mon-manga"
+                    />
+                  </Field>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => goTo(parentPath(nasPath))}
+                  disabled={nasBusy || nasPath === "/"}
+                  title="Monter d'un niveau"
+                >
+                  <ArrowUp className="size-4" /> Monter
+                </Button>
+                <Button type="button" onClick={() => goTo(nasPath)} disabled={nasBusy}>
+                  {nasBusy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
                   Lister
                 </Button>
               </div>
+
+              <Breadcrumbs crumbs={crumbs} onGo={goTo} />
 
               {nasError && <p className="text-sm text-adult">{nasError}</p>}
 
@@ -645,8 +1117,7 @@ export function ImportPanel({
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg hover:bg-surface2"
                           onClick={() => {
                             if (item.isDir) {
-                              setNasPath(childPath);
-                              void listNas(childPath);
+                              goTo(childPath);
                             } else {
                               setEntries((prev) =>
                                 naturalSort([
@@ -783,6 +1254,8 @@ export function ImportPanel({
                     onClick={() => void selectImgPost(post.id)}
                   >
                     {post.thumbnail ? (
+                      // CDN externe d'ImgChest : miniatures 40px, non optimisables par next/image.
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={post.thumbnail}
                         alt=""
@@ -1023,7 +1496,7 @@ function ImportForm(props: {
   error: string | null;
   busy: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  source: "upload" | "nas" | "imgchest";
+  source: "nas" | "imgchest";
   statut: ImportStatut;
   onStatut: (value: ImportStatut) => void;
   publishAt: string;
@@ -1118,7 +1591,7 @@ function ImportForm(props: {
 
       <div className="flex items-end gap-3">
         <Button type="submit" variant="primary" disabled={props.busy}>
-          {props.busy ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
+          {props.busy ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
           {props.busy ? "Import en cours…" : submitLabel}
         </Button>
       </div>
@@ -1258,5 +1731,141 @@ function ResultPanel({
         au journal d&apos;audit (acteur, date, IP).
       </p>
     </Card>
+  );
+}
+
+/* -- Fil d'Ariane du navigateur NAS --------------------------------------- */
+
+function Breadcrumbs({
+  crumbs,
+  onGo,
+}: {
+  crumbs: Array<{ label: string; path: string }>;
+  onGo: (path: string) => void;
+}) {
+  if (crumbs.length <= 1) return null;
+  return (
+    <nav aria-label="Fil d'Ariane du NAS" className="flex flex-wrap items-center gap-1 text-xs">
+      {crumbs.map((crumb, index) => (
+        <span key={crumb.path} className="flex items-center gap-1">
+          {index > 0 && (
+            <span className="text-muted" aria-hidden="true">
+              /
+            </span>
+          )}
+          <button
+            type="button"
+            className={index === crumbs.length - 1 ? "chip chip-active" : "chip"}
+            aria-current={index === crumbs.length - 1 ? "page" : undefined}
+            onClick={() => onGo(crumb.path)}
+          >
+            {crumb.label}
+          </button>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+/* -- R�sultat de l'analyse d'un dossier de s�rie (import par lot) --------- */
+
+const ETAT_TONE: Record<ScanCandidate["etat"], "ok" | "neutral" | "warn"> = {
+  pret: "ok",
+  deja_importe: "neutral",
+  pas_d_image: "neutral",
+  numero_a_corriger: "warn",
+};
+
+function BatchScanTable({
+  candidates,
+  checked,
+  numeros,
+  onCheck,
+  onNumero,
+  onSelectAll,
+}: {
+  candidates: ScanCandidate[];
+  checked: Record<string, boolean>;
+  numeros: Record<string, string>;
+  onCheck: (path: string, value: boolean) => void;
+  onNumero: (path: string, value: string) => void;
+  onSelectAll: (value: boolean) => void;
+}) {
+  const pret = candidates.filter((c) => c.etat === "pret").length;
+  const deja = candidates.filter((c) => c.etat === "deja_importe").length;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-fg">
+          {candidates.length} sous-dossier(s) � {pret} � importer
+          {deja > 0 && ` � ${deja} d�j� import�(s)`}
+        </p>
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => onSelectAll(true)}>
+            Tout cocher
+          </button>
+          <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => onSelectAll(false)}>
+            Tout d�cocher
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-line">
+        <table className="w-full min-w-[44rem] text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs uppercase text-muted">
+              <th className="px-3 py-2 font-semibold">Importer</th>
+              <th className="px-3 py-2 font-semibold">Dossier</th>
+              <th className="px-3 py-2 font-semibold">N� de chapitre</th>
+              <th className="px-3 py-2 text-right font-semibold">Planches</th>
+              <th className="px-3 py-2 font-semibold">�tat</th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((cand) => {
+              const disabled = cand.etat !== "pret";
+              return (
+                <tr key={cand.path} className="border-b border-line last:border-0">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[var(--color-primary,#3b82f6)]"
+                      checked={Boolean(checked[cand.path])}
+                      disabled={disabled}
+                      aria-label={`Importer ${cand.name}`}
+                      onChange={(e) => onCheck(cand.path, e.target.checked)}
+                    />
+                  </td>
+                  <td className="max-w-[18rem] px-3 py-2">
+                    <span className="block truncate text-fg" title={cand.path}>
+                      {cand.name}
+                    </span>
+                    <span className="block truncate text-xs text-muted">
+                      {cand.kind === "volume" ? "volume (structure particuli�re)" : cand.path}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <input
+                      type="number"
+                      min={1}
+                      className="input w-24"
+                      value={numeros[cand.path] ?? ""}
+                      disabled={cand.etat === "deja_importe" || cand.etat === "pas_d_image"}
+                      aria-label={`Num�ro de chapitre pour ${cand.name}`}
+                      onChange={(e) => onNumero(cand.path, e.target.value)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted">{cand.pages}</td>
+                  <td className="px-3 py-2">
+                    <Badge tone={ETAT_TONE[cand.etat]}>{ETAT_LABEL[cand.etat]}</Badge>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

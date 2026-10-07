@@ -45,6 +45,17 @@ export interface SeriesFilters {
   page?: number;
   perPage?: number;
   includeAdult?: boolean;
+  /** Inclut les séries archivées (back-office uniquement). */
+  includeArchived?: boolean;
+}
+
+/**
+ * Séries archivées exclues du catalogue public (§9.2) : le filtre `neq` porte
+ * sur le statut déjà stocké, il n'y a donc rien à backfiller.
+ */
+function filtreArchives(include?: boolean, statut?: SeriesStatus | ""): Filter[] {
+  if (include || statut === "archive") return [];
+  return [{ field: "statut", op: "neq" as const, value: "archive" }];
 }
 
 const SORT_MAP: Record<SeriesSort, { field: string; dir: "asc" | "desc" }> = {
@@ -89,6 +100,7 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
     } else if (f.classification === "adult") {
       filters.push({ field: "classification", op: "eq" as const, value: "adult" });
     }
+    filters.push(...filtreArchives(f.includeArchived, f.statut));
 
     /* Jeu de démo masqué en production : l'exclusion est portée **par la
        requête** pour que `total`, la pagination et le repli tolérant aux
@@ -193,12 +205,18 @@ export function fuzzyScore(query: string, serie: Series): number {
   return score >= 0.6 ? score : 0;
 }
 
-export async function getSeriesBySlug(slug: string): Promise<Series | null> {
+export async function getSeriesBySlug(
+  slug: string,
+  opts: { includeArchived?: boolean } = {},
+): Promise<Series | null> {
   /* Série de la graine masquée en production : `null` → vrai 404 (page fiche,
      lecteur, proxy) sans requête inutile. */
   if (serieDeDemo(slug)) return null;
   const res = await getDb().list<Series>(TABLES.series, {
-    filters: [{ field: "slug", op: "eq", value: slug }],
+    filters: [
+      { field: "slug", op: "eq", value: slug },
+      ...filtreArchives(opts.includeArchived),
+    ],
     limit: 1,
   });
   return res.items[0] ? mapSeries(res.items[0]) : null;
@@ -210,9 +228,9 @@ export async function getSeriesById(id: string): Promise<Series | null> {
   return row ? mapSeries(row) : null;
 }
 
-export async function allSeries(): Promise<Series[]> {
+export async function allSeries(opts: { includeArchived?: boolean } = {}): Promise<Series[]> {
   const { items } = await getDb().list<Series>(TABLES.series, {
-    filters: filtresSansDemo("series"),
+    filters: [...filtresSansDemo("series"), ...filtreArchives(opts.includeArchived)],
     order: { field: "titre", dir: "asc" },
     limit: 1000,
   });
@@ -240,33 +258,50 @@ export async function similarSeries(series: Series, limit = 6): Promise<Series[]
 export async function activeRecommendations(
   placement: Recommendation["placement"],
 ): Promise<Recommendation[]> {
-  const { items } = await getDb().list<Recommendation>(TABLES.recommendations, {
-    filters: [
-      { field: "placement", op: "eq", value: placement },
-      { field: "actif", op: "eq", value: true },
-    ],
-    order: { field: "ordre", dir: "asc" },
-    limit: 50,
-  });
-  const now = Date.now();
-  return items.filter((r) => {
-    /* Recommandation éditoriale sur une série de la graine : masquée en prod. */
-    if (serieDeDemo(r.series_id)) return false;
-    if (r.debut && new Date(r.debut).getTime() > now) return false;
-    if (r.fin && new Date(r.fin).getTime() < now) return false;
-    return true;
+  // Cache court (30 s) : deux lectures réseau par affichage, et un repli sur la
+  // dernière valeur connue si le VPN vers Appwrite tombe (voir `cached`).
+  return cached(`series:recos:${placement}`, 30_000, async () => {
+    const { items } = await getDb().list<Recommendation>(TABLES.recommendations, {
+      filters: [
+        { field: "placement", op: "eq", value: placement },
+        { field: "actif", op: "eq", value: true },
+      ],
+      order: { field: "ordre", dir: "asc" },
+      limit: 50,
+    });
+    if (items.length === 0) return [];
+
+    /* Une série archivée ne doit plus être mise en avant : une seule requête
+       pour les ids concernés, puis filtrage en mémoire (≤ 50 recommandations). */
+    const archived = await getDb().list<{ id: string }>(TABLES.series, {
+      filters: [{ field: "statut", op: "eq", value: "archive" }],
+      limit: 1000,
+    });
+    const archivedIds = new Set(archived.items.map((s) => s.id));
+
+    const now = Date.now();
+    return items.filter((r) => {
+      /* Recommandation éditoriale sur une série de la graine : masquée en prod. */
+      if (serieDeDemo(r.series_id)) return false;
+      if (archivedIds.has(r.series_id)) return false;
+      if (r.debut && new Date(r.debut).getTime() > now) return false;
+      if (r.fin && new Date(r.fin).getTime() < now) return false;
+      return true;
+    });
   });
 }
 
 /** Top séries par vues (utilisé pour la home et le dashboard). */
 export async function popularSeries(limit = 10, includeAdult = false): Promise<Series[]> {
-  const { items } = await getDb().list<Series>(TABLES.series, {
-    filters: filtresSansDemo("series"),
-    order: { field: "vues", dir: "desc" },
-    limit,
+  return cached(`series:popular:${limit}:${includeAdult ? 1 : 0}`, 30_000, async () => {
+    const { items } = await getDb().list<Series>(TABLES.series, {
+      filters: [...filtresSansDemo("series"), ...filtreArchives()],
+      order: { field: "vues", dir: "desc" },
+      limit,
+    });
+    const rows = includeAdult ? items : items.filter((s) => s.classification !== "adult");
+    return rows.map(mapSeries);
   });
-  const rows = includeAdult ? items : items.filter((s) => s.classification !== "adult");
-  return rows.map(mapSeries);
 }
 
 export async function seriesStats(slug: string): Promise<{

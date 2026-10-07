@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Plus, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, Check, Plus, Trash2, X } from "lucide-react";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/modal";
 import {
@@ -13,6 +13,12 @@ import {
   type SeriesStatus,
   type SeriesType,
 } from "@/lib/types";
+
+/**
+ * Actions d'une fiche série — partagées par les espaces Gérant (CRUD complet)
+ * et Admin (consultation). `basePath` pointe vers l'espace appelant : le
+ * formulaire annule et redirige toujours dans l'espace d'origine.
+ */
 
 type SeriesPayload = {
   titre: string;
@@ -112,7 +118,15 @@ function ChipsInput({
 
 /* ── Formulaire de fiche série (création + édition) ───────────────────── */
 
-export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?: Series }) {
+export function SeriesForm({
+  mode,
+  series,
+  basePath = "/gerant/series",
+}: {
+  mode: "create" | "edit";
+  series?: Series;
+  basePath?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,7 +193,7 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
         return;
       }
       if (mode === "create") {
-        router.push(`/admin/series/${data?.series?.id ?? ""}`);
+        router.push(`${basePath}/${data?.series?.id ?? ""}`);
         router.refresh();
       } else {
         setSaved(true);
@@ -231,7 +245,11 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
           </Field>
         </div>
 
-        <Field label="Couverture (URL)" htmlFor="s-couverture" hint="Laisser vide pour la couverture générée.">
+        <Field
+          label="Couverture (URL)"
+          htmlFor="s-couverture"
+          hint="Laisser vide pour la couverture générée."
+        >
           <Input
             id="s-couverture"
             value={couverture}
@@ -241,18 +259,26 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
           />
         </Field>
 
-        <Field label="Bannière (URL)" htmlFor="s-banniere">
+        <Field label="Bannière (URL)" htmlFor="s-banniere" hint="Optionnel">
           <Input
             id="s-banniere"
             value={banniere}
             onChange={(e) => setBanniere(e.target.value)}
             maxLength={500}
-            placeholder="Optionnel"
+            placeholder="https://…"
           />
         </Field>
 
-        <Field label="Statut" htmlFor="s-statut">
-          <Select id="s-statut" value={statut} onChange={(e) => setStatut(e.target.value as SeriesStatus)}>
+        <Field
+          label="Statut"
+          htmlFor="s-statut"
+          hint="« Archivée » retire la série du catalogue public sans supprimer ses chapitres."
+        >
+          <Select
+            id="s-statut"
+            value={statut}
+            onChange={(e) => setStatut(e.target.value as SeriesStatus)}
+          >
             {(Object.keys(SERIES_STATUT_LABELS) as SeriesStatus[]).map((key) => (
               <option key={key} value={key}>
                 {SERIES_STATUT_LABELS[key]}
@@ -315,7 +341,13 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
           onChange={setGenres}
           placeholder="Action, Aventure…"
         />
-        <ChipsInput id="s-tags" label="Tags" value={tags} onChange={setTags} placeholder="golems, école…" />
+        <ChipsInput
+          id="s-tags"
+          label="Tags"
+          value={tags}
+          onChange={setTags}
+          placeholder="golems, école…"
+        />
         <div className="md:col-span-2">
           <ChipsInput
             id="s-auteurs"
@@ -343,7 +375,7 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
         <Button type="submit" variant="primary" disabled={busy}>
           {busy ? "Enregistrement…" : mode === "create" ? "Créer la série" : "Enregistrer"}
         </Button>
-        <button type="button" className="btn-ghost" onClick={() => router.push("/admin/series")}>
+        <button type="button" className="btn-ghost" onClick={() => router.push(basePath)}>
           Annuler
         </button>
       </div>
@@ -351,13 +383,170 @@ export function SeriesForm({ mode, series }: { mode: "create" | "edit"; series?:
   );
 }
 
-/* ── Suppression d'une série (confirmation) ────────────────────────────── */
+/* ── Archivage réversible (suppression douce) ─────────────────────────── */
 
-export function DeleteSeriesButton({ id, titre }: { id: string; titre: string }) {
+const RESTORE_STATUTS: SeriesStatus[] = ["en_cours", "termine", "hiatus", "abandonne"];
+
+export function ArchiveSeriesButton({
+  id,
+  titre,
+  archived = false,
+  returnTo,
+  showLabels = true,
+}: {
+  id: string;
+  titre: string;
+  archived?: boolean;
+  returnTo?: string;
+  showLabels?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [restore, setRestore] = useState<SeriesStatus>("en_cours");
+
+  async function apply() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/series/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statut: archived ? restore : "archive" }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setError(data?.error ?? "Action impossible.");
+        return;
+      }
+      setOpen(false);
+      if (returnTo && archived) router.push(returnTo);
+      router.refresh();
+    } catch {
+      setError("Erreur réseau : réessayez.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        onClick={() => setOpen(true)}
+        title={
+          archived
+            ? "Remettre la série dans le catalogue"
+            : "Retirer la série du catalogue sans rien supprimer"
+        }
+      >
+        {archived ? (
+          <>
+            <ArchiveRestore className="size-4" /> {showLabels ? "Déarchiver" : undefined}
+          </>
+        ) : (
+          <>
+            <Archive className="size-4" /> {showLabels ? "Archiver" : undefined}
+          </>
+        )}
+      </Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={archived ? "Déarchiver la série ?" : "Archiver la série ?"}
+      >
+        <div className="space-y-3 text-sm text-muted">
+          <p>
+            {archived ? (
+              <>
+                <span className="font-semibold text-fg">{titre}</span> redevient visible dans le
+                catalogue public et ses pages refontes apparaître dans les listes.
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-fg">{titre}</span> quitte le catalogue public :
+                fiche, chapitres, favoris et historiques sont conservés. Rien n&apos;est supprimé, et
+                l&apos;opération est réversible depuis cette même page.
+              </>
+            )}
+          </p>
+          {archived && (
+            <Field
+              label="Statut à la sortie de l'archivage"
+              htmlFor="restore-statut"
+              hint="L'archivage remplace le statut, il faut donc le resélectionner."
+            >
+              <Select
+                id="restore-statut"
+                value={restore}
+                onChange={(e) => setRestore(e.target.value as SeriesStatus)}
+              >
+                {RESTORE_STATUTS.map((key) => (
+                  <option key={key} value={key}>
+                    {SERIES_STATUT_LABELS[key]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {error && <p className="text-sm text-adult">{error}</p>}
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
+            Annuler
+          </button>
+          <Button variant="primary" onClick={apply} disabled={busy}>
+            {busy ? (
+              "Application…"
+            ) : archived ? (
+              <>
+                <Check className="size-4" /> Déarchiver
+              </>
+            ) : (
+              <>
+                <Archive className="size-4" /> Archiver
+              </>
+            )}
+          </Button>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/* ── Suppression définitive (irréversible) ────────────────────────────── */
+
+/**
+ * Suppression en cascade avec garde-fous : le titre exact doit être retapé,
+ * la saisie est normalisée (espaces, casse) pour éviter le piège à faute de
+ * frappe. Seul le Gérant y accède — le serveur revérifie le rôle.
+ */
+export function DeleteSeriesButton({
+  id,
+  titre,
+  returnTo = "/gerant/series",
+  showLabels = true,
+}: {
+  id: string;
+  titre: string;
+  returnTo?: string;
+  showLabels?: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
+
+  const normalize = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  const matches = normalize(typed) === normalize(titre) && typed.trim().length > 0;
 
   async function confirmDelete() {
     setBusy(true);
@@ -370,7 +559,7 @@ export function DeleteSeriesButton({ id, titre }: { id: string; titre: string })
         return;
       }
       setOpen(false);
-      router.push("/admin/series");
+      router.push(returnTo);
       router.refresh();
     } catch {
       setError("Erreur réseau : réessayez.");
@@ -381,20 +570,44 @@ export function DeleteSeriesButton({ id, titre }: { id: string; titre: string })
 
   return (
     <>
-      <Button variant="danger" onClick={() => setOpen(true)}>
-        <Trash2 className="size-4" /> Supprimer la série
+      <Button variant="danger" onClick={() => setOpen(true)} title="Suppression définitive">
+        <Trash2 className="size-4" /> {showLabels ? "Supprimer définitivement" : undefined}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Supprimer la série ?">
-        <p className="text-sm text-muted">
-          La fiche <span className="font-semibold text-fg">{titre}</span>, ses chapitres, leurs
-          pages et ses recommandations seront supprimés définitivement.
-        </p>
-        {error && <p className="mt-3 text-sm text-adult">{error}</p>}
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Supprimer définitivement la série ?"
+      >
+        <div className="space-y-3 text-sm text-muted">
+          <p>
+            La fiche <span className="font-semibold text-fg">{titre}</span>, ses chapitres, leurs
+            pages, ses recommandations et les erreurs d&apos;images associées seront supprimés
+            définitivement. <span className="font-semibold text-adult">Sans retour possible.</span>
+          </p>
+          <p className="text-xs">
+            Pour un retrait réversible, préférez l&apos;archivage : rien n&apos;est perdu et la
+            série redevient visible en un clic.
+          </p>
+          <Field
+            label="Tapez le titre de la série pour confirmer"
+            htmlFor="delete-confirm"
+            hint="La casse et les accents n'ont pas d'importance."
+          >
+            <Input
+              id="delete-confirm"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={titre}
+              autoComplete="off"
+            />
+          </Field>
+          {error && <p className="text-sm text-adult">{error}</p>}
+        </div>
         <div className="mt-5 flex justify-end gap-3">
           <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
             Annuler
           </button>
-          <Button variant="danger" onClick={confirmDelete} disabled={busy}>
+          <Button variant="danger" onClick={confirmDelete} disabled={busy || !matches}>
             {busy ? "Suppression…" : "Supprimer définitivement"}
           </Button>
         </div>
@@ -550,7 +763,11 @@ export function ChapterActions({
 
       {error && <p className="text-right text-xs text-adult">{error}</p>}
 
-      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Supprimer le chapitre ?">
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Supprimer le chapitre ?"
+      >
         <p className="text-sm text-muted">
           Le chapitre {numero} et l&apos;index de ses pages seront supprimés définitivement.
         </p>

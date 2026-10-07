@@ -1,22 +1,24 @@
 import { SeriesDirectory } from "@/components/series/series-directory";
 import { getCurrentUser } from "@/lib/auth";
-import { atLeast } from "@/lib/roles";
+import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Catalogue en lecture seule (admin+). La création, l'édition et la
- * suppression d'une série vivent dans l'espace Gérant (§4.2 / §10) : cet
- * écran reste la vue « contenu » du back-office.
+ * Répertoire des séries (Gérant) — création, édition, archivage et
+ * suppression définitive : le CRUD vit ici, l'espace Admin ne garde qu'une
+ * vue de consultation (§4.2 / §10).
  */
-export default async function AdminSeriesPage({
+export default async function GerantSeriesPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; page?: string; statut?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!atLeast(user?.role, "admin")) return <AccessDenied required="admin" />;
+  if (!can(user?.role, "edit_series")) {
+    return <AccessDenied required="owner" hint="La gestion des séries est réservée au Gérant." />;
+  }
 
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
@@ -25,13 +27,12 @@ export default async function AdminSeriesPage({
 
   return (
     <SeriesDirectory
-      basePath="/admin/series"
+      basePath="/gerant/series"
       q={q}
       statut={statut}
       page={page}
-      canManage={false}
-      heading="Catalogue"
-      emptyHint="Aucune série dans le catalogue."
+      canManage
+      emptyHint="Aucune série : créez la première pour pouvoir y importer des chapitres."
     />
   );
 }

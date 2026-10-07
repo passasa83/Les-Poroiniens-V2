@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Eye, PencilLine } from "lucide-react";
+import { ArrowLeft, FolderUp } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
-import { atLeast, can } from "@/lib/roles";
+import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card } from "@/components/ui/kit";
-import { ChapterActions } from "@/components/series/series-actions";
+import { ChapterActions, DeleteSeriesButton, ArchiveSeriesButton, SeriesForm } from "@/components/series/series-actions";
 import { listChapters } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
 import { SERIES_STATUT_LABELS, type Chapter, type SeriesStatus } from "@/lib/types";
@@ -35,27 +35,16 @@ function formatDate(iso: string | null | undefined): string {
   });
 }
 
-function Ligne({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap gap-2 border-b border-line py-2.5 text-sm last:border-0">
-      <dt className="w-40 shrink-0 text-muted">{label}</dt>
-      <dd className="min-w-0 flex-1 text-fg">{children}</dd>
-    </div>
-  );
-}
-
-/**
- * Consultation d'une fiche série (admin+). L'édition complète vit dans
- * l'espace Gérant ; un Gérant voit le lien de raccourci, un administrateur
- * simplement l'information.
- */
-export default async function ViewSeriePage({
+/** Édition d'une fiche série + chapitres + archivage / suppression (Gérant). */
+export default async function GerantSeriePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!atLeast(user?.role, "admin")) return <AccessDenied required="admin" />;
+  if (!can(user?.role, "edit_series")) {
+    return <AccessDenied required="owner" hint="La gestion des séries est réservée au Gérant." />;
+  }
 
   const { id } = await params;
   const series = await getSeriesById(id);
@@ -63,14 +52,16 @@ export default async function ViewSeriePage({
 
   const chapters = (await listChapters(series.id)) as ChapterRow[];
   const canPublish = can(user?.role, "publish_chapter");
-  const canEdit = can(user?.role, "import_chapters");
   const archived = series.statut === "archive";
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="section-title">{series.titre}</h1>
+          <Link href="/gerant/series" className="link-muted inline-flex items-center gap-1.5 text-sm">
+            <ArrowLeft className="size-3.5" /> Répertoire des séries
+          </Link>
+          <h1 className="section-title mt-2">{series.titre}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
             <Badge tone={STATUT_TONE[series.statut] ?? "neutral"}>
               {SERIES_STATUT_LABELS[series.statut]}
@@ -85,69 +76,45 @@ export default async function ViewSeriePage({
             </span>
           </div>
         </div>
-        {canEdit ? (
-          <Link href={`/gerant/series/${series.id}`} className="btn-primary">
-            <PencilLine className="size-4" /> Éditer la fiche
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/gerant/import?series=${encodeURIComponent(series.id)}`}
+            className="btn-primary"
+          >
+            <FolderUp className="size-4" /> Importer des chapitres
           </Link>
-        ) : (
-          <span className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs text-muted">
-            Création et édition réservées au Gérant
-          </span>
-        )}
+          <ArchiveSeriesButton
+            id={series.id}
+            titre={series.titre}
+            archived={archived}
+            returnTo="/gerant/series"
+          />
+          <DeleteSeriesButton
+            id={series.id}
+            titre={series.titre}
+            returnTo="/gerant/series"
+          />
+        </div>
       </div>
 
       {archived && (
         <p className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
-          Cette série est archivée : elle est invisible du catalogue public, de la recherche et des
-          listes de sorties. Ses chapitres restent intacts.
+          Cette série est archivée : invisible du catalogue public et des listes de sorties, mais
+          ses chapitres et leurs planches sont intacts. « Déarchiver » la remet en ligne.
         </p>
       )}
 
-      <Card className="p-6">
-        <h2 className="section-title">Fiche</h2>
-        <dl className="mt-3">
-          <Ligne label="Titres alternatifs">
-            {series.titresAlt.length ? series.titresAlt.join(" · ") : "—"}
-          </Ligne>
-          <Ligne label="Synopsis">
-            {series.synopsis ? (
-              <span className="whitespace-pre-wrap">{series.synopsis}</span>
-            ) : (
-              "—"
-            )}
-          </Ligne>
-          <Ligne label="Auteurs">{series.auteurs.length ? series.auteurs.join(", ") : "—"}</Ligne>
-          <Ligne label="Genres">{series.genres.length ? series.genres.join(", ") : "—"}</Ligne>
-          <Ligne label="Tags">{series.tags.length ? series.tags.join(", ") : "—"}</Ligne>
-          <Ligne label="Année / Langue">
-            {series.annee ?? "—"} · {series.langue || "—"}
-          </Ligne>
-          <Ligne label="Couverture">
-            <span className="break-all font-mono text-xs">{series.couverture || "générée"}</span>
-          </Ligne>
-          <Ligne label="Statistiques">
-            {series.vues.toLocaleString("fr-FR")} vues · note{" "}
-            {series.noteMoy.toFixed(1)}/5 ({series.nbVotes} votes) ·{" "}
-            {series.nb_chapitres} chapitre{series.nb_chapitres > 1 ? "s" : ""}
-          </Ligne>
-          <Ligne label="Mise à jour">{formatDate(series.updated_at)}</Ligne>
-        </dl>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <a href={`/serie/${series.slug}`} className="btn-secondary">
-            <Eye className="size-4" /> Voir la page publique
-          </a>
-        </div>
-      </Card>
+      <SeriesForm mode="edit" series={series} basePath="/gerant/series" />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="section-title">Chapitres</h2>
-          {!canPublish && (
-            <p className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs text-warn">
-              Publication, planification et suppression d&apos;un chapitre sont réservées au Gérant
-              (matrice 4.3) : ces actions sont en lecture seule pour un administrateur.
-            </p>
-          )}
+          <p className="text-sm text-muted">
+            {chapters.filter((c) => c.statut === "published").length} publié
+            {chapters.filter((c) => c.statut === "published").length > 1 ? "s" : ""} ·{" "}
+            {chapters.filter((c) => c.statut !== "published").length} en attente
+          </p>
         </div>
 
         <Card className="overflow-x-auto p-0">
@@ -202,15 +169,10 @@ export default async function ViewSeriePage({
               {chapters.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-muted">
-                    Aucun chapitre. Importez-en depuis l&apos;espace Gérant
-                    {canEdit ? (
-                      <>
-                        {" "}
-                        (<a href="/gerant/import" className="link-muted">import</a>)
-                      </>
-                    ) : (
-                      " (accès réservé au Gérant)"
-                    )}
+                    Aucun chapitre pour l&apos;instant — lancez un{" "}
+                    <a href={`/gerant/import?series=${encodeURIComponent(series.id)}`} className="link-muted">
+                      import depuis le NAS
+                    </a>
                     .
                   </td>
                 </tr>

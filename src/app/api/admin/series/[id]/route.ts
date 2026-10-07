@@ -40,7 +40,9 @@ const patchInput = z.object({
   synopsis: z.string().max(8000).optional(),
   couverture: z.string().trim().max(500).optional(),
   banniere: z.string().trim().max(500).optional(),
-  statut: z.enum(["en_cours", "termine", "hiatus", "abandonne"]).optional(),
+  statut: z
+    .enum(["en_cours", "termine", "hiatus", "abandonne", "archive"])
+    .optional(),
   type: z.enum(["manga", "manhwa", "manhua"]).optional(),
   annee: z.number().int().min(1900).max(2100).nullable().optional(),
   langue: z.string().trim().min(2).max(10).optional(),
@@ -108,7 +110,7 @@ export async function PATCH(
 
   const patch = parsed.data;
   if (patch.slug && patch.slug !== existing.slug) {
-    const clash = await getSeriesBySlug(patch.slug);
+    const clash = await getSeriesBySlug(patch.slug, { includeArchived: true });
     if (clash && clash.id !== id) {
       return jsonError("Ce slug est déjà utilisé.", "slug_taken", 409);
     }

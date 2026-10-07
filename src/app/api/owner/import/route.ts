@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { audit, createImportJob, updateImportJob } from "@/lib/data/moderation";
+import { audit, createImportJob, listImportJobs, updateImportJob } from "@/lib/data/moderation";
 import { refreshSeriesChapterCount } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
 import { getDb, rowId, TABLES } from "@/lib/db";
@@ -10,12 +10,17 @@ import { demoPagePath } from "@/lib/db/seed";
 import { nasErrorMessage, nasList, type NasPage } from "@/lib/nas";
 import { imgchestErrorMessage, imgchestPost as fetchImgChestPost } from "@/lib/imgchest";
 import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
-import type { Chapter } from "@/lib/types";
+import type { Chapter, ImportJob } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
+function jsonError(
+  error: string,
+  code: string,
+  status: number,
+  extra?: Record<string, unknown>,
+) {
+  return Response.json({ error, code, ...(extra ?? {}) }, { status });
 }
 
 const importInput = z.object({
@@ -36,6 +41,15 @@ const importInput = z.object({
   /** Brouillon (défaut), programmé ou publié directement (§5.1, étape 4). */
   statut: z.enum(["draft", "scheduled", "published"]).default("draft"),
   publish_at: z.string().datetime({ offset: true }).nullable().default(null),
+  /** Import par lot (§10.2) : chapitre rattaché au job ouvert par l'interface. */
+  batch: z
+    .object({
+      jobId: z.string().trim().min(1).max(64),
+      index: z.number().int().min(1).max(5000),
+      total: z.number().int().min(1).max(5000),
+    })
+    .nullable()
+    .default(null),
 });
 
 /** Tri naturel : `page 2` avant `page 10` (§10.2). */
@@ -74,8 +88,6 @@ export async function POST(request: Request) {
   }
 
   const ip = clientIp(request);
-  const limit = rateLimit(`owner:import:${ip}`, { limit: 10, windowMs: 60_000 });
-  if (!limit.ok) return jsonError("Trop d'imports en une minute.", "rate_limited", 429);
 
   let body: unknown;
   try {
@@ -89,7 +101,30 @@ export async function POST(request: Request) {
     return jsonError(parsed.error.issues[0]?.message ?? "Champs invalides.", "invalid_body", 400);
   }
 
+  /* Un lot enchaîne les chapitres : le quota est relevé pour la durée de
+     l'opération, au prorata du nombre de chapitres annoncé (60/min par défaut
+     + le déclaratif du lot, borné) — un import manuel reste bloqué à 10/min. */
+  const batchTotal = parsed.success ? (parsed.data.batch?.total ?? 0) : 0;
+  const limit = rateLimit(`owner:import:${ip}`, {
+    limit: parsed.data.batch ? Math.min(600, 60 + batchTotal) : 10,
+    windowMs: 60_000,
+  });
+  if (!limit.ok) {
+    return jsonError("Trop d'imports en une minute.", "rate_limited", 429, {
+      retryAfter: limit.retryAfter,
+    });
+  }
+
   const data = parsed.data;
+
+  /* Job de lot : vérifié du côté serveur — un jobId étranger est refusé. */
+  let batchJob: ImportJob | null = null;
+  if (data.batch) {
+    const jobs = await listImportJobs(500);
+    batchJob = jobs.find((j) => j.id === data.batch!.jobId && j.created_by === user.id) ?? null;
+    if (!batchJob) return jsonError("Lot d'import introuvable.", "batch_not_found", 404);
+  }
+
   const nasPath = data.chemin?.trim().replace(/^\/+/, "").replace(/\/+$/, "") || "";
   const imgchestId = data.source === "imgchest" ? (data.imgchest_post ?? "").trim() : "";
   if (data.source === "imgchest" && !imgchestId) {
@@ -192,14 +227,21 @@ export async function POST(request: Request) {
         ? now
         : null;
 
-  const job = await createImportJob({
-    type: imgchestId ? "imgchest" : data.source === "nas" || nasPath ? "nas" : "upload",
-    statut: "cours",
-    progression: 10,
-    message: `Indexation de ${indexed.length} pages…`,
-    erreurs: [],
-    created_by: user.id,
-  });
+  const job: ImportJob =
+    batchJob ??
+    (await createImportJob({
+      type: imgchestId ? "imgchest" : data.source === "nas" || nasPath ? "nas" : "upload",
+      statut: "cours",
+      progression: 10,
+      message: `Indexation de ${indexed.length} pages…`,
+      erreurs: [],
+      created_by: user.id,
+    }));
+
+  /** Progression lissée du lot : `3/12` → 25 %. */
+  const batchProgression = data.batch
+    ? Math.round((data.batch.index / data.batch.total) * 100)
+    : 100;
 
   try {
     const chapter: Chapter = {
@@ -249,18 +291,30 @@ export async function POST(request: Request) {
     }
 
     const warning = nas?.action === "error" ? nas.error : undefined;
-    await updateImportJob(job.id, {
-      statut: warning ? "erreur" : "termine",
-      progression: 100,
-      message: warning
-        ? `Chapitre ${data.numero} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
-        : storage === "nas"
-          ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis ${nasPath}.`
-          : storage === "imgchest"
-            ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis l'album ImgChest ${imgchestId}.`
-            : `Chapitre ${data.numero} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`,
-      ...(warning ? { erreurs: [warning] } : {}),
-    });
+    const resultat = warning
+      ? `Chapitre ${data.numero} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
+      : storage === "nas"
+        ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis ${nasPath}.`
+        : storage === "imgchest"
+          ? `Chapitre ${data.numero} indexé : ${indexed.length} pages depuis l'album ImgChest ${imgchestId}.`
+          : `Chapitre ${data.numero} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`;
+
+    await updateImportJob(job.id, batchJob
+      ? {
+          /* Le job de lot reste « en cours » jusqu'à la clôture envoyée par
+             l'interface : il porte la progression de l'ensemble. */
+          progression: batchProgression,
+          message: `${resultat} (${data.batch!.index}/${data.batch!.total})`,
+          ...(warning
+            ? { erreurs: [...(batchJob.erreurs ?? []), warning].slice(-20) }
+            : {}),
+        }
+      : {
+          statut: warning ? "erreur" : "termine",
+          progression: 100,
+          message: resultat,
+          ...(warning ? { erreurs: [warning] } : {}),
+        });
 
     await audit({
       actorId: user.id,
@@ -294,12 +348,20 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erreur inconnue.";
-    await updateImportJob(job.id, {
-      statut: "erreur",
-      progression: 100,
-      message: "Échec de l'import.",
-      erreurs: [message],
-    });
+    await updateImportJob(job.id, batchJob
+      ? {
+          /* Un chapitre en erreur n'arrête pas le lot : l'interface enchaîne
+             et clôt le job avec le rapport complet. */
+          progression: batchProgression,
+          message: `Échec du chapitre ${data.batch!.index}/${data.batch!.total}.`,
+          erreurs: [...(batchJob.erreurs ?? []), message].slice(-20),
+        }
+      : {
+          statut: "erreur",
+          progression: 100,
+          message: "Échec de l'import.",
+          erreurs: [message],
+        });
     await audit({
       actorId: user.id,
       actorPseudo: user.pseudo,

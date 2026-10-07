@@ -8,6 +8,7 @@ import {
   type ListResult,
 } from "./driver";
 import { rowId as normalizeRowId } from "./ids";
+import { withRetry } from "./transport";
 
 type Row = Models.Row & Record<string, unknown>;
 
@@ -151,15 +152,17 @@ export class AppwriteDriver implements DbDriver {
     if (query?.search && fields && fields.length > 0) {
       const settled = await Promise.allSettled(
         fields.map((field) =>
-          this.db.listRows<Row>({
-            databaseId: this.databaseId,
-            tableId: table,
-            queries: [
-              ...buildQueries({ ...query, search: undefined }),
-              Query.search(field, query.search!),
-            ],
-            total: false,
-          }),
+          withRetry(() =>
+            this.db.listRows<Row>({
+              databaseId: this.databaseId,
+              tableId: table,
+              queries: [
+                ...buildQueries({ ...query, search: undefined }),
+                Query.search(field, query.search!),
+              ],
+              total: false,
+            }),
+          ),
         ),
       );
       // Un champ refusé par Appwrite (colonne array, index manquant…) ne
@@ -190,21 +193,25 @@ export class AppwriteDriver implements DbDriver {
       return { items: rows.slice(offset, offset + limit), total: rows.length };
     }
 
-    const res = await this.db.listRows<Row>({
-      databaseId: this.databaseId,
-      tableId: table,
-      queries: buildQueries(query),
-    });
+    const res = await withRetry(() =>
+      this.db.listRows<Row>({
+        databaseId: this.databaseId,
+        tableId: table,
+        queries: buildQueries(query),
+      }),
+    );
     return { items: res.rows.map((r) => mapRow<T>(table, r)), total: res.total };
   }
 
   async get<T>(table: string, id: string): Promise<T | null> {
     try {
-      const row = await this.db.getRow<Row>({
-        databaseId: this.databaseId,
-        tableId: table,
-        rowId: normalizeRowId(id),
-      });
+      const row = await withRetry(() =>
+        this.db.getRow<Row>({
+          databaseId: this.databaseId,
+          tableId: table,
+          rowId: normalizeRowId(id),
+        }),
+      );
       return mapRow<T>(table, row);
     } catch (err) {
       if (isNotFound(err)) return null;

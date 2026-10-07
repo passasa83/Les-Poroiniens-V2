@@ -89,7 +89,9 @@ const TABLES: Table[] = [
       { key: "synopsis", type: "longtext" },
       { key: "couverture", type: "varchar", size: 512 },
       { key: "banniere", type: "varchar", size: 512 },
-      { key: "statut", type: "enum", elements: ["en_cours", "termine", "hiatus", "abandonne"] },
+      // `archive` : suppression douce — la série quitte le catalogue public
+      // sans perdre ses chapitres (complétée par le script, §9.2).
+      { key: "statut", type: "enum", elements: ["en_cours", "termine", "hiatus", "abandonne", "archive"] },
       { key: "type", type: "enum", elements: ["manga", "manhwa", "manhua"] },
       { key: "annee", type: "integer" },
       { key: "langue", type: "varchar", size: 16, def: "FR" },

@@ -3,8 +3,13 @@ import { can } from "@/lib/roles";
 import { nasConfigured } from "@/lib/nas";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
-export function jsonError(error: string, code: string, status: number): Response {
-  return Response.json({ error, code }, { status });
+export function jsonError(
+  error: string,
+  code: string,
+  status: number,
+  extra?: Record<string, unknown>,
+): Response {
+  return Response.json({ error, code, ...(extra ?? {}) }, { status });
 }
 
 /**
@@ -22,7 +27,14 @@ export async function guardNas(
     return { ok: false, response: jsonError("Accès au NAS réservé au Gérant.", "owner_only", 403) };
   }
   const limit = rateLimit(`owner:nas:${clientIp(request)}`, budget);
-  if (!limit.ok) return { ok: false, response: jsonError("Trop de requêtes.", "rate_limited", 429) };
+  if (!limit.ok) {
+    return {
+      ok: false,
+      response: jsonError("Trop de requêtes.", "rate_limited", 429, {
+        retryAfter: limit.retryAfter,
+      }),
+    };
+  }
   if (!nasConfigured()) {
     return {
       ok: false,

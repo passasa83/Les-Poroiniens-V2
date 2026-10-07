@@ -126,7 +126,8 @@ export async function recentChapters(limit = 12): Promise<Array<Chapter & { seri
     const out: Array<Chapter & { series: Series }> = [];
     for (const chapter of items) {
       const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      if (series) out.push({ ...chapter, series: mapSeries(series) });
+      // Une série archivée ne génère plus aucune sortie publique (§9.2).
+      if (series && series.statut !== "archive") out.push({ ...chapter, series: mapSeries(series) });
     }
     return out;
   });
@@ -200,7 +201,11 @@ export async function listUpdates(
       const publishAt = chapter.publish_at ? Date.parse(chapter.publish_at) : NaN;
       if (Number.isNaN(publishAt) || publishAt > now) continue; // planifié / horodatage absurde
       const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      if (series && (opts.includeAdult || series.classification !== "adult")) {
+      if (
+        series &&
+        series.statut !== "archive" &&
+        (opts.includeAdult || series.classification !== "adult")
+      ) {
         out.push({ ...chapter, series: mapSeries(series) });
       }
     }
@@ -260,7 +265,8 @@ export async function listRecentReleases(
     const out: ReleaseItem[] = [];
     for (const chapter of items) {
       const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      if (series) out.push({ ...chapter, series: mapSeries(series) });
+      // Série archivée : sortie retirée du catalogue public (§9.2).
+      if (series && series.statut !== "archive") out.push({ ...chapter, series: mapSeries(series) });
     }
     return { items: out, total, page, perPage };
   });

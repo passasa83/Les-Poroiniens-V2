@@ -5,7 +5,13 @@
 
 export type Role = "visiteur" | "membre" | "modo" | "admin" | "owner";
 export type Classification = "all" | "adult";
-export type SeriesStatus = "en_cours" | "termine" | "hiatus" | "abandonne";
+/**
+ * Statut d'une série.
+ * `archive` = retirée du catalogue public mais conservée en base (fiche,
+ * chapitres, historique de lecture intacts) : c'est la « suppression douce »
+ * proposée à côté de la suppression définitive (§9.2).
+ */
+export type SeriesStatus = "en_cours" | "termine" | "hiatus" | "abandonne" | "archive";
 export type SeriesType = "manga" | "manhwa" | "manhua";
 export type ChapterStatus = "draft" | "scheduled" | "published";
 export type LibraryStatus = "en_cours" | "a_lire" | "termine" | "en_pause" | "abandonne";
@@ -266,6 +272,7 @@ export const SERIES_STATUT_LABELS: Record<SeriesStatus, string> = {
   termine: "Terminé",
   hiatus: "Hiatus",
   abandonne: "Abandonné",
+  archive: "Archivée",
 };
 
 export const SERIES_TYPE_LABELS: Record<SeriesType, string> = {

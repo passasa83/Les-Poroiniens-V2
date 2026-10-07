@@ -57,7 +57,8 @@ function slugify(input: string): string {
 async function uniqueSlug(base: string): Promise<string> {
   let slug = base;
   let n = 2;
-  while (await getSeriesBySlug(slug)) {
+  // Les séries archivées conservent leur slug : il reste réservé (index unique).
+  while (await getSeriesBySlug(slug, { includeArchived: true })) {
     slug = `${base}-${n}`;
     n += 1;
   }

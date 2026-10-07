@@ -1,20 +1,24 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, FolderUp, Gauge, ScrollText, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  FolderUp,
+  Gauge,
+  LibraryBig,
+  ScrollText,
+  Settings,
+} from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { can, ROLE_LABELS } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
-
-const NAV: Array<{ href: string; label: string; icon: ReactNode }> = [
-  { href: "/gerant", label: "Imports", icon: <Gauge className="size-4" /> },
-  { href: "/gerant/import", label: "Importer", icon: <FolderUp className="size-4" /> },
-  { href: "/gerant/audit", label: "Journal d'audit", icon: <ScrollText className="size-4" /> },
-  { href: "/gerant/parametres", label: "Paramètres", icon: <Settings className="size-4" /> },
-];
+import { Badge } from "@/components/ui/kit";
+import { SideNav, type NavSection } from "@/components/backoffice/side-nav";
 
 /**
- * Espace Gérant (§10) : import, publication, audit complet et configuration.
- * Cloisonnement §4.2 — même les administrateurs sont exclus.
+ * Espace Gérant (§10) : séries, import depuis le NAS, publication, audit
+ * complet et configuration. Cloisonnement §4.2 — même les administrateurs
+ * sont exclus de ce rubrique.
  */
 export default async function GerantLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -23,41 +27,63 @@ export default async function GerantLayout({ children }: { children: ReactNode }
     return (
       <AccessDenied
         required="owner"
-        hint="Cet espace est réservé au Gérant : import de chapitres, publication, journal d'audit complet et configuration du site."
+        hint="Cet espace est réservé au Gérant : séries, import de chapitres, journal d'audit complet et configuration du site."
       />
     );
   }
 
+  const SECTIONS: NavSection[] = [
+    {
+      label: "Pilotage",
+      items: [{ href: "/gerant", label: "Tableau de bord", icon: <Gauge className="size-4" /> }],
+    },
+    {
+      label: "Contenu",
+      items: [
+        { href: "/gerant/series", label: "Séries", icon: <LibraryBig className="size-4" /> },
+        { href: "/gerant/import", label: "Import de contenu", icon: <FolderUp className="size-4" /> },
+      ],
+    },
+    {
+      label: "Traçabilité",
+      items: [
+        { href: "/gerant/audit", label: "Journal d'audit", icon: <ScrollText className="size-4" /> },
+      ],
+    },
+    {
+      label: "Configuration",
+      items: [
+        { href: "/gerant/parametres", label: "Paramètres", icon: <Settings className="size-4" /> },
+      ],
+    },
+  ];
+
   return (
     <div className="container-site py-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="section-title">Espace Gérant</h1>
-          <p className="text-sm text-muted">
-            <span className="font-semibold text-fg">{user?.pseudo}</span> —{" "}
-            {user ? ROLE_LABELS[user.role] : ""} · accès exclusif à l&apos;import et à la
-            configuration
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+            Espace Gérant
+          </p>
+          <h1 className="section-title">Pilotage du site</h1>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <span className="font-semibold text-fg">{user?.pseudo}</span>
+            <Badge tone="primary">{user ? ROLE_LABELS[user.role] : ""}</Badge>
+            <span>· séries, import NAS, publication et configuration</span>
           </p>
         </div>
-        <Link href="/admin" className="link-muted text-sm">
-          <ArrowLeft className="mr-1 inline size-4" /> Back-office admin
-        </Link>
-      </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/" className="link-muted text-sm">
+            <ExternalLink className="mr-1 inline size-4" /> Voir le site
+          </Link>
+          <Link href="/admin" className="link-muted text-sm">
+            <ArrowLeft className="mr-1 inline size-4" /> Back-office admin
+          </Link>
+        </div>
+      </header>
 
       <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
-        <nav className="card h-fit space-y-1 p-3" aria-label="Navigation espace Gérant">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface2 hover:text-fg"
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
+        <SideNav sections={SECTIONS} ariaLabel="Navigation espace Gérant" />
         <div className="min-w-0">{children}</div>
       </div>
     </div>
