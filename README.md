@@ -125,8 +125,8 @@ Dans les deux cas, le serveur ne fait que construire des URLs et indexer un inde
 
 | Variable                    | Exemple                          | Rôle                                                        |
 | --------------------------- | -------------------------------- | ----------------------------------------------------------- |
-| `IMG_BASE_URL`              | `https://img.lesporoiniens.org`  | domaine qui sert les fichiers ; `${IMG_BASE_URL}/${chemin}`  |
-| `NAS_API_BASE`              | `https://api-img.lesporoiniens.org` | appel **serveur** à l'API de listing (`/list`, `/tree`, `/health`, `/move`) |
+| `IMG_BASE_URL`              | `https://img.lesporoiniens.duckdns.org` | domaine qui sert les fichiers ; `${IMG_BASE_URL}/${chemin}`  |
+| `NAS_API_BASE`              | `https://img.lesporoiniens.duckdns.org/api` | appel **serveur** à l'API de listing (`/list`, `/tree`, `/health`, `/move`) — service `nas-api/` sur le NAS via NPM |
 | `NAS_API_CLIENT_ID`         | *(secret)*                       | service token Cloudflare Access — `CF-Access-Client-Id`      |
 | `NAS_API_CLIENT_SECRET`     | *(secret)*                       | service token Cloudflare Access — `CF-Access-Client-Secret`  |
 | `NAS_API_KEY`               | *(secret)*                       | `X-Api-Key` + `Authorization: Bearer` (alternative à Access) |
