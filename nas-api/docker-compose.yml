@@ -1,0 +1,29 @@
+# API de listing du NAS (voir TUTO-NAS.md, étape 6).
+#
+# Mise en place sur le NAS :
+#   1. copier ce dossier à côté de la stack images (ou `git pull` si le dépôt
+#      y est cloné) ;
+#   2. copier `.env.example` → `.env` (NON versionné) et renseigner
+#      `IMAGES_PATH` (+ `NAS_API_KEY` conseillé) ;
+#   3. docker compose -f docker-compose.yml up -d --build
+#   4. dans Nginx Proxy Manager : Custom Location `/api` sur l'hôte
+#      `img.…` → `http://<IP-du-NAS>:8660` (le préfixe `/api` est conservé,
+#      le service l'accepte avec ou sans).
+#
+# Secrets : uniquement dans `.env` (ignoré par git), jamais ici.
+services:
+  nas-api:
+    build: .
+    container_name: poroiniens-nas-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      IMG_ROOT: /images
+      PORT: "8660"
+    volumes:
+      # `:rw` requis pour `POST /move` (`staging/` → `public/`, §5.1).
+      # Le montage `:ro` du conteneur nginx reste inchangé.
+      - ${IMAGES_PATH:?Renseigne IMAGES_PATH dans nas-api/.env}:/images:rw
+    ports:
+      - "${API_PORT:-8660}:8660"

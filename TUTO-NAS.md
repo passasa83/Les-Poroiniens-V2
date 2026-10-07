@@ -237,10 +237,90 @@ directs sont servables).
 | Quand | Quoi |
 |---|---|
 | Maintien = rien | Le site lit ImgChest (pages) et file.garden (couvertures) — il ne dépend pas encore de ton NAS. |
-| Phase 2 : « système d'import » | Ton NAS devra exposer un endpoint `GET /list?path=…` (le nginx statique ne le fait pas). Je te fournirai le service + l'écran d'import Gérant ; l'importera les chapitres depuis ton NAS en base. |
+| Phase 2 : « système d'import » | Voir **étape 6** ci-dessous (service API du NAS). |
 | Phase 2 bis | Brancher `IMG_BASE_URL` (dev + Vercel) sur l'URL publique de ton serveur d'images. |
 | Plus tard | Rapatriement éventuel des contenus encore chez les autres (ImgChest, file.garden) vers ton NAS — decision prise : « dans un second temps ». |
 | Plus tard | Passer derrière Cloudflare (domaine, cache, anti-hotlink) — cahier images §6. |
+
+---
+
+## Étape 6 — API de listing du NAS : tout le contenu par ton NAS (15 min)
+
+Le nginx statique (étape 3) sert les fichiers mais ne sait pas **lister**
+les dossiers : le site a besoin de `GET /list`, `/tree`, `/health`, `/move`
+et `/file` (cahier images §4). Le service est fourni dans le dépôt :
+`nas-api/server.mjs` (Node zéro dépendance), `Dockerfile`,
+`docker-compose.yml`.
+
+### 6.1 Récupérer les fichiers sur le NAS
+
+Si le dépôt est déjà cloné sur le NAS (annexe A) : `git pull`.
+Sinon, depuis ton PC (mot de passe SSH demandé) :
+
+```powershell
+scp -P 2000 -r nas-api root@IP-DU-NAS:/root/poroiniens-nas-api
+```
+
+### 6.2 Configurer et démarrer
+
+En SSH sur le NAS (port 2000) :
+
+```bash
+cd /root/poroiniens-nas-api   # ou le clone du dépôt : Les-Poroiniens-V2/nas-api
+cp .env.example .env
+nano .env
+```
+
+Renseigne `IMAGES_PATH` = le dossier physique des images (le même que le
+montage `:ro` du conteneur nginx, étape 3.3), par exemple
+`/srv/dev-disk-by-uuid-xxxx-xxxx/Nas/Dev/poroiniens`.
+Génère une clé (`openssl rand -hex 24`) pour `NAS_API_KEY` et reporte la
+**même** valeur dans `.env.local` et Vercel (`NAS_API_KEY`) — sans elle, le
+site ne pourra plus interroger l'API.
+
+```bash
+docker compose up -d --build
+docker ps --filter name=poroiniens-nas-api     # STATUS = Up
+curl -s -H "X-Api-Key: TA_CLE" http://localhost:8660/health
+# → {"status":"ok","disk_free_pct":…,"version":"nas-api/1.0.0",…}
+curl -s -H "X-Api-Key: TA_CLE" "http://localhost:8660/tree?path=/" | head -c 300
+# → [{"name":"…","path":"…","type":"dir",…}]
+```
+
+(Sans clé configurée, les lectures restent ouvertes mais `POST /move` est
+refusé — jamais d'écriture anonyme sur tes images.)
+
+### 6.3 Exposer `/api` dans Nginx Proxy Manager
+
+Sur l'hôte proxy **existant** `img.lesporoiniens.duckdns.org` (celui des
+images), ajoute une **Custom Location** :
+
+| Champ | Valeur |
+|---|---|
+| Location | `/api` |
+| Scheme | `http` |
+| Forward Hostname / IP | `IP-DU-NAS` |
+| Forward Port | `8660` (ou `API_PORT` si changé) |
+
+Le service accepte le préfixe `/api` avec ou sans (aucune réécriture à
+configurer côté NPM). Test public :
+
+```bash
+curl -s -H "X-Api-Key: TA_CLE" "https://img.lesporoiniens.duckdns.org/api/health"
+curl -s -H "X-Api-Key: TA_CLE" "https://img.lesporoiniens.duckdns.org/api/list?path=..." | head -c 300
+```
+
+Aucune collision : aucune racine de série ne commence par `api`.
+
+### 6.4 Basculer le site (c'est moi qui le fais après ton OK)
+
+1. `.env.local` : `NAS_API_BASE=https://img.lesporoiniens.duckdns.org/api`
+   (+ `NAS_API_KEY=…`), puis recettes locales (import Gérant, `/api/image`,
+   cron `health`).
+2. Vercel → Settings → Environment Variables (Production + Preview) :
+   `NAS_API_BASE` et `NAS_API_KEY`, puis **Redeploy**.
+3. Recette visuelle de prod : une fiche série + un chapitre + écran
+   d'import Gérant.
 
 ---
 
