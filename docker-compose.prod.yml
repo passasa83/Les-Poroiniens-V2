@@ -1,0 +1,77 @@
+# ══════════════════════════════════════════════════════════════════
+#  Stack de PRODUCTION du site — tout est cloisonné ici : le site
+#  (`site`) + les cron jobs (`cron`), gérable depuis l'interface OMV :
+#
+#    OMV ▸ Services ▸ Compose ▸ Files   → « + » → CE fichier
+#    OMV ▸ Services ▸ Compose ▸ Services → poroiniens-prod ▸ ▶ ⏸ ↻ Update
+#
+#  Mise en place détaillée : TUTO-NAS.md, annexe C.
+#    1. clone du dépôt sur le NAS (partage appdata, cf. annexe A) ;
+#    2. `cp .env.example .env` puis renseigner les secrets (NON versionné) ;
+#    3. enregistrer ce fichier dans OMV puis « Démarrer » (build au 1er lancement) ;
+#    4. NPM : Proxy Host <DOMAIN> → http://<IP-NAS>:3200, SSL Let's Encrypt.
+#
+#  `name:` fige le nom de projet : la stack dev (docker-compose.dev.yml)
+#  vit dans le même dossier mais reste une pile totalement distincte.
+# ══════════════════════════════════════════════════════════════════
+name: poroiniens-prod
+
+services:
+  site:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Interpolations lues dans `.env` (à côté de ce fichier) — ces vars
+        # sont inlinées à la compilation, elles doivent donc être présentes
+        # au build, pas seulement au runtime.
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Renseigne NEXT_PUBLIC_SITE_URL dans .env (URL publique exacte du site)}
+        NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Les Poroiniens}
+        CDN_BASE_URL: ${CDN_BASE_URL:-}
+    image: poroiniens-site:latest
+    container_name: poroiniens-site
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # NPM proxyne vers http://<IP-NAS>:3200 (le dev occupe :3100).
+      - "3200:3000"
+    healthcheck:
+      # favicon.ico = route statique gratuite, aucune requête Appwrite.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/favicon.ico').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  cron:
+    # Remplace les crons de `vercel.json` : mêmes 2 appels (04:20 / 05:50 UTC,
+    # comme Vercel) en wget depuis Alpine — ni docker.sock, ni fichier externe.
+    # Le secret est écrit dans la crontab au démarrage du conteneur : les jobs
+    # n'ont donc aucun besoin d'hériter d'un environnement particulier.
+    image: alpine:3.21
+    container_name: poroiniens-cron
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      site:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        : "$${CRON_SECRET:?CRON_SECRET absent de .env — génère-le : openssl rand -hex 32}"
+        cat > /etc/crontabs/root <<EOF
+        20 4 * * * wget -qO- --header="authorization: Bearer $${CRON_SECRET}" http://site:3000/api/cron/revalidate >/dev/null 2>&1 || true
+        50 5 * * * wget -qO- --header="authorization: Bearer $${CRON_SECRET}" http://site:3000/api/cron/health >/dev/null 2>&1 || true
+        EOF
+        chmod 600 /etc/crontabs/root
+        echo "poroiniens-cron : 2 tâches planifiées —"
+        crontab -l
+        exec crond -f -l 2

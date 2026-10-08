@@ -7,6 +7,10 @@ const imgHosts = [
 ];
 
 const nextConfig: NextConfig = {
+  // Serveur autonome pour l'auto-hébergement Docker (`server.js` au lieu de
+  // `next start`) — voir `Dockerfile` + `docker-compose.prod.yml` (annexe C
+  // du TUTO-NAS.md). Sans effet sur `next dev` ni sur Vercel, qui lit `.next`.
+  output: "standalone",
   images: {
     remotePatterns: imgHosts.map((hostname) => ({
       protocol: "https",

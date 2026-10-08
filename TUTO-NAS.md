@@ -447,6 +447,117 @@ Les fichiers sont déjà dans le dépôt : `Dockerfile.dev`,
 
 ---
 
+## Annexe C — Mettre le site PROD sur la NAS (interface OMV)
+
+Le site de production tourne **sur la NAS, à côté d'Appwrite** : les requêtes
+vers la base passent de ~110 ms (Vercel ↔ home-lab) à ~1 ms (réseau Docker
+local). Tout est cloisonné dans **un seul fichier** gérable depuis l'interface :
+
+```
+Visiteur ──DNS──▶ IP maison ──NPM :443 (TLS)──┬─ <DOMAIN>      ─▶ poroiniens-site:3200
+                                              ├─ img.…         ─▶ nginx :8082 / nas-api :8660
+                                              └─ appwrite.…    ─▶ Appwrite
+poroiniens-site ──http://appwrite:80/v1──▶ Appwrite   (~1 ms)
+```
+
+Fichiers du dépôt : `docker-compose.prod.yml` (site + crons),
+`Dockerfile` (build de production), `.env.example` (modèle d'environnement),
+`next.config.ts` (`output: "standalone"`).
+
+### C.1 Prérequis (3 min)
+
+```bash
+free -h          # ≥ 2 Go libres pour le build (sinon : créer un swap OMV)
+docker ps --format '{{.Ports}}' | grep -c 3200   # doit renvoyer 0
+```
+
+### C.2 Poser les fichiers (5 min)
+
+Sur le NAS, dans le clone du dépôt (même dossier que le dev, annexe A) :
+
+```bash
+cd <partage>/appdata/poroiniens-dev/Les-Poroiniens-V2   # ou le clone prod
+git pull
+cp .env.example .env
+nano .env
+```
+
+Dans `.env` (non versionné) : **`NEXT_PUBLIC_SITE_URL`** (URL publique
+exacte, `https://…` sans slash final), `AUTH_SECRET` et `CRON_SECRET`
+(à générer : `openssl rand -hex 32`), les clés Appwrite, `NAS_API_KEY`,
+`IMG_SIGNING_SECRET`. `VERCEL_ENV=production` est déjà dans l'exemple :
+il masque le jeu de démo (demo-gate.ts).
+
+### C.3 Enregistrer et démarrer dans OMV (3 min)
+
+1. **Services ▸ Compose ▸ Files** → « + » → chemin complet vers
+   `docker-compose.prod.yml` → Save.
+2. **Services ▸ Compose ▸ Services** → `poroiniens-prod` → **▶ Démarrer** :
+   le premier lancement build l'image (npm ci + next build, 2 à 6 min).
+3. Vérifier : état **Up**, healthcheck **healthy**, et
+   `docker logs poroiniens-site` (aucune erreur).
+
+> Les piles `docker-compose.dev.yml` et `docker-compose.prod.yml` coexistent :
+> le fichier prod porte `name: poroiniens-prod`, les deux sont indépendantes.
+
+### C.4 Tester en LAN avant tout (3 min)
+
+```bash
+curl -si http://IP-DU-NAS:3200/ | head -3          # HTTP/1.1 200
+curl -si http://IP-DU-NAS:3200/api/cron/health | head -3   # 401 = normal sans en-tête
+```
+
+### C.5 Reverse proxy dans NPM (4 min)
+
+NPM → **Hosts → Proxy Hosts → +** : domaine du site →
+`http://IP-DU-NAS:3200`, **SSL ▸ Request a new SSL Certificate** (Let's
+Encrypt, comme pour `img.…`), **Force HTTPS** coché.
+
+### C.6 DNS et bascule (2 min + TTL)
+
+Record du domaine → IP maison (DuckDNS comme `img.`, ou le registrar si le
+domaine pointait chez Vercel). **Repli :** remettre le CNAME vers Vercel
+(le déploiement Vercel reste intact, ses crons continuent sans effet de bord).
+
+### C.7 Recette de prod (5 min)
+
+- accueil, `/nouveautes`, fiche série, lecture d'un chapitre (progression) ;
+- login gestionnaire + `/gerant`, import Gérant (utilise `NAS_API_BASE`) ;
+- `/inscription` : bandeau captcha **absent** (pas de clés Turnstile) ;
+- bouton Discord : état attendu tant que `DISCORD_CLIENT_ID/SECRET` sont
+  vides ; à configurer, l'URI à inscrire sera
+  `https://<DOMAIN>/api/auth/discord/callback` (puis Update pour rebuild) ;
+- cron forcé (depuis la NAS) :
+
+```bash
+docker exec poroiniens-cron sh -c 'wget -qO- --header="authorization: Bearer $CRON_SECRET" http://site:3000/api/cron/health'
+# → {"status":"ok",…}
+```
+
+### C.8 Vie quotidienne
+
+| Action | Comment |
+|---|---|
+| Voir les logs | `docker logs -f poroiniens-site` (ou Stats dans OMV) |
+| Mettre à jour le site | `git pull` puis OMV ▸ Compose ▸ Services → **Update** ; sinon SSH : `docker compose -f docker-compose.prod.yml up -d --build` |
+| Redémarrer / arrêter | Boutons ▶ ⏸ de l'interface, ou `restart: unless-stopped` fait tout seul après reboot NAS |
+| Crons | 2 appels/jour (04:20 / 05:50 UTC, comme `vercel.json`) — visibles dans `docker logs poroiniens-cron` |
+
+### C.9 Dépannage
+
+| Symptôme | Cause / solution |
+|---|---|
+| Erreur `${NEXT_PUBLIC_SITE_URL:?…}` au démarrage | `.env` absent ou mal renseigné → revoir C.2. |
+| Build tué (`FATAL ERROR`, exit 137) | RAM insuffisante → créer un swap puis relancer. |
+| `cron` reste à « created », `site` unhealthy | `docker logs poroiniens-site` (souvent clés manquantes ou Appwrite injoignable). |
+| Cron → 401 `cron_disabled`/`unauthorized` | `CRON_SECRET` absent ou différent → aligner dans `.env`, **Update** la pile. |
+| OK en LAN, KO depuis l'extérieur | DNS (record → IP maison) ou NPM (Proxy Host / SSL). |
+| Jeu de démo visible en prod | `VERCEL_ENV=production` absent du `.env` → l'ajouter + Update (rebuild). |
+| Images cassées | `IMG_BASE_URL` / `NAS_API_BASE` absents du `.env`. |
+| Port 3200 déjà pris | `docker ps`, puis changer le port public (`3200:3000` → `3201:3000`) et recalser NPM. |
+
+---
+
 ## Récapitulatif
 
 | Élément | Valeur |
@@ -456,3 +567,4 @@ Les fichiers sont déjà dans le dépôt : `Dockerfile.dev`,
 | URL des images | `http://<IP>:8082/<Série>/<Chapitre N>/<page>` |
 | Stack images | `…/appdata/poroiniens-images/docker-compose.images.yml` |
 | Site dev (optionnel) | `http://<IP>:3100` |
+| Site **prod** (OMV ▸ Compose) | `docker-compose.prod.yml` → `http://<IP>:3200` (annexe C) |
