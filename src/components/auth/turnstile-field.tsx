@@ -42,9 +42,11 @@ function loadTurnstile(): Promise<void> {
  *
  * Deux états possibles :
  *  - clé publique fournie → widget Cloudflare Turnstile rendu explicitement ;
- *  - clé absente → **repli explicite** : le champ reste en place, l'absence de
- *    captcha est annoncée clairement côté serveur (journal) et côté client,
- *    sans clé manquante affichée et sans blocage fantôme.
+ *  - clé absente → **tout est masqué** (aucun bandeau « à configurer »
+ *    montré aux visiteurs) : le repli serveur reste actif — vérification
+ *    sautée et journalisée, honeypot et limitation de débit toujours en
+ *    place — sans clé manquante affichée et sans blocage fantôme.
+ *    L'état réel reste consultable par le Gérant (Réglages : statuts).
  */
 export function CaptchaField({
   siteKey,
@@ -103,6 +105,9 @@ export function CaptchaField({
     };
   }, [siteKey]);
 
+  /* Sans clé : rien à afficher au visiteur (le repli serveur s'en charge). */
+  if (!siteKey) return null;
+
   const labelId = `${idPrefix}-captcha-label`;
 
   return (
@@ -116,25 +121,15 @@ export function CaptchaField({
         Vérification anti-robot
       </p>
 
-      {!siteKey ? (
-        /* Repli explicite : rien n'est masqué, rien n'est bloqué. */
-        <p className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs text-muted">
-          Captcha à configurer par l&apos;administrateur : l&apos;inscription reste protégée par
-          la limitation de débit.
+      <div ref={containerRef} />
+      {state === "loading" && (
+        <p className="text-xs text-muted">Chargement de la vérification…</p>
+      )}
+      {state === "unavailable" && (
+        <p className="text-xs text-adult">
+          La vérification anti-robot n&apos;a pas pu se charger (réseau ou bloqueur) :
+          réessayez ou désactivez votre bloqueur.
         </p>
-      ) : (
-        <>
-          <div ref={containerRef} />
-          {state === "loading" && (
-            <p className="text-xs text-muted">Chargement de la vérification…</p>
-          )}
-          {state === "unavailable" && (
-            <p className="text-xs text-adult">
-              La vérification anti-robot n&apos;a pas pu se charger (réseau ou bloqueur) :
-              réessayez ou désactivez votre bloqueur.
-            </p>
-          )}
-        </>
       )}
 
       <p className="mt-1 text-xs text-adult" role="alert">

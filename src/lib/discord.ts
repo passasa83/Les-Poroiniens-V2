@@ -94,10 +94,10 @@ export function discordAuthorizeUrl(state: string): string | null {
 }
 
 function sansSymboles(valeur: string): string {
-  return valeur
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{L}\p{N}]/gu, "");
+  // On garde les lettres (accents compris) et les chiffres : c'est exactement
+  // ce que le formulaire d'inscription accepte (^[\p{L}\p{N}]+$), donc le nom
+  // Discord reste tel quel — seuls espaces et ponctuation sautent.
+  return valeur.normalize("NFC").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function tronque(valeur: string, longueur: number): string {
@@ -105,9 +105,10 @@ function tronque(valeur: string, longueur: number): string {
 }
 
 /**
- * Pseudo du site à partir d'un compte Discord : mêmes règles que le
- * formulaire d'inscription (6 à 20 caractères, lettres et chiffres seuls),
- * unicité arbitrée ensuite par `loginWithDiscord`.
+ * Pseudo du site à partir du nom de compte Discord : mêmes règles que le
+ * formulaire d'inscription (6 à 20 lettres / chiffres, accents autorisés),
+ * en préférant le nom d'affichage au nom d'utilisateur. L'unicité est
+ * arbitrée ensuite par `loginWithDiscord` (suffixe numérique si pris).
  */
 export function pseudoDiscord(
   globalName: string | null,
@@ -116,14 +117,14 @@ export function pseudoDiscord(
 ): string {
   for (const source of [globalName, username]) {
     if (!source) continue;
-    const base = tronque(sansSymboles(source).toLowerCase(), 20);
+    const base = tronque(sansSymboles(source), 20);
     if ([...base].length >= 6) return base;
   }
   // Source trop courte : on complète avec les chiffres de l'identifiant.
-  const base =
-    tronque(sansSymboles(globalName || username || "membre").toLowerCase(), 12) || "membre";
+  const base = tronque(sansSymboles(globalName || username || ""), 12);
   const chiffres = (id.match(/\d+/g) || []).join("").slice(-8) || "0";
   let pseudo = tronque(`${base}${chiffres}`, 20);
+  if ([...pseudo].length < 6) pseudo = tronque(`membre${chiffres}`, 20);
   while ([...pseudo].length < 6) pseudo += "0";
   return pseudo;
 }
