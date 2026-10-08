@@ -10,8 +10,7 @@ import {
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
-import { getDb, TABLES } from "@/lib/db";
-import { listNotifications } from "@/lib/data/moderation";
+import { getSettings, listNotifications } from "@/lib/data/moderation";
 import { HeaderShell } from "./header-shell";
 import { Breadcrumbs, HeaderSearch, NavLinks } from "./header-nav";
 import { SiteThemeToggle } from "./theme-toggle";
@@ -19,10 +18,13 @@ import { UserMenu } from "./user-menu";
 import { AuthLink } from "@/components/auth/auth-link";
 
 export async function SiteHeader() {
-  const user = await getCurrentUser();
+  /* Session et paramètres en parallèle : les deux premières requêtes ne se
+     suivent plus. Les notifications (qui ont besoin de l'id) partent ensuite,
+     déjà mises en cache par `listNotifications`. */
+  const [user, settings] = await Promise.all([getCurrentUser(), getSettings()]);
   const notifications = user ? await listNotifications(user.id) : [];
   const unread = notifications.filter((n) => !n.lu).length;
-  const registrationOpen = (await getSetting("registration_open")) !== "0";
+  const registrationOpen = settings.registration_open !== "0";
 
   return (
     <HeaderShell>
@@ -91,13 +93,27 @@ export async function SiteHeader() {
   );
 }
 
-async function getSetting(cle: string): Promise<string | undefined> {
-  try {
-    const row = await getDb().get<{ valeur: string }>(TABLES.settings, cle);
-    return row?.valeur;
-  } catch {
-    return undefined;
-  }
+/**
+ * Coquille de l'en-tête affichée pendant que la session et les notifications
+ * se résolvent : mêmes classes que `HeaderShell` et la même barre
+ * (`container-site` + hauteurs 64/72 px) + le même fil d'Ariane, si bien que
+ * le contenu de la page ne bouge pas d'un pixel quand l'en-tête réel monte.
+ */
+export function HeaderSkeleton() {
+  return (
+    <header
+      aria-hidden
+      className="sticky top-0 z-40 border-b border-line bg-header/95 backdrop-blur"
+    >
+      <div className="container-site flex min-h-16 flex-wrap items-center gap-2 opacity-60 md:min-h-[72px] md:gap-4">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-sm text-primaryfg">
+          LP
+        </span>
+        <span className="hidden text-lg sm:block">Les Poroiniens</span>
+      </div>
+      <Breadcrumbs />
+    </header>
+  );
 }
 
 function MobileNav({ hasUser, canModerate }: { hasUser: boolean; canModerate: boolean }) {

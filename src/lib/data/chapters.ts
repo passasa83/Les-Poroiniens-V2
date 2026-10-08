@@ -2,7 +2,7 @@ import "server-only";
 import { cached, getDb, invalidate, TABLES } from "@/lib/db";
 import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
 import { pageUrl } from "@/lib/media";
-import { mapSeries } from "@/lib/data/series";
+import { seriesParIds } from "@/lib/data/series";
 import type { Chapter, ScanPage, Series, SeriesType } from "@/lib/types";
 
 export async function listChapters(
@@ -123,11 +123,15 @@ export async function recentChapters(limit = 12): Promise<Array<Chapter & { seri
       order: { field: "publish_at", dir: "desc" },
       limit,
     });
+    /* Les séries sont récupérées en **un** lot (au lieu d'un `get` par
+       chapitre : 12 aller-retours séquentiels avant). */
+    if (items.length === 0) return [];
+    const seriesMap = await seriesParIds(items.map((c) => c.series_id));
     const out: Array<Chapter & { series: Series }> = [];
     for (const chapter of items) {
-      const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
+      const series = seriesMap.get(chapter.series_id);
       // Une série archivée ne génère plus aucune sortie publique.
-      if (series && series.statut !== "archive") out.push({ ...chapter, series: mapSeries(series) });
+      if (series && series.statut !== "archive") out.push({ ...chapter, series });
     }
     return out;
   });
@@ -195,18 +199,22 @@ export async function listUpdates(
       limit,
     });
 
+    /* Un seul lot de séries pour les jusqu'à 400 chapitres (au lieu d'un
+       aller-retour par chapitre). */
+    if (items.length === 0) return [];
+    const seriesMap = await seriesParIds(items.map((c) => c.series_id));
     const now = Date.now();
     const out: ReleaseItem[] = [];
     for (const chapter of items) {
       const publishAt = chapter.publish_at ? Date.parse(chapter.publish_at) : NaN;
       if (Number.isNaN(publishAt) || publishAt > now) continue; // planifié / horodatage absurde
-      const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
+      const series = seriesMap.get(chapter.series_id);
       if (
         series &&
         series.statut !== "archive" &&
         (opts.includeAdult || series.classification !== "adult")
       ) {
-        out.push({ ...chapter, series: mapSeries(series) });
+        out.push({ ...chapter, series });
       }
     }
     return out;
@@ -227,6 +235,45 @@ export async function latestPublishedChapter(seriesId: string): Promise<Chapter 
 }
 
 /**
+ * Requête commune des sorties : **1 liste + 1 lot de séries = 2 RTT**.
+ * L'ancienne version faisait un `get(Series)` par chapitre — 12 à 240
+ * aller-retours séquentiels vers le backend distant.
+ */
+async function queryReleases(
+  opts: { type?: SeriesType | ""; includeAdult?: boolean },
+  limit: number,
+  offset: number,
+): Promise<{ items: ReleaseItem[]; total: number }> {
+  const filters = [
+    { field: "statut", op: "eq" as const, value: "published" },
+    ...(!opts.includeAdult
+      ? [{ field: "classification", op: "eq" as const, value: "all" }]
+      : []),
+    ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+    /* Exclusion dans la requête : `total` (« Charger plus ») doit
+       correspondre aux lignes réellement servies. */
+    ...filtresSansDemo("chapters"),
+  ];
+
+  const { items, total } = await getDb().list<Chapter>(TABLES.chapters, {
+    filters,
+    order: { field: "publish_at", dir: "desc" },
+    limit,
+    offset,
+  });
+  if (items.length === 0) return { items: [], total };
+
+  const seriesMap = await seriesParIds(items.map((c) => c.series_id));
+  const out: ReleaseItem[] = [];
+  for (const chapter of items) {
+    const series = seriesMap.get(chapter.series_id);
+    // Série archivée : sortie retirée du catalogue public.
+    if (series && series.statut !== "archive") out.push({ ...chapter, series });
+  }
+  return { items: out, total };
+}
+
+/**
  * « Dernières sorties » : chapitres publiés les plus récents, avec leur
  * série, filtrables par format (manga / manhwa / manhua) via la colonne
  * dénormalisée `series_type`, paginés côté serveur.
@@ -244,31 +291,8 @@ export async function listRecentReleases(
   const key = `releases:${opts.type ?? "all"}:${page}:${perPage}:${opts.includeAdult ? "adult" : "safe"}`;
 
   return cached(key, 60_000, async () => {
-    const filters = [
-      { field: "statut", op: "eq" as const, value: "published" },
-      ...(!opts.includeAdult
-        ? [{ field: "classification", op: "eq" as const, value: "all" }]
-        : []),
-      ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
-      /* Exclusion dans la requête : `total` (« Charger plus ») doit
-         correspondre aux lignes réellement servies. */
-      ...filtresSansDemo("chapters"),
-    ];
-
-    const { items, total } = await getDb().list<Chapter>(TABLES.chapters, {
-      filters,
-      order: { field: "publish_at", dir: "desc" },
-      limit: perPage,
-      offset: (page - 1) * perPage,
-    });
-
-    const out: ReleaseItem[] = [];
-    for (const chapter of items) {
-      const series = await getDb().get<Series>(TABLES.series, chapter.series_id);
-      // Série archivée : sortie retirée du catalogue public.
-      if (series && series.statut !== "archive") out.push({ ...chapter, series: mapSeries(series) });
-    }
-    return { items: out, total, page, perPage };
+    const { items, total } = await queryReleases(opts, perPage, (page - 1) * perPage);
+    return { items, total, page, perPage };
   });
 }
 
@@ -291,20 +315,18 @@ export async function listRecentReleasesGrouped(
 ): Promise<{ items: ReleaseItem[]; seriesCount: number; totalChapters: number }> {
   const maxSeries = Math.min(Math.max(opts.series ?? 12, 1), 48);
   const perSeries = Math.min(Math.max(opts.perSeries ?? 3, 1), 10);
+  /* Clé sous le préfixe `releases:` : `saveChapter` l'invalide déjà. */
+  const key = `releases:groupes:${opts.type ?? "all"}:${maxSeries}:${perSeries}:${opts.includeAdult ? "adult" : "safe"}`;
 
-  const items: ReleaseItem[] = [];
-  const parSerie = new Map<string, number>();
-  let totalChapters = 0;
-  // Assez de chapitres pour remplir les séries (12 × 3 + marge), page par page.
-  for (let page = 1; page <= 5; page++) {
-    const { items: lot, total } = await listRecentReleases({
-      type: opts.type,
-      page,
-      perPage: 48,
-      includeAdult: opts.includeAdult,
-    });
-    totalChapters = total;
-    if (lot.length === 0) break;
+  return cached(key, 60_000, async () => {
+    /* Une seule liste couvrant les 5 anciennes pages de 48 chapitres, puis
+       un lot de séries : **2 requêtes** au lieu de 5 listes et ~240 `get`
+       séquentiels — le plus gros poste de l'accueil à froid. */
+    const limite = Math.min(Math.max(maxSeries * perSeries * 4, 48), 240);
+    const { items: lot, total } = await queryReleases(opts, limite, 0);
+
+    const items: ReleaseItem[] = [];
+    const parSerie = new Map<string, number>();
     for (const ch of lot) {
       const pris = parSerie.get(ch.series_id) ?? 0;
       if (pris >= perSeries) continue;
@@ -312,9 +334,8 @@ export async function listRecentReleasesGrouped(
       parSerie.set(ch.series_id, pris + 1);
       items.push(ch);
     }
-    if (parSerie.size >= maxSeries) break;
-  }
-  return { items, seriesCount: parSerie.size, totalChapters };
+    return { items, seriesCount: parSerie.size, totalChapters: total };
+  });
 }
 
 export async function saveChapter(chapter: Partial<Chapter> & { id: string }): Promise<Chapter> {

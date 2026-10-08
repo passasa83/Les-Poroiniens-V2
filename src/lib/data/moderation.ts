@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb, TABLES } from "@/lib/db";
+import { cached, getDb, invalidate, TABLES } from "@/lib/db";
 import { idDeDemo } from "@/lib/demo-gate";
 import type { AuditEntry, ImportJob, Notification, Report, SiteSetting } from "@/lib/types";
 
@@ -80,8 +80,13 @@ export async function listAudit(opts: { full: boolean; limit?: number }): Promis
 /* ── Paramètres du site (Gérant) ─────────────────────────────────────── */
 
 export async function getSettings(): Promise<Record<string, string>> {
-  const { items } = await getDb().list<SiteSetting>(TABLES.settings, { limit: 200 });
-  return Object.fromEntries(items.map((s) => [s.cle, s.valeur]));
+  /* Paramètres lus à CHAQUE page (l'en-tête en dépend) : un cache court évite
+     un aller-retour vers le backend à chaque rendu. Écritures invalidées par
+     `setSetting` — l'admin voit sa valeur immédiatement après enregistrement. */
+  return cached("settings:tout", 60_000, async () => {
+    const { items } = await getDb().list<SiteSetting>(TABLES.settings, { limit: 200 });
+    return Object.fromEntries(items.map((s) => [s.cle, s.valeur]));
+  });
 }
 
 export async function setSetting(cle: string, valeur: string): Promise<void> {
@@ -89,6 +94,7 @@ export async function setSetting(cle: string, valeur: string): Promise<void> {
   const existing = await db.get<SiteSetting>(TABLES.settings, cle);
   if (existing) await db.update<SiteSetting>(TABLES.settings, cle, { valeur });
   else await db.create<SiteSetting>(TABLES.settings, cle, { cle, valeur });
+  invalidate("settings:");
 }
 
 /* ── Jobs d'import (espace Gérant) ───────────────────────────────────── */
@@ -116,12 +122,17 @@ export async function updateImportJob(id: string, patch: Partial<ImportJob>): Pr
 /* ── Notifications in-app ─────────────────────────────────────── */
 
 export async function listNotifications(userId: string): Promise<Notification[]> {
-  const { items } = await getDb().list<Notification>(TABLES.notifications, {
-    filters: [{ field: "user_id", op: "eq", value: userId }],
-    order: { field: "created_at", dir: "desc" },
-    limit: 50,
+  /* La cloche de l'en-tête est rendue à CHAQUE page : 30 s de cache valent
+     un aller-retour en moins par navigation ; `notify` et
+     `markNotificationsRead` invalident la clé. */
+  return cached(`notifications:${userId}`, 30_000, async () => {
+    const { items } = await getDb().list<Notification>(TABLES.notifications, {
+      filters: [{ field: "user_id", op: "eq", value: userId }],
+      order: { field: "created_at", dir: "desc" },
+      limit: 50,
+    });
+    return items;
   });
-  return items;
 }
 
 export async function notify(userId: string, type: Notification["type"], payload: Record<string, unknown>) {
@@ -134,11 +145,16 @@ export async function notify(userId: string, type: Notification["type"], payload
     created_at: new Date().toISOString(),
   };
   await getDb().create<Notification>(TABLES.notifications, n.id, n as unknown as Record<string, unknown>);
+  invalidate(`notifications:${userId}`);
 }
 
 export async function markNotificationsRead(userId: string): Promise<void> {
+  /* On purge d'abord : la liste doit être fraîche (une notification venue
+     moins de 30 s avant ne serait pas dans le cache). */
+  invalidate(`notifications:${userId}`);
   const items = await listNotifications(userId);
   for (const n of items.filter((x) => !x.lu)) {
     await getDb().update<Notification>(TABLES.notifications, n.id, { lu: true });
   }
+  invalidate(`notifications:${userId}`);
 }

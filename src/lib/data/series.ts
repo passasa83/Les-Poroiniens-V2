@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cached, getDb, invalidate, TABLES, type Filter } from "@/lib/db";
 import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
 import { resolveCover, storeCover } from "@/lib/media";
@@ -205,36 +206,81 @@ export function fuzzyScore(query: string, serie: Series): number {
   return score >= 0.6 ? score : 0;
 }
 
+/* `React cache` : la fiche série appelle `getSeriesBySlug` au moins deux fois
+   (`generateMetadata` + page) — sans déduplication, deux aller-retours vers le
+   backend pour strictement la même ligne. La clé mémorise un booléen (React
+   compare les arguments par `Object.is`, un objet ne dédoublonnerait pas). */
+const serieParSlug = cache(
+  async (slug: string, includeArchived: boolean): Promise<Series | null> => {
+    /* Série de la graine masquée en production : `null` → vrai 404 (page fiche,
+       lecteur, proxy) sans requête inutile. */
+    if (serieDeDemo(slug)) return null;
+    const res = await getDb().list<Series>(TABLES.series, {
+      filters: [
+        { field: "slug", op: "eq", value: slug },
+        ...filtreArchives(includeArchived),
+      ],
+      limit: 1,
+    });
+    return res.items[0] ? mapSeries(res.items[0]) : null;
+  },
+);
+
 export async function getSeriesBySlug(
   slug: string,
   opts: { includeArchived?: boolean } = {},
 ): Promise<Series | null> {
-  /* Série de la graine masquée en production : `null` → vrai 404 (page fiche,
-     lecteur, proxy) sans requête inutile. */
-  if (serieDeDemo(slug)) return null;
-  const res = await getDb().list<Series>(TABLES.series, {
-    filters: [
-      { field: "slug", op: "eq", value: slug },
-      ...filtreArchives(opts.includeArchived),
-    ],
-    limit: 1,
-  });
-  return res.items[0] ? mapSeries(res.items[0]) : null;
+  return serieParSlug(slug, Boolean(opts.includeArchived));
 }
 
-export async function getSeriesById(id: string): Promise<Series | null> {
+export const getSeriesById = cache(async (id: string): Promise<Series | null> => {
   if (serieDeDemo(id)) return null;
   const row = await getDb().get<Series>(TABLES.series, id);
   return row ? mapSeries(row) : null;
+});
+
+/**
+ * Plusieurs séries en **une seule** requête (lots de 50 ids pour rester loin
+ * des limites de longueur d'URL, lots volés en parallèle → un seul RTT).
+ *
+ * C'est le remède aux N+1 « un `get` par ligne » : sorties récentes,
+ * nouveautés et accueil faisaient 12 à 240 aller-retours séquentiels vers un
+ * backend distant — d'où des chargements de plusieurs dizaines de secondes.
+ */
+export async function seriesParIds(ids: readonly string[]): Promise<Map<string, Series>> {
+  const uniques = [...new Set(ids)].filter((id) => id && !serieDeDemo(id));
+  const sortie = new Map<string, Series>();
+  if (uniques.length === 0) return sortie;
+
+  const lots: string[][] = [];
+  for (let i = 0; i < uniques.length; i += 50) lots.push(uniques.slice(i, i + 50));
+  const resultats = await Promise.all(
+    lots.map((lot) =>
+      getDb().list<Series>(TABLES.series, {
+        filters: [{ field: "id", op: "in", value: lot }],
+        limit: lot.length,
+      }),
+    ),
+  );
+  for (const resultat of resultats) {
+    for (const row of resultat.items) sortie.set(row.id, mapSeries(row));
+  }
+  return sortie;
 }
 
 export async function allSeries(opts: { includeArchived?: boolean } = {}): Promise<Series[]> {
-  const { items } = await getDb().list<Series>(TABLES.series, {
-    filters: [...filtresSansDemo("series"), ...filtreArchives(opts.includeArchived)],
-    order: { field: "titre", dir: "asc" },
-    limit: 1000,
+  /* Jusqu'à 1000 lignes téléchargées par `/catalogue`, `/recherche`,
+     « séries similaires » et le sitemap : 60 s de cache font disparaître un
+     aller-retour lourd de toutes ces pages. Les écritures (saveSeries,
+     saveChapter…) appellent déjà `invalidate("series:")`. */
+  return cached(`series:tout:${opts.includeArchived ? 1 : 0}`, 60_000, async () => {
+    const { items } = await getDb().list<Series>(TABLES.series, {
+      filters: [...filtresSansDemo("series"), ...filtreArchives(opts.includeArchived)],
+      order: { field: "titre", dir: "asc" },
+      limit: 1000,
+    });
+    return items.map(mapSeries);
   });
-  return items.map(mapSeries);
 }
 
 /** « Séries similaires » : genres puis tags en commun. */

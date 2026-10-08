@@ -8,6 +8,7 @@ import {
   getSeriesById,
   listSeries,
   popularSeries,
+  seriesParIds,
   similarSeries,
 } from "@/lib/data/series";
 import { dateAnnonce, dateIsoAnnonce, derniereAnnonce } from "@/lib/data/annonces";
@@ -22,7 +23,7 @@ import { RankList } from "@/components/home/rank-list";
 import { libelleUnite, plainText } from "@/lib/format";
 import type { ReleaseItem } from "@/lib/data/chapters";
 import type { ReleaseDto } from "@/lib/dto";
-import { SERIES_TYPE_LABELS, type Annonce, type Chapter, type Series } from "@/lib/types";
+import { SERIES_TYPE_LABELS, type Annonce, type Chapter, type HistoryEntry, type Series } from "@/lib/types";
 
 /** Sections facultatives : masquées quand elles n'ont rien à montrer. */
 export default async function HomePage() {
@@ -36,27 +37,40 @@ export default async function HomePage() {
     derniereAnnonce().catch(() => null),
   ]);
 
-  const [popular, releases, nouveautes, library] = await Promise.all([
+  const [popular, releases, nouveautes, library, editorialMap, history] = await Promise.all([
     popularSeries(10, adult),
     // Une carte par série (12 séries × 3 derniers chapitres) : le
     // total reste le décompte des chapitres (bouton « Charger plus »).
     listRecentReleasesGrouped({ series: 12, perSeries: 3, includeAdult: adult }),
     listSeries({ sort: "nouveautes", perPage: 6, includeAdult: adult }),
     user ? listLibrary(user.id) : Promise.resolve([]),
+    // Les 12 recommandations éditoriales en **un** lot (l'ancienne boucle
+    // faisait 12 `get` en série), et l'historique en même temps : tout est
+    // indépendant, autant d'aller-retours partagés.
+    seriesParIds(recos.slice(0, 12).map((rec) => rec.series_id)),
+    user ? listHistory(user.id, 1) : Promise.resolve([]),
   ]);
 
   /* ── Héros « À la une » : sélection de la rédaction, sinon les plus lues ── */
   const editorial: Series[] = [];
   for (const rec of recos.slice(0, 12)) {
-    const s = await getSeriesById(rec.series_id);
+    const s = editorialMap.get(rec.series_id);
     if (s && (adult || s.classification !== "adult")) editorial.push(s);
   }
 
   const heroPool = editorial.length > 0 ? editorial : popular;
   const heroSeries = heroPool.slice(0, 5);
   const heroIds = new Set(heroSeries.map((s) => s.id));
-  const firstChapters = await firstChapterNumbers(heroSeries.map((s) => s.id));
   const followedIds = new Set(library.map((entry) => entry.series_id));
+
+  /* Trois lectures indépendantes en parallèle : premiers chapitres (héros),
+     dernier lu, et bloc « Continuer la lecture » (qui partage désormais
+     l'historique déjà chargé au lieu de le re-demander). */
+  const [firstChapters, lastRead, continueReading] = await Promise.all([
+    firstChapterNumbers(heroSeries.map((s) => s.id)),
+    history[0] ? getSeriesById(history[0].series_id) : Promise.resolve(null),
+    user ? continueBlock(history) : Promise.resolve(null),
+  ]);
 
   const slides: HeroSlide[] = heroSeries.map((s) => ({
     id: s.id,
@@ -75,13 +89,9 @@ export default async function HomePage() {
   /* ── « Ajouts récents » et recommandations ─────────────────────── */
   let recoSeries: Series[] = [];
   let recoForVisitor = true;
-  if (user) {
-    const history = await listHistory(user.id, 1);
-    const lastRead = history[0] ? await getSeriesById(history[0].series_id) : null;
-    if (lastRead) {
-      recoForVisitor = false;
-      recoSeries = await similarSeries(lastRead, 6);
-    }
+  if (lastRead) {
+    recoForVisitor = false;
+    recoSeries = await similarSeries(lastRead, 6);
   }
   if (recoSeries.length === 0) {
     recoForVisitor = true;
@@ -91,7 +101,6 @@ export default async function HomePage() {
     .filter((s) => !heroIds.has(s.id) && (adult || s.classification !== "adult"))
     .slice(0, 6);
 
-  const continueReading = user ? await continueBlock(user.id) : null;
   const announcement = settings.announcement?.trim();
 
   return (
@@ -298,15 +307,18 @@ function AnnonceALaUne({ annonce, bandeau }: { annonce: Annonce; bandeau: boolea
   );
 }
 
-async function continueBlock(userId: string) {
-  const history = await listHistory(userId, 1);
-  if (history.length === 0) return null;
+async function continueBlock(history: HistoryEntry[]) {
   const entry = history[0];
-  const series = await getSeriesById(entry.series_id);
-  const chapters = await getDb().list<Chapter>(TABLES.chapters, {
-    filters: [{ field: "id", op: "eq", value: entry.chapter_id }],
-    limit: 1,
-  });
+  if (!entry) return null;
+  /* Série et chapitre sont indépendants : deux requêtes parallèles au lieu
+     de deux requêtes en série (l'historique est déjà chargé par l'appelant). */
+  const [series, chapters] = await Promise.all([
+    getSeriesById(entry.series_id),
+    getDb().list<Chapter>(TABLES.chapters, {
+      filters: [{ field: "id", op: "eq", value: entry.chapter_id }],
+      limit: 1,
+    }),
+  ]);
   const chapter = chapters.items[0];
   if (!series || !chapter) return null;
 

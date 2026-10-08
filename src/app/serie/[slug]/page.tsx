@@ -79,26 +79,27 @@ export default async function SeriePage({
   const series = await getSeriesBySlug(slug);
   if (!series) notFound();
 
-  // Chapitres programmés échus : publiés immédiatement (le cron quotidien ne
-  // couvre qu'une exécution par jour sur le plan Hobby de Vercel).
-  await publishDueChaptersOnDemand();
-
   const isAdult = series.classification === "adult";
+  /* Chapitres programmés échus : publiés immédiatement (le cron quotidien ne
+     couvre qu'une exécution par jour sur le plan Hobby de Vercel). La
+     publication doit précéder la liste des chapitres, mais elle partage
+     l'aller-retour de la session : même lot que l'utilisateur, la porte
+     +18 et les stats. */
   const [user, gateOk, stats] = await Promise.all([
     getCurrentUser(),
     adultGateAccepted(),
     seriesStats(series.slug),
+    publishDueChaptersOnDemand(),
   ]);
   const needsGate = isAdult && !gateOk;
 
-  const [chapters, similar] = await Promise.all([
+  const [chapters, similar, history, entry] = await Promise.all([
     listChapters(series.id, { publishedOnly: true }),
     similarSeries(series, 6),
+    user ? listHistory(user.id, 500) : (Promise.resolve([]) as Promise<HistoryEntry[]>),
+    user ? getLibraryEntry(user.id, series.id) : Promise.resolve(null),
   ]);
-
-  const history: HistoryEntry[] = user ? await listHistory(user.id, 500) : [];
   const read = new Map(history.map((h) => [h.chapter_id, h]));
-  const entry = user ? await getLibraryEntry(user.id, series.id) : null;
 
   const rawOrdre = Array.isArray(sp.ordre) ? sp.ordre[0] : sp.ordre;
   const asc = rawOrdre === "asc";

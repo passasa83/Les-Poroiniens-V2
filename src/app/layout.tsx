@@ -3,7 +3,7 @@ import { Poppins } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
+import { HeaderSkeleton, SiteHeader } from "@/components/layout/site-header";
 import { CookieBanner } from "@/components/layout/cookie-banner";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { PwaRegister } from "@/components/layout/pwa-register";
@@ -85,7 +85,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Aller au contenu principal
         </a>
-        <SiteHeader />
+        {/* L'en-tête (session + notifications, jusqu'à 4 requêtes vers le
+            backend) est mis en Suspense : le contenu de la page part
+            immédiatement au lieu d'attendre l'en-tête, la coquille ayant
+            exactement la même hauteur (aucun décalage visuel). */}
+        <Suspense fallback={<HeaderSkeleton />}>
+          <SiteHeader />
+        </Suspense>
         <main id="contenu-principal" className="flex-1 scroll-mt-24">
           {children}
         </main>

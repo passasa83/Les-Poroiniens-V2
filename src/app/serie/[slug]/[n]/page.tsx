@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { AdultGate } from "@/components/adult/adult-gate";
 import { CommentsSection } from "@/components/comments/comments-section";
@@ -12,8 +13,8 @@ import { getChapter, getReaderContext, recordView } from "@/lib/data/chapters";
 import { listHistory } from "@/lib/data/library";
 import {
   activeRecommendations,
-  getSeriesById,
   getSeriesBySlug,
+  seriesParIds,
   similarSeries,
 } from "@/lib/data/series";
 import { publishDueChaptersOnDemand } from "@/lib/publishing";
@@ -25,7 +26,7 @@ import {
   titreUnite,
 } from "@/lib/format";
 import { can } from "@/lib/roles";
-import type { Series } from "@/lib/types";
+import type { HistoryEntry, Series } from "@/lib/types";
 
 type Params = Promise<{ slug: string; n: string }>;
 
@@ -96,16 +97,24 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   const series = await getSeriesBySlug(slug);
   if (!series || !numero) notFound();
 
-  // Un lien direct vers un chapitre programmé mais déjà échu doit fonctionner
-  // sans attendre le cron quotidien (limite du plan Hobby).
-  await publishDueChaptersOnDemand();
-
-  const [user, gateOk] = await Promise.all([getCurrentUser(), adultGateAccepted()]);
+  /* La publication à échéance partage l'aller-retour de la session (elle
+     doit être faite avant de résoudre le chapitre, sinon un lien direct
+     vers un chapitre dû renverrait un 404). */
+  const [user, gateOk] = await Promise.all([
+    getCurrentUser(),
+    adultGateAccepted(),
+    publishDueChaptersOnDemand(),
+  ]);
   // Aperçu des brouillons réservé au Gérant (étape 4) : les pages sont
   // alors servies avec des URLs signées à 10 minutes.
   const allowDraft = Boolean(user && can(user.role, "publish_chapter"));
 
-  const context = await getReaderContext(series, numero, { allowDraft });
+  /* Contexte du lecteur et historique (page de départ) sont indépendants :
+     deux lectures en parallèle au lieu de deux en série. */
+  const [context, history] = await Promise.all([
+    getReaderContext(series, numero, { allowDraft }),
+    user ? listHistory(user.id, 500) : (Promise.resolve([]) as Promise<HistoryEntry[]>),
+  ]);
   if (!context) notFound();
 
   const isAdult = series.classification === "adult" || context.chapter.classification === "adult";
@@ -114,12 +123,14 @@ export default async function ChapitrePage({ params }: { params: Params }) {
   const href = chapterHref(series.slug, context.chapter.numero);
 
   if (!needsGate && !context.preview) {
-    await recordView(context.chapter);
+    /* Compteur de vues : écriture reportée après la réponse (`after`) —
+       un aller-retour bloquant de moins au chargement du lecteur, avec la
+       même valeur comptée (issue du contexte déjà chargé). */
+    after(() => recordView(context.chapter));
   }
 
   let initialPage = 1;
   if (user) {
-    const history = await listHistory(user.id, 500);
     const entry = history.find((h) => h.chapter_id === context.chapter.id);
     if (entry && entry.page > 0) initialPage = entry.page;
   }
@@ -311,10 +322,12 @@ async function endOfChapterRecommendations(
 
   try {
     const recos = await activeRecommendations("end_chapter");
+    /* Un seul lot de séries au lieu d'un aller-retour par recommandation. */
+    const cibles = await seriesParIds(recos.map((reco) => reco.series_id));
     for (const reco of recos) {
       if (out.length >= 4) break;
       if (seen.has(reco.series_id)) continue;
-      const target = await getSeriesById(reco.series_id);
+      const target = cibles.get(reco.series_id) ?? null;
       if (!target || seen.has(target.id)) continue;
       if (target.classification === "adult" && !adultOk) continue;
       seen.add(target.id);
