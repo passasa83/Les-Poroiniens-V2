@@ -14,7 +14,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: siteName,
     short_name: siteName,
     description:
-      "Lecture de scans manga, manhwa et manhua : catalogue, fiches séries, lecteur optimisé et suivi de lecture.",
+      "Lecture de scans manga, manhwa, manhua et light novel : catalogue, fiches séries, lecteur optimisé et suivi de lecture.",
     lang: "fr",
     dir: "ltr",
     start_url: "/",

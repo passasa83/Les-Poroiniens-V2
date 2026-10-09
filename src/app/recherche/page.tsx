@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 
 const SORTS = ["popularite", "nouveautes", "alpha", "note", "maj"] as const;
 const STATUTS = ["en_cours", "termine", "hiatus", "abandonne", "one_shot"] as const;
-const TYPES = ["manga", "manhwa", "manhua"] as const;
+const TYPES = ["manga", "manhwa", "manhua", "light_novel"] as const;
 
 const Schema = z.object({
   q: z.string().max(120).catch("").optional(),

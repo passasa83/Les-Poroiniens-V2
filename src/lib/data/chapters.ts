@@ -1,7 +1,9 @@
 import "server-only";
 import { cached, getDb, invalidate, TABLES } from "@/lib/db";
 import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
-import { pageUrl } from "@/lib/media";
+import { demoLnContent } from "@/lib/db/demo-content";
+import { imageEnv, pageUrl } from "@/lib/media";
+import { isSafePath } from "@/lib/nas";
 import { seriesParIds } from "@/lib/data/series";
 import type { Chapter, ScanPage, Series, SeriesType } from "@/lib/types";
 
@@ -75,8 +77,78 @@ export interface ReaderContext {
   prev: Chapter | null;
   next: Chapter | null;
   pages: { index: number; url: string; largeur: number; hauteur: number }[];
+  /** Light novel : paragraphes du chapitre (null pour les séries image). */
+  contenu: string[] | null;
   /** vrai quand le chapitre n'est pas publié (aperçu Gérant, URLs signées). */
   preview: boolean;
+}
+
+/** Encodage par segment : les chemins NAS portent espaces et accents. */
+function encodeRel(rel: string): string {
+  return rel.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+}
+
+/** Découpe d'un fichier texte brut en paragraphes (sauts de lignes doubles). */
+export function decouperParagraphes(texte: string): string[] {
+  return texte
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+/** Garde-fou : un chapitre texte reste un contenu de lecture, pas un fichier. */
+const LN_MAX_CHARS = 2_000_000;
+
+/**
+ * Chemin NAS du fichier texte d'un chapitre light novel : `<Série>/Chapitre 3.txt`
+ * (mêmes conventions de dossier que les dépôts d'images importés).
+ */
+export function lnContentPath(series: Series, numero: number): string {
+  return `${series.titre}/Chapitre ${numero}.txt`;
+}
+
+/**
+ * Texte brut d'un chapitre light novel (lecture **et** éditeur du Gérant :
+ * la découpe en paragraphes reste réservée à l'affichage).
+ * Chemin de démo accepté (`/api/…`) : servi par la graine, sans HTTP.
+ */
+export async function fetchChapterRawText(chapter: Chapter): Promise<string | null> {
+  const chemin = (chapter.contenu_chemin ?? "").trim();
+  if (!chemin) return null;
+  if (chemin.startsWith("/")) return (demoLnContent(chemin) ?? []).join("\n\n");
+  if (!isSafePath(chemin)) return null;
+
+  try {
+    const texte = await cached(`ln:${chapter.id}:${chemin}`, 5 * 60_000, async () => {
+      const { imgBase } = imageEnv();
+      if (!imgBase) return "";
+      const res = await fetch(`${imgBase}/${encodeRel(chemin)}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return "";
+      return (await res.text()).slice(0, LN_MAX_CHARS);
+    });
+    return texte || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Purge du texte en cache après une écriture (éditeur → relecture immédiate). */
+export function invalidateChapterContent(chapterId: string): void {
+  invalidate(`ln:${chapterId}`);
+}
+
+/**
+ * Contenu d'un chapitre light novel : le `.txt` du NAS lu **côté serveur**
+ * (le navigateur n'atteint jamais le CDN) puis découpé en paragraphes.
+ */
+export async function getChapterContent(chapter: Chapter): Promise<string[] | null> {
+  const texte = await fetchChapterRawText(chapter);
+  if (!texte) return null;
+  return decouperParagraphes(texte);
 }
 
 /**
@@ -100,6 +172,10 @@ export async function getReaderContext(
   const ordered = [...chapters].sort((a, b) => a.numero - b.numero);
   const idx = ordered.findIndex((c) => c.id === chapter.id);
   const { pages } = await getChapterPageUrls(chapter.id, { signed: preview });
+  const contenu =
+    series.type === "light_novel" || chapter.contenu_chemin
+      ? await getChapterContent(chapter)
+      : null;
   return {
     series,
     chapter,
@@ -107,6 +183,7 @@ export async function getReaderContext(
     prev: idx > 0 ? ordered[idx - 1] : null,
     next: idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1] : null,
     pages,
+    contenu,
     preview,
   };
 }

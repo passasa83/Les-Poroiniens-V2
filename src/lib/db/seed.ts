@@ -27,7 +27,7 @@ type SeedDef = {
   alt?: string[];
   synopsis: string;
   statut: "en_cours" | "termine" | "hiatus" | "abandonne";
-  type: "manga" | "manhwa" | "manhua";
+  type: "manga" | "manhwa" | "manhua" | "light_novel";
   annee: number;
   classification?: "adult";
   genres: string[];
@@ -160,6 +160,19 @@ const seeds: SeedDef[] = [
     auteurs: ["K. Aoi"],
     chapters: 9,
   },
+  {
+    titre: "La Lueur des Étoiles Perdues",
+    alt: ["Hoshi no Kioku"],
+    synopsis:
+      "Archiviste des cartes célestes, Nanami hérite d'un observatoire abandonné où chaque nuit quelqu'un répond depuis l'horizon. Un roman illustré en quatre arcs.",
+    statut: "en_cours",
+    type: "light_novel",
+    annee: 2026,
+    genres: ["Fantastique", "Aventure", "Drame"],
+    tags: ["astronomie", "voyage", "roman"],
+    auteurs: ["S. Hoshino"],
+    chapters: 4,
+  },
 ];
 
 const USERS: Array<{
@@ -214,6 +227,11 @@ export const DEMO_ACCOUNTS = USERS.map(({ email, password, pseudo, role }) => ({
 /** Pages par chapitre générées en SVG à la volée côté serveur. */
 export function demoPagePath(slug: string, chapter: number, index: number): string {
   return `/api/img/page/${slug}/${chapter}/${index}`;
+}
+
+/** Contenu texte par chapitre light novel de démo (servi par `demo-content`). */
+export function demoLnPath(slug: string, chapter: number): string {
+  return `/api/img/ln/${slug}/${chapter}`;
 }
 
 export function coverPath(slug: string): string {
@@ -299,6 +317,7 @@ function build(): DemoDatabase {
           ? iso(-heuresRecent * 3600_000)
           : iso(-(rang + 3) * DAY - n * 3600_000);
       const nbPages = 16 + ((n + si) % 7);
+      const isLn = s.type === "light_novel";
       const chapter = {
         id: chapterId,
         series_id: seriesId,
@@ -308,9 +327,11 @@ function build(): DemoDatabase {
         statut: "published" as const,
         publish_at: published,
         source: "nas" as const,
+        // Light novel : chemin de démo servi sans HTTP (`demo-content.ts`).
+        ...(isLn ? { contenu_chemin: demoLnPath(slug, n) } : {}),
         // dénormalisé : les onglets « Dernières sorties » filtrent dessus
         series_type: s.type,
-        nb_pages: nbPages,
+        nb_pages: isLn ? 0 : nbPages,
         classification,
         // Chapitre de la graine : aucun groupe de scan (pas de pastille).
         teams: [],
@@ -319,6 +340,9 @@ function build(): DemoDatabase {
         created_at: published,
       };
       db[TABLES.chapters].set(chapterId, chapter);
+
+      // Chapitre image uniquement : le lecteur texte n'a pas de planches.
+      if (isLn) continue;
 
       for (let p = 0; p < nbPages; p++) {
         const pageId = rowId(`${chapterId}-p${p}`);

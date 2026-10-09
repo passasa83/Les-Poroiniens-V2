@@ -19,12 +19,12 @@ import { SERIES_STATUT_LABELS, SERIES_TYPE_LABELS, type SeriesStatus, type Serie
 export const metadata: Metadata = {
   title: "Catalogue",
   description:
-    "Parcourez le catalogue complet : manga, manhwa et manhua, avec filtres par genre, statut, type et année.",
+    "Parcourez le catalogue complet : manga, manhwa, manhua et light novel, avec filtres par genre, statut, type et année.",
 };
 
 const SORTS = ["popularite", "nouveautes", "alpha", "note", "maj"] as const;
 const STATUTS = ["en_cours", "termine", "hiatus", "abandonne", "one_shot"] as const;
-const TYPES = ["manga", "manhwa", "manhua"] as const;
+const TYPES = ["manga", "manhwa", "manhua", "light_novel"] as const;
 
 const Schema = z.object({
   q: z.string().max(120).catch("").optional(),

@@ -303,6 +303,71 @@ export async function nasMove(from: string, to: string): Promise<void> {
   });
 }
 
+/**
+ * `POST /upload?path=` — écrit un fichier **texte** sur le NAS (chapitres
+ * light novel : import du corpus + création Gérant). L'API refuse
+ * d'écraser : passer `overwrite` seulement après un contrôle explicite.
+ */
+export async function nasUpload(
+  rel: string,
+  content: string,
+  opts: { overwrite?: boolean } = {},
+): Promise<void> {
+  if (!isSafePath(rel)) {
+    throw new NasError("invalid_path", "Chemin d'upload refusé (validation anti traversal).");
+  }
+  if (!/\.(txt|md|html?)$/i.test(rel)) {
+    throw new NasError("invalid_path", "Seuls les fichiers texte (.txt) sont téléversables.");
+  }
+  const base = imageEnv().nasApiBase;
+  if (!base) throw new NasError("unconfigured", "API du NAS non configurée.");
+  const url = new URL(`${base}/upload`);
+  url.searchParams.set("path", rel);
+  if (opts.overwrite) url.searchParams.set("overwrite", "1");
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { ...nasHeaders(), "Content-Type": "text/plain; charset=utf-8" },
+      body: content,
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    const timedOut =
+      err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+    throw new NasError(
+      timedOut ? "timeout" : "unreachable",
+      timedOut ? "Délai dépassé lors de l'écriture sur le NAS." : "Impossible d'écrire sur le NAS.",
+    );
+  }
+  if (res.status === 409) {
+    throw new NasError("http_error", "Ce fichier existe déjà sur le NAS.", 409);
+  }
+  if (!res.ok) {
+    throw new NasError("http_error", `L'écriture sur le NAS a échoué (${res.status}).`, res.status);
+  }
+}
+
+/** `HEAD /file?path=` — existence d'un fichier (reprise d'import, anti écrasement). */
+export async function nasFileExists(rel: string): Promise<boolean> {
+  if (!isSafePath(rel)) return false;
+  const base = imageEnv().nasApiBase;
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/file?path=${encodeURIComponent(rel)}`, {
+      method: "HEAD",
+      headers: nasHeaders(),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Message français prêt à afficher à l'espace Gérant. */
 export function nasErrorMessage(err: unknown): string {
   if (err instanceof NasError) return err.message;

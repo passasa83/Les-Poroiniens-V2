@@ -300,6 +300,7 @@ export function SeriesForm({
             <option value="manga">Manga</option>
             <option value="manhwa">Manhwa</option>
             <option value="manhua">Manhua</option>
+            <option value="light_novel">Light Novel</option>
           </Select>
         </Field>
 

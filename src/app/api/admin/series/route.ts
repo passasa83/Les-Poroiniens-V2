@@ -33,7 +33,7 @@ const serieInput = z.object({
   couverture: z.string().trim().max(500).default(""),
   banniere: z.string().trim().max(500).default(""),
   statut: z.enum(["en_cours", "termine", "hiatus", "abandonne"]).default("en_cours"),
-  type: z.enum(["manga", "manhwa", "manhua"]).default("manga"),
+  type: z.enum(["manga", "manhwa", "manhua", "light_novel"]).default("manga"),
   /** Chapitres (défaut) ou tomes : pilote les libellés sur tout le site. */
   unite: z.enum(["chapitre", "tome"]).default("chapitre"),
   annee: z.number().int().min(1900).max(2100).nullable().default(null),

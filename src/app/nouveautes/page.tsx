@@ -16,10 +16,10 @@ import { bucketByDay, dayLabel, isWithin24h } from "@/lib/updates";
 export const metadata: Metadata = {
   title: "Nouveautés",
   description:
-    "Les dernières publications sur Les Poroiniens : les 24 dernières heures, puis les sept jours écoulés, en manga, manhwa et manhua.",
+    "Les dernières publications sur Les Poroiniens : les 24 dernières heures, puis les sept jours écoulés, en manga, manhwa, manhua et light novel.",
 };
 
-const TYPES = ["manga", "manhwa", "manhua"] as const;
+const TYPES = ["manga", "manhwa", "manhua", "light_novel"] as const;
 
 const Schema = z.object({
   type: z.enum(TYPES).optional().catch(undefined),

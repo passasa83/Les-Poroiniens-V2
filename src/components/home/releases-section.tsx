@@ -16,6 +16,7 @@ const TABS: Array<{ value: Tab; label: string }> = [
   { value: "manga", label: "Manga" },
   { value: "manhwa", label: "Manhwa" },
   { value: "manhua", label: "Manhua" },
+  { value: "light_novel", label: "Light Novel" },
 ];
 
 type ReleaseCard = {

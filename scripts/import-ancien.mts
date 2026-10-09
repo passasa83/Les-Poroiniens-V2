@@ -338,6 +338,8 @@ interface AncienChapitre {
   volume?: string;
   last_updated?: string;
   groups?: Record<string, string>;
+  /** Light novel : URL du fichier texte (`.txt` hébergé, ex. file.garden). */
+  file?: string;
 }
 
 interface AncienSerie {
@@ -359,6 +361,8 @@ interface AncienSerie {
   doujinshi?: boolean;
   pornwha?: boolean;
   webtoon?: boolean;
+  /** Série en texte : chapitres portés par `chapter.file` (voir `LnPlan`). */
+  light_novel?: boolean;
   chapters?: Record<string, AncienChapitre>;
 }
 
@@ -413,6 +417,60 @@ interface SeriesPlan {
   duplicate: boolean;
 }
 
+/* ── Light novel (texte) ──────────────────────────────────────────────────────
+   Passerelle dédiée : ces séries n'ont ni `groups` ni planches. Les chapitres
+   portent une URL `.txt` (file.garden) qu'on téléverse sur le NAS ; la ligne
+   `chapters` ne porte que `contenu_chemin` (nb_pages 0, aucune ligne `pages`).
+   Chemin NAS calé sur `lnContentPath()` de l'app : `<Série>/Chapitre 12.txt`. */
+
+/** État d'un chapitre texte vis-à-vis du NAS / de la base. */
+type LnEtat =
+  /** Texte à écrire (création de ligne + téléversement). */
+  | "a-creer"
+  /** Ligne déjà en base mais sans `contenu_chemin` : fichier + maj ligne. */
+  | "backfill"
+  /** Tout est déjà en place : rien n'est touché. */
+  | "existant"
+  /** URL morte / fichier vide : rien n'est écrit, erreur au rapport. */
+  | "mort"
+  /** `--no-resolve` en dry-run : l'état réel n'est pas vérifié. */
+  | "non-resolu";
+
+interface LnChapterPlan {
+  serie: string;
+  key: string;
+  numero: number;
+  titre: string;
+  volume: number | null;
+  publishAt: string;
+  /** URL du `.txt` à téléverser. */
+  fichier: string;
+  /** Chemin relatif NAS de destination (`<Série>/Chapitre 12.txt`). */
+  chemin: string;
+  chapterId: string;
+  /** Texte brut (résolu) — servi tel quel à l'upload. */
+  texte: string | null;
+  octets: number;
+  etat: LnEtat;
+  /** Ligne déjà en base (même numéro) : jamais réécrite. */
+  existing: AppwriteRow | null;
+  /** Ligne à écrire (statique, sans `created_by` qui dépend de la réconciliation). */
+  row: Record<string, unknown> | null;
+}
+
+interface LnPlan {
+  file: string;
+  titre: string;
+  slug: string;
+  seriesId: string;
+  row: Record<string, unknown>;
+  chapters: LnChapterPlan[];
+  /** Présente en base avec le même titre : ligne réutilisée. */
+  existing: AppwriteRow | null;
+  /** Slug déjà pris par une autre œuvre : rien n'est touché. */
+  duplicate: boolean;
+}
+
 type Ignored = { titre: string; detail: string };
 
 /* ── Compteurs & rapport ─────────────────────────────────────────────────── */
@@ -453,6 +511,18 @@ const stats = {
   dossiersNasResolus: 0,
   dossiersNasDepuisCache: 0,
   dossiersNasNonResolus: 0,
+  /* Light novel : comptes dédiés (texte sur le NAS, jamais de planches). */
+  lnSeries: 0,
+  lnSeriesACreer: 0,
+  lnSeriesExistantes: 0,
+  lnChapitres: 0,
+  lnChapitresACreer: 0,
+  lnChapitresBackfill: 0,
+  lnChapitresExistants: 0,
+  lnChapitresMorts: 0,
+  lnChapitresRenumerotes: 0,
+  lnOctets: 0,
+  lnUploads: 0,
 };
 
 const ignoredSeries: Ignored[] = [];
@@ -469,6 +539,13 @@ function recordError(label: string, err: unknown): void {
 
 function verbose(...parts: unknown[]): void {
   if (VERBOSE) console.log(...parts);
+}
+
+/** Poids lisible pour le rapport (`1,2 Mo` / `842 Ko`). */
+function formatPoids(bytes: number): string {
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} Mo`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} Ko`;
+  return `${bytes} o`;
 }
 
 function list(label: string, items: string[], max = 12): void {
@@ -543,6 +620,29 @@ function isoFromUnix(value: string | undefined, now: Date): { iso: string; ok: b
   if (Number.isNaN(date.getTime())) return { iso: now.toISOString(), ok: false };
   // Pas de date future : elle ferait basculer la ligne en « planifié ».
   return { iso: (date.getTime() > now.getTime() ? now : date).toISOString(), ok: true };
+}
+
+/**
+ * Dates du corpus light novel : `31/03/2024` ou `01/10/2025/00h00` en toutes
+ * lettres — `isoFromUnix` tomberait en NaN et daterait tous les chapitres du
+ * jour, noyant « Dernières sorties ». Repli : timestamp Unix, puis date du jour.
+ */
+function isoFromFrench(value: string | undefined, now: Date): { iso: string; ok: boolean } {
+  const raw = String(value ?? "").trim();
+  if (!raw) return { iso: now.toISOString(), ok: false };
+  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\/(\d{1,2})h(\d{1,2}))?$/);
+  if (m) {
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    if (day < 1 || day > 31 || month < 1 || month > 12) {
+      return { iso: now.toISOString(), ok: false };
+    }
+    const date = new Date(Number(m[3]), month - 1, day, Number(m[4] ?? 0), Number(m[5] ?? 0));
+    if (Number.isNaN(date.getTime())) return { iso: now.toISOString(), ok: false };
+    // Même garde-fou qu'isoFromUnix : jamais de date future.
+    return { iso: (date.getTime() > now.getTime() ? now : date).toISOString(), ok: true };
+  }
+  return isoFromUnix(raw, now);
 }
 
 function parseVolume(value: string | undefined): number | null {
@@ -1294,9 +1394,209 @@ function buildSeries(file: string, raw: AncienSerie, now: Date): SeriesBuild {
   };
 }
 
+/* ── Light novel : construction du plan texte (miroir de buildSeries) ───── */
+
+/**
+ * Numérotation propre au texte, **sans perte** (contrairement à
+ * `planChapterNumbers` qui jette une clé en collision) :
+ * - `0` (prologue) → `1` si `1` est libre (convention image), sinon `0.5`
+ *   — V2 refuse `numero > 0` côté route, et le prologue reste avant le 1 ;
+ * - même valeur numérique (`67` et `67.0`) → le premier gagne, le suivant
+ *   prend la décimale libre suivante (`67.1`), comme l'ordre de l'ancien site.
+ */
+function planLnNumbers(
+  keys: string[],
+): { keep: Array<{ key: string; numero: number; remapped: boolean }>; skipped: Ignored[] } {
+  const keep: Array<{ key: string; numero: number; remapped: boolean }> = [];
+  const skipped: Ignored[] = [];
+  const taken = new Set<number>();
+
+  const numeric = keys.filter((k) => /^\d+(?:\.\d+)?$/.test(k));
+  const others = keys.filter((k) => !/^\d+(?:\.\d+)?$/.test(k));
+  const ordered = numeric.sort((a, b) => Number(a) - Number(b));
+  // `1` existe-t-il comme clé ? (le futur : « 0 » est trié en premier, donc
+  // `taken` ne le contient pas encore au moment du test)
+  const hasOne = ordered.some((k) => Number(k) === 1);
+
+  for (const key of ordered) {
+    const brut = Number(key);
+    let numero = brut;
+    if (brut === 0) {
+      numero = hasOne || taken.has(1) ? 0.5 : 1;
+    }
+    let tentatives = 0;
+    while (taken.has(numero)) {
+      numero = Math.round((numero + 0.1) * 10) / 10;
+      if (++tentatives > 50) {
+        numero = -1;
+        break;
+      }
+    }
+    if (numero < 1 && numero !== 0.5) {
+      // garde-fou : V2 n'accepte que des numéros > 0
+      skipped.push({ titre: `chapitre ${key}`, detail: "numéro résolu invalide (> 50 collisions)" });
+      continue;
+    }
+    taken.add(numero);
+    if (numero !== brut) {
+      verbose(`   · LN chapitre ${key} → ${numero}`);
+      stats.lnChapitresRenumerotes += 1;
+    }
+    keep.push({ key, numero, remapped: numero !== brut });
+  }
+  for (const key of others) {
+    skipped.push({
+      titre: `chapitre ${key}`,
+      detail: "clé non numérique (ni entier ni décimal > 0)",
+    });
+  }
+  return { keep, skipped };
+}
+
+interface LnBuild {
+  plan: LnPlan | null;
+  ignored?: Ignored;
+  skipped: Ignored[];
+}
+
+function buildLnSeries(file: string, raw: AncienSerie, now: Date): LnBuild {
+  const stem = file.replace(/\.json$/i, "");
+  const titre =
+    (typeof raw.title === "string" ? raw.title.trim() : "") || stem;
+  let slug = slugify(titre);
+  if (!slug) slug = slugify(stem);
+  const skipped: Ignored[] = [];
+  if (!slug) return { plan: null, ignored: { titre, detail: "slug vide" }, skipped };
+
+  /* ── Chapitres texte : seuls les chapitres porteurs d'une URL `.txt`
+     sont importables (les autres remontent en « ignorés » du rapport). */
+  const fileKeys: string[] = [];
+  const fichierOf = new Map<string, string>();
+  for (const [key, chapter] of Object.entries(raw.chapters ?? {})) {
+    const url = typeof chapter?.file === "string" ? chapter.file.trim() : "";
+    if (!url) {
+      skipped.push({ titre: `chapitre ${key}`, detail: "light novel sans fichier texte" });
+      continue;
+    }
+    try {
+      fichierOf.set(key, assertCleanUrl(url, `texte ${slug}#${key}`));
+      fileKeys.push(key);
+    } catch (err) {
+      skipped.push({
+        titre: `chapitre ${key}`,
+        detail: truncate(err instanceof Error ? err.message : "URL de texte invalide", 140),
+      });
+    }
+  }
+
+  /* ── Couverture : vivante (file.garden…), sinon NAS, sinon vide ─────── */
+  const cover = pickCover(raw);
+  const nasCover = cover ? "" : pickNasCover(raw);
+  if (cover) stats.couverturesVivantes += 1;
+  else stats.couverturesSansSource += 1;
+
+  if (fileKeys.length === 0 && !cover && !INCLUDE_NO_COVER) {
+    return {
+      plan: null,
+      ignored: { titre, detail: "aucun chapitre texte et aucune couverture vivante" },
+      skipped,
+    };
+  }
+
+  /* ── Numéros (spécifique texte : sans perte, prologue en 0.5) ────────── */
+  const { keep, skipped: skippedNumbers } = planLnNumbers(fileKeys);
+  for (const skip of skippedNumbers) skipped.push(skip);
+
+  const titreRow = truncate(titre, 255);
+  const chapters: LnChapterPlan[] = [];
+  for (const entry of keep) {
+    const chapter = raw.chapters?.[entry.key] ?? {};
+    const { iso, ok } = isoFromFrench(chapter.last_updated, now);
+    if (!ok) verbose(`   ! LN chapitre ${entry.key} : last_updated illisible → date du jour`);
+    const titreChapitre =
+      typeof chapter.title === "string" ? chapter.title.trim() : "";
+    chapters.push({
+      serie: titre,
+      key: entry.key,
+      numero: entry.numero,
+      titre: titreChapitre || `Chapitre ${entry.numero}`,
+      volume: parseVolume(chapter.volume),
+      publishAt: iso,
+      fichier: fichierOf.get(entry.key) ?? "",
+      // calé sur `lnContentPath()` de l'app : <Série>/Chapitre 12.txt
+      chemin: `${titreRow}/Chapitre ${entry.numero}.txt`,
+      chapterId: "",
+      texte: null,
+      octets: 0,
+      etat: "non-resolu",
+      existing: null,
+      row: null,
+    });
+  }
+
+  /* ── Fiche (miroir de buildSeries, `type: "light_novel"`) ────────────── */
+  const dates = Object.values(raw.chapters ?? {})
+    .map((c) => isoFromFrench(c?.last_updated, now))
+    .filter((d) => d.ok)
+    .map((d) => d.iso)
+    .sort();
+
+  const titresAlt = uniqueStrings(raw.alternative_titles ?? [])
+    .slice(0, 20)
+    .map((t) => truncate(t, 255));
+  const auteurs = uniqueStrings([raw.author, raw.artist]).map((a) => truncate(a, 128));
+  const genres: string[] = [];
+  const tags: string[] = [];
+  for (const tag of uniqueStrings(raw.tags ?? []).slice(0, 60)) {
+    const clean = truncate(tag, 64);
+    if (GENRES.has(clean.toLowerCase())) genres.push(clean);
+    else tags.push(clean);
+  }
+  const seriesId = rowId(`s-${slug}`);
+  const couverture = cover ? assertCleanUrl(cover, `couverture ${slug}`) : nasCover;
+  const row: Record<string, unknown> = {
+    slug,
+    titre: titreRow,
+    titresAlt,
+    synopsis: (typeof raw.description === "string" ? raw.description : "").trim(),
+    couverture,
+    banniere: couverture,
+    statut: mapStatut(raw.release_status),
+    type: "light_novel",
+    langue: "FR",
+    classification: mapClassification(raw),
+    genres,
+    tags,
+    auteurs,
+    noteMoy: 0,
+    nbVotes: 0,
+    vues: 0,
+    populaire: 0,
+    nb_chapitres: chapters.length,
+    recherche_alt: truncate(titresAlt.join(" "), 512),
+    recherche_auteurs: truncate(auteurs.join(" "), 512),
+    created_at: dates[0] ?? now.toISOString(),
+    updated_at: dates[dates.length - 1] ?? now.toISOString(),
+  };
+  const annee = raw.release_year;
+  if (Number.isInteger(annee)) row.annee = annee;
+
+  stats.lnSeries += 1;
+  stats.lnChapitres += chapters.length;
+
+  return {
+    plan: { file, titre, slug, seriesId, row, chapters, existing: null, duplicate: false },
+    skipped,
+  };
+}
+
 /* ── Plan d'import ───────────────────────────────────────────────────────── */
 
 const seriesPlans: SeriesPlan[] = [];
+/** Plans light novel, traités par leur propre pass (`resolveLn`/`applyLn`). */
+const lnPlans: LnPlan[] = [];
+/** Chapitres texte laissés de côté (sans URL, URL invalide, fichier mort). */
+const lnIgnored: Ignored[] = [];
 
 function buildPlan(): void {
   if (!existsSync(ANCIEN_CORPUS)) {
@@ -1323,6 +1623,28 @@ function buildPlan(): void {
     if (SERIE_FILTER) {
       const haystack = `${slugify(parsed.title ?? file)} ${file}`.toLowerCase();
       if (!haystack.includes(SERIE_FILTER)) continue;
+    }
+
+    /* Light novel : sorti du pipeline image (ni albums, ni dossiers NAS). */
+    if (parsed.light_novel === true) {
+      try {
+        const built = buildLnSeries(file, parsed, now);
+        const label = built.plan?.titre ?? parsed.title ?? file;
+        for (const skip of built.skipped) {
+          lnIgnored.push({ titre: `${label} · ${skip.titre}`, detail: skip.detail });
+          verbose(`   · ignoré — ${label} · ${skip.titre} (${skip.detail})`);
+        }
+        if (built.ignored) {
+          stats.seriesIgnorees += 1;
+          ignoredSeries.push(built.ignored);
+        } else if (built.plan) {
+          lnPlans.push(built.plan);
+        }
+      } catch (err) {
+        stats.fichiersEnErreur += 1;
+        recordError(`plan LN ${file}`, err);
+      }
+      continue;
     }
 
     try {
@@ -1425,6 +1747,149 @@ async function reconcile(): Promise<void> {
       stats.chapitresExistants += 1;
     }
   }
+}
+
+/* ── Light novel : réconciliation + résolution des textes ────────────────── */
+
+/** `POST <NAS_API_BASE>/upload?path=…&overwrite=1` : écrit le `.txt` sur le NAS. */
+async function nasUploadText(relPath: string, texte: string): Promise<void> {
+  const base = nasApiBaseOf();
+  if (!base) throw new Error("NAS_API_BASE manquant : téléversement impossible");
+  const url = new URL(`${base.replace(/\/+$/, "")}/upload`);
+  url.searchParams.set("path", relPath);
+  url.searchParams.set("overwrite", "1");
+  const doUpload = async () => {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { ...nasAuthHeaders(), "Content-Type": "text/plain; charset=utf-8" },
+      body: texte,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (res.ok) return;
+    const detail = truncate(await res.text().catch(() => ""), 200);
+    const err = new Error(`upload ${res.status} — ${detail}`) as Error & { code?: number };
+    // `errCode()` lit `.code` : 429/5xx rejoués par withRetry, le reste échoue net.
+    err.code = res.status;
+    throw err;
+  };
+  await withRetry(doUpload, `upload ${relPath}`);
+}
+
+/** Mise à jour ciblée d'une ligne (reprise d'un chapitre sans `contenu_chemin`). */
+async function updateRow(
+  table: string,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await withRetry(
+    () => tables.updateRow({ databaseId: DB_ID, tableId: table, rowId: id, data }),
+    `update ${table}/${id}`,
+  );
+}
+
+/**
+ * Croise les plans LN avec la base (doublons, chapitres déjà présents) puis
+ * télécharge les `.txt` (lecture seule, y compris en dry-run : le rapport
+ * vérifie l'aliveness des 166 fichiers et affiche le poids exact).
+ */
+async function resolveLn(createdBy: string): Promise<void> {
+  for (const plan of lnPlans) {
+    const existing = existingSeriesBySlug.get(plan.slug);
+    if (existing) {
+      if (String(existing.titre ?? "").trim().toLowerCase() !== plan.titre.trim().toLowerCase()) {
+        plan.duplicate = true;
+        stats.seriesDoublons += 1;
+        duplicateSeries.push({
+          titre: plan.titre,
+          detail: `slug « ${plan.slug} » déjà porté par « ${String(existing.titre ?? "?")} »`,
+        });
+        continue;
+      }
+      plan.existing = existing;
+      plan.seriesId = existing.$id;
+      stats.lnSeriesExistantes += 1;
+    } else {
+      stats.lnSeriesACreer += 1;
+    }
+
+    const known = existing
+      ? await loadChapters(plan.seriesId)
+      : new Map<number, AppwriteRow>();
+    for (const chapter of plan.chapters) {
+      chapter.chapterId = rowId(`${plan.seriesId}-c${chapter.numero}`);
+      const row = known.get(chapter.numero);
+      if (row) {
+        chapter.existing = row;
+        chapter.chapterId = row.$id;
+      }
+      chapter.row = {
+        series_id: plan.seriesId,
+        numero: chapter.numero,
+        titre: chapter.titre,
+        statut: "published",
+        publish_at: chapter.publishAt,
+        source: "nas",
+        teams: [],
+        nb_pages: 0,
+        likes: 0,
+        classification: String(plan.row.classification ?? "all"),
+        series_type: "light_novel",
+        contenu_chemin: chapter.chemin,
+        vues: 0,
+        created_by: createdBy,
+        created_at: chapter.publishAt,
+      };
+      if (chapter.volume !== null) chapter.row.volume = chapter.volume;
+    }
+  }
+
+  /* ── Fetch des textes (réseau lecture seul, concurrence bornée) ──────── */
+  const toFetch: LnChapterPlan[] = [];
+  for (const plan of lnPlans) {
+    if (plan.duplicate) continue;
+    for (const chapter of plan.chapters) {
+      if (RESOLVE) toFetch.push(chapter);
+      // !RESOLVE : l'état reste « non-resolu », rien n'est vérifié ni écrit.
+    }
+  }
+
+  await runPool(toFetch, CONCURRENCE_NAS, async (chapter) => {
+    try {
+      const res = await fetch(chapter.fichier, {
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const texte = await res.text();
+      if (!texte.trim()) throw new Error("fichier vide");
+      chapter.texte = texte;
+      chapter.octets = Buffer.byteLength(texte, "utf8");
+    } catch (err) {
+      chapter.etat = "mort";
+      stats.lnChapitresMorts += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      lnIgnored.push({
+        titre: `${chapter.serie} · ${chapter.titre}`,
+        detail: `texte introuvable — ${truncate(message, 120)}`,
+      });
+      recordError(`LN ${chapter.chemin}`, err);
+      return;
+    }
+
+    /* État final : fichier mort déjà traité, sinon la base décide. */
+    if (!chapter.existing) {
+      chapter.etat = "a-creer";
+      stats.lnChapitresACreer += 1;
+      stats.lnOctets += chapter.octets;
+    } else if (String(chapter.existing.contenu_chemin ?? "").trim()) {
+      // Chapitre déjà lié à un fichier (édité depuis ?) : jamais touché.
+      chapter.etat = "existant";
+      stats.lnChapitresExistants += 1;
+    } else {
+      chapter.etat = "backfill";
+      stats.lnChapitresBackfill += 1;
+      stats.lnOctets += chapter.octets;
+    }
+  });
 }
 
 /* ── Résolution des albums puis construction des lignes ──────────────────── */
@@ -1618,6 +2083,31 @@ function printReport(createdBy: string): void {
     nonResolus.map((c) => `${c.titre} — ${c.detail}`),
     15,
   );
+  if (stats.lnSeries > 0) {
+    const lnNonResolus = lnPlans.reduce(
+      (n, p) => n + p.chapters.filter((c) => c.etat === "non-resolu").length,
+      0,
+    );
+    console.log("");
+    console.log("LIGHT NOVEL (texte)");
+    console.log(
+      `  séries              : ${stats.lnSeries} — à créer ${stats.lnSeriesACreer} · déjà en base ${stats.lnSeriesExistantes}`,
+    );
+    console.log(
+      `  chapitres texte     : ${stats.lnChapitres} — à créer ${stats.lnChapitresACreer} · compléter (contenu_chemin) ${stats.lnChapitresBackfill} · déjà en base ${stats.lnChapitresExistants} · fichier mort ${stats.lnChapitresMorts} · non résolus ${lnNonResolus}`,
+    );
+    console.log(
+      `  renumérotés (0 → 0.5, 67.0 → 67.1) : ${stats.lnChapitresRenumerotes}`,
+    );
+    console.log(
+      `  poids à téléverser  : ${formatPoids(stats.lnOctets)} → <Série>/Chapitre N.txt (nas-api /upload)`,
+    );
+    list(
+      "Textes LN laissés de côté :",
+      lnIgnored.map((c) => `${c.titre} — ${c.detail}`),
+      15,
+    );
+  }
   console.log("");
   console.log("PAGES");
   console.log(`  à créer             : ${stats.pagesACreer}`);
@@ -1641,7 +2131,7 @@ function printReport(createdBy: string): void {
 
 /* ── Écriture (`--apply` uniquement) ─────────────────────────────────────── */
 
-async function apply(): Promise<void> {
+async function apply(createdBy: string): Promise<void> {
   const write = { series: 0, seriesSkip: 0, chapters: 0, chaptersSkip: 0, pages: 0, pagesSkip: 0 };
   const seriesToCreate = seriesPlans.filter((p) => !p.duplicate && !p.existing);
 
@@ -1703,12 +2193,94 @@ async function apply(): Promise<void> {
   });
   console.log(`  ✔ pages     : ${write.pages} créées, ${write.pagesSkip} déjà présentes`);
 
+  await applyLn(createdBy);
+
   console.log("\nRésumé de l'écriture :");
   console.log(`  series   : ${write.series} créées / ${write.seriesSkip} déjà présentes`);
   console.log(`  chapters : ${write.chapters} créés / ${write.chaptersSkip} déjà présents`);
   console.log(`  pages    : ${write.pages} créées / ${write.pagesSkip} déjà présentes`);
   console.log(`  erreurs  : ${errors.length}`);
   console.log("  (les caches du site expirent en 30–60 s : aucune purge nécessaire)");
+}
+
+/** Écriture des light novel : `.txt` sur le NAS, puis lignes `chapters`. */
+async function applyLn(createdBy: string): Promise<void> {
+  const plans = lnPlans.filter((p) => !p.duplicate);
+  if (plans.length === 0) return;
+
+  const write = { series: 0, seriesSkip: 0, uploads: 0, chapters: 0, backfill: 0, skip: 0 };
+
+  console.log(
+    `\n▶ Light novel : ${plans.length} séries, ${stats.lnChapitresACreer} chapitres à créer, ${stats.lnChapitresBackfill} à compléter (${formatPoids(stats.lnOctets)} vers le NAS)`,
+  );
+
+  const seriesToCreate = plans.filter((p) => !p.existing);
+  await runPool(seriesToCreate, CONCURRENCE, async (plan) => {
+    try {
+      const result = await createRow("series", plan.seriesId, plan.row);
+      if (result === "cree") write.series += 1;
+      else write.seriesSkip += 1;
+    } catch (err) {
+      recordError(`LN series/${plan.slug}`, err);
+    }
+  });
+  console.log(`  ✔ LN séries    : ${write.series} créées, ${write.seriesSkip} déjà présentes`);
+
+  /* Téléversement PUIS ligne : jamais de chapitre vide en base si le NAS
+     tombe. Un fichier orphelin au même chemin est écrasé (overwrite=1),
+     c'est la même unité de lecture. */
+  const tasks: LnChapterPlan[] = [];
+  for (const plan of plans) {
+    for (const chapter of plan.chapters) {
+      if (chapter.etat === "a-creer" || chapter.etat === "backfill") {
+        tasks.push(chapter);
+      } else if (chapter.etat === "non-resolu") {
+        write.skip += 1;
+        recordError(
+          `LN ${plan.titre} · chapitre ${chapter.numero}`,
+          new Error("texte non résolu (--no-resolve) : relancer sans ce flag"),
+        );
+      } else {
+        write.skip += 1; // mort (déjà signalé) ou déjà en base
+      }
+    }
+  }
+
+  await runPool(tasks, CONCURRENCE_NAS, async (chapter) => {
+    if (!chapter.texte) {
+      write.skip += 1;
+      return;
+    }
+    try {
+      await nasUploadText(chapter.chemin, chapter.texte);
+      write.uploads += 1;
+      stats.lnUploads += 1;
+    } catch (err) {
+      recordError(`LN upload ${chapter.chemin}`, err);
+      return;
+    }
+    try {
+      if (chapter.existing) {
+        await updateRow("chapters", chapter.chapterId, { contenu_chemin: chapter.chemin });
+        write.backfill += 1;
+      } else {
+        const result = await createRow(
+          "chapters",
+          chapter.chapterId,
+          chapter.row ?? { created_by: createdBy },
+        );
+        if (result === "cree") write.chapters += 1;
+        else write.skip += 1;
+      }
+    } catch (err) {
+      recordError(`LN chapters/${chapter.chapterId}`, err);
+    }
+  });
+
+  console.log(`  ✔ LN fichiers  : ${write.uploads} téléversés sur le NAS`);
+  console.log(
+    `  ✔ LN chapitres : ${write.chapters} créés, ${write.backfill} complétés, ${write.skip} sans écriture`,
+  );
 }
 
 /* ── Main ────────────────────────────────────────────────────────────────── */
@@ -1741,9 +2313,11 @@ async function main(): Promise<void> {
   loadNasCache();
   buildPlan();
   console.log(`▶ ${seriesPlans.length} séries retenues après filtre éditorial.`);
+  if (lnPlans.length > 0) console.log(`▶ ${lnPlans.length} séries light novel (texte).`);
 
   await reconcile();
   const createdBy = await resolveCreatedBy();
+  await resolveLn(createdBy);
   await resolvePages();
   await finalizeAndCount(createdBy);
   saveCache();
@@ -1758,7 +2332,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  await apply();
+  await apply(createdBy);
 }
 
 main().catch((err) => {

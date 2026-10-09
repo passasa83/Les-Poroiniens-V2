@@ -6,6 +6,7 @@ import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card } from "@/components/ui/kit";
 import { ChapterActions, DeleteSeriesButton, ArchiveSeriesButton, SeriesForm } from "@/components/series/series-actions";
+import { LnChapterEditor, LnNewChapter } from "@/components/series/ln-content";
 import { listChapters } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
 import { compteUnites, libelleUniteSingulier, libelleUnitesPluriel, titreUnite } from "@/lib/format";
@@ -54,6 +55,9 @@ export default async function GerantSeriePage({
   const chapters = (await listChapters(series.id)) as ChapterRow[];
   const canPublish = can(user?.role, "publish_chapter");
   const archived = series.statut === "archive";
+  /* Light novel : pas de planches à importer — la création de chapitres se
+     fait en texte (champ + bouton dédiés), l'import NAS reste image. */
+  const isLn = series.type === "light_novel";
 
   return (
     <div className="space-y-8">
@@ -77,13 +81,17 @@ export default async function GerantSeriePage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={`/gerant/import?series=${encodeURIComponent(series.id)}`}
-            className="btn-primary"
-          >
-            <FolderUp className="size-4" /> Importer des{" "}
-            {libelleUnitesPluriel(series.unite).toLowerCase()}
-          </Link>
+          {isLn ? (
+            <LnNewChapter seriesId={series.id} unite={series.unite} />
+          ) : (
+            <Link
+              href={`/gerant/import?series=${encodeURIComponent(series.id)}`}
+              className="btn-primary"
+            >
+              <FolderUp className="size-4" /> Importer des{" "}
+              {libelleUnitesPluriel(series.unite).toLowerCase()}
+            </Link>
+          )}
           <ArchiveSeriesButton
             id={series.id}
             titre={series.titre}
@@ -127,7 +135,9 @@ export default async function GerantSeriePage({
                 <th className="px-4 py-3 font-semibold">N°</th>
                 <th className="px-4 py-3 font-semibold">Titre</th>
                 <th className="px-4 py-3 font-semibold">Statut</th>
-                <th className="px-4 py-3 text-right font-semibold">Pages</th>
+                <th className="px-4 py-3 text-right font-semibold">
+                  {isLn ? "Texte" : "Pages"}
+                </th>
                 <th className="px-4 py-3 font-semibold">Publication</th>
                 <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
@@ -157,30 +167,52 @@ export default async function GerantSeriePage({
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted">
-                    {chapter.nb_pages ?? 0}
+                    {isLn ? (chapter.contenu_chemin ? "✓" : "—") : (chapter.nb_pages ?? 0)}
                   </td>
                   <td className="px-4 py-3 text-muted">{formatDate(chapter.publish_at)}</td>
                   <td className="px-4 py-3">
-                    <ChapterActions
-                      chapterId={chapter.id}
-                      numero={chapter.numero}
-                      unite={series.unite}
-                      statut={chapter.statut}
-                      publishAt={chapter.publish_at}
-                      canPublish={canPublish}
-                    />
+                    <div className="flex items-center justify-end gap-2">
+                      {isLn && canPublish && (
+                        <LnChapterEditor
+                          chapterId={chapter.id}
+                          numero={chapter.numero}
+                          unite={series.unite}
+                        />
+                      )}
+                      <ChapterActions
+                        chapterId={chapter.id}
+                        numero={chapter.numero}
+                        unite={series.unite}
+                        statut={chapter.statut}
+                        publishAt={chapter.publish_at}
+                        canPublish={canPublish}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
               {chapters.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-6 text-center text-muted">
-                    Aucun {libelleUniteSingulier(series.unite).toLowerCase()} pour
-                    l&apos;instant — lancez un{" "}
-                    <a href={`/gerant/import?series=${encodeURIComponent(series.id)}`} className="link-muted">
-                      import depuis le NAS
-                    </a>
-                    .
+                    {isLn ? (
+                      <>
+                        Aucun {libelleUniteSingulier(series.unite).toLowerCase()} pour
+                        l&apos;instant — créez le premier avec « Nouveau{" "}
+                        {libelleUniteSingulier(series.unite).toLowerCase()} texte ».
+                      </>
+                    ) : (
+                      <>
+                        Aucun {libelleUniteSingulier(series.unite).toLowerCase()} pour
+                        l&apos;instant — lancez un{" "}
+                        <a
+                          href={`/gerant/import?series=${encodeURIComponent(series.id)}`}
+                          className="link-muted"
+                        >
+                          import depuis le NAS
+                        </a>
+                        .
+                      </>
+                    )}
                   </td>
                 </tr>
               )}

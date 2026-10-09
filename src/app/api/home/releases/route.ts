@@ -7,7 +7,7 @@ import type { SeriesType } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TYPES: SeriesType[] = ["manga", "manhwa", "manhua"];
+const TYPES: SeriesType[] = ["manga", "manhwa", "manhua", "light_novel"];
 const PER_PAGE = 12;
 
 /**

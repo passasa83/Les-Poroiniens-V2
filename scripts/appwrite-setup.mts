@@ -92,7 +92,9 @@ const TABLES: Table[] = [
       // `archive` : suppression douce — la série quitte le catalogue public
       // sans perdre ses chapitres (complétée par le script).
       { key: "statut", type: "enum", elements: ["en_cours", "termine", "hiatus", "abandonne", "archive"] },
-      { key: "type", type: "enum", elements: ["manga", "manhwa", "manhua"] },
+      // `light_novel` : dépôt en texte (chapitres servis par le LNReader,
+      // fichiers `.txt` sur le NAS — colonne `chapters.contenu_chemin`).
+      { key: "type", type: "enum", elements: ["manga", "manhwa", "manhua", "light_novel"] },
       // Organisation du contenu : un dépôt NAS découpé en tomes affiche
       // « Tome 3 » partout (liste, lecteur, compteurs) au lieu de « Chapitre 3 ».
       { key: "unite", type: "enum", elements: ["chapitre", "tome"], def: "chapitre" },
@@ -155,12 +157,17 @@ const TABLES: Table[] = [
       { key: "statut", type: "enum", elements: ["draft", "scheduled", "published"] },
       { key: "publish_at", ...DATE },
       { key: "source", type: "enum", elements: ["nas", "imgchest"], def: "nas" },
+      // Light novel : chemin relatif du fichier texte sur le NAS
+      // (`<Série>/Chapitre 1.txt`), lu via IMG_BASE_URL côté serveur.
+      // Vide/absent sur les chapitres image et sur les lignes antérieures.
+      { key: "contenu_chemin", type: "varchar", size: 512 },
       { key: "nb_pages", type: "integer", def: 0 },
       { key: "likes", type: "integer", def: 0 },
       { key: "classification", type: "enum", elements: ["all", "adult"], def: "all" },
-      // Format d'origine de la série (manga/manhwa/manhua), dénormalisé pour
-      // filtrer les sorties sans jointure — Appwrite TablesDB n'en opère pas
-      { key: "series_type", type: "enum", elements: ["manga", "manhwa", "manhua"], def: "manga" },
+      // Format d'origine de la série (manga/manhwa/manhua/light_novel),
+      // dénormalisé pour filtrer les sorties sans jointure — Appwrite TablesDB
+      // n'en opère pas
+      { key: "series_type", type: "enum", elements: ["manga", "manhwa", "manhua", "light_novel"], def: "manga" },
       { key: "vues", type: "integer", def: 0 },
       { key: "created_by", ...ID64 },
       { key: "created_at", ...DATE },

@@ -43,7 +43,7 @@ const patchInput = z.object({
   statut: z
     .enum(["en_cours", "termine", "hiatus", "abandonne", "archive"])
     .optional(),
-  type: z.enum(["manga", "manhwa", "manhua"]).optional(),
+  type: z.enum(["manga", "manhwa", "manhua", "light_novel"]).optional(),
   unite: z.enum(["chapitre", "tome"]).optional(),
   annee: z.number().int().min(1900).max(2100).nullable().optional(),
   langue: z.string().trim().min(2).max(10).optional(),

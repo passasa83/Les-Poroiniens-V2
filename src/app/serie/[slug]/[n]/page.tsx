@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { AdultGate } from "@/components/adult/adult-gate";
 import { CommentsSection } from "@/components/comments/comments-section";
+import { LnReader } from "@/components/reader/ln-reader";
 import { Reader } from "@/components/reader/reader";
 import { SeriesGrid } from "@/components/series/series-card";
 import { ChapitreIndisponible } from "./chapitre-indisponible";
@@ -29,6 +30,8 @@ import { can } from "@/lib/roles";
 import type { HistoryEntry, Series } from "@/lib/types";
 
 type Params = Promise<{ slug: string; n: string }>;
+/** Query string du lecteur : `?page=N` (lien partagé vers une page précise). */
+type Search = Promise<{ page?: string | string[] }>;
 
 /**
  * Segment dynamique `[n]` réécrit depuis l'URL publique `/chapitre-{n}`
@@ -91,8 +94,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-export default async function ChapitrePage({ params }: { params: Params }) {
-  const { slug, n } = await params;
+export default async function ChapitrePage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Search;
+}) {
+  const [{ slug, n }, query] = await Promise.all([params, searchParams]);
   const numero = parseNumero(n);
   const series = await getSeriesBySlug(slug);
   if (!series || !numero) notFound();
@@ -129,8 +138,13 @@ export default async function ChapitrePage({ params }: { params: Params }) {
     after(() => recordView(context.chapter));
   }
 
+  /* Page de départ : un lien `?page=N` partagé l'emporte sur la
+     progression en base (`page=1` = début, donc valeur par défaut). */
   let initialPage = 1;
-  if (user) {
+  const urlPage = typeof query.page === "string" ? Number(query.page) : NaN;
+  if (Number.isFinite(urlPage) && urlPage >= 2) {
+    initialPage = Math.floor(urlPage);
+  } else if (user) {
     const entry = history.find((h) => h.chapter_id === context.chapter.id);
     if (entry && entry.page > 0) initialPage = entry.page;
   }
@@ -152,7 +166,13 @@ export default async function ChapitrePage({ params }: { params: Params }) {
 
   /* « chapitre indisponible » : le chapitre existe mais aucune page ne
      se charge → message précis + Réessayer / Signaler, sans le lecteur. */
-  const indisponible = !needsGate && context.pages.length === 0;
+  /* « chapitre indisponible » : le chapitre existe mais aucune page (image)
+     ou aucun paragraphe (light novel) ne se charge → message précis +
+     Réessayer / Signaler, sans le lecteur. */
+  const isLn = series.type === "light_novel";
+  const indisponible =
+    !needsGate &&
+    (isLn ? !context.contenu || context.contenu.length === 0 : context.pages.length === 0);
 
   const navigation = (
     <div className="container-site flex items-center justify-between gap-2">
@@ -207,7 +227,13 @@ export default async function ChapitrePage({ params }: { params: Params }) {
             </span>
           ))}
           <span>
-            {indisponible ? "Pages indisponibles" : `${context.pages.length} pages`}
+            {indisponible
+              ? isLn
+                ? "Texte indisponible"
+                : "Pages indisponibles"
+              : isLn
+                ? `${context.contenu?.length ?? 0} paragraphes`
+                : `${context.pages.length} pages`}
           </span>
         </div>
       </div>
@@ -258,26 +284,44 @@ export default async function ChapitrePage({ params }: { params: Params }) {
       ) : (
         <>
           <div className="container-site">
-            <Reader
-              key={context.chapter.id}
-              pages={context.pages}
-              chapterId={context.chapter.id}
-              chapterNumero={context.chapter.numero}
-              serieId={series.id}
-              serieSlug={series.slug}
-              serieTitre={series.titre}
-              unite={series.unite}
-              chapitres={chapitres}
-              initialMode={user?.preferences.mode_lecture}
-              initialSens={user?.preferences.sens_lecture}
-              initialPage={initialPage}
-              canProgress={Boolean(user) && !context.preview}
-              canSync={Boolean(user) && !context.preview}
-              initialLikes={context.chapter.likes ?? 0}
-              prevHref={prevHref}
-              nextHref={nextHref}
-              nextChapterId={context.next?.id ?? null}
-            />
+            {isLn && context.contenu ? (
+              <LnReader
+                key={context.chapter.id}
+                contenu={context.contenu}
+                chapterId={context.chapter.id}
+                chapterNumero={context.chapter.numero}
+                chapterTitre={context.chapter.titre}
+                serieSlug={series.slug}
+                serieTitre={series.titre}
+                unite={series.unite}
+                chapitres={chapitres}
+                initialLikes={context.chapter.likes ?? 0}
+                prevHref={prevHref}
+                nextHref={nextHref}
+              />
+            ) : (
+              <Reader
+                key={context.chapter.id}
+                pages={context.pages}
+                chapterId={context.chapter.id}
+                chapterNumero={context.chapter.numero}
+                serieId={series.id}
+                serieSlug={series.slug}
+                serieTitre={series.titre}
+                unite={series.unite}
+                chapitres={chapitres}
+                initialMode={user?.preferences.mode_lecture}
+                initialSens={user?.preferences.sens_lecture}
+                initialPage={initialPage}
+                canProgress={Boolean(user) && !context.preview}
+                canSync={Boolean(user) && !context.preview}
+                initialLikes={context.chapter.likes ?? 0}
+                prevHref={prevHref}
+                nextHref={nextHref}
+                nextChapterId={context.next?.id ?? null}
+                adult={isAdult}
+              />
+            )}
           </div>
 
           {navigation}

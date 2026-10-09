@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: `%s — ${siteName}`,
   },
   description:
-    "Lisez les derniers scans manga, manhwa et manhua : catalogue, fiches séries, lecteur optimisé et suivi de lecture.",
+    "Lisez les derniers scans manga, manhwa, manhua et light novel : catalogue, fiches séries, lecteur optimisé et suivi de lecture.",
   openGraph: {
     type: "website",
     locale: "fr_FR",

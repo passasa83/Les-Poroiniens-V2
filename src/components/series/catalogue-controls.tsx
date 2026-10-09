@@ -43,7 +43,7 @@ const SORTS: Array<{ key: string; label: string }> = [
   { key: "maj", label: "Mise à jour" },
 ];
 
-const TYPES: SeriesType[] = ["manga", "manhwa", "manhua"];
+const TYPES: SeriesType[] = ["manga", "manhwa", "manhua", "light_novel"];
 const STATUTS: SeriesStatus[] = ["en_cours", "termine", "hiatus", "abandonne"];
 
 /** Menu déroulant « Tri » : contour fin, ordre A → Z en tête. */

@@ -18,7 +18,7 @@ import { SERIES_TYPE_LABELS, type SeriesType } from "@/lib/types";
 export const metadata: Metadata = {
   title: "Classement",
   description:
-    "Le classement des séries les plus actives sur Les Poroiniens : jour, semaine, mois et tout temps, en manga, manhwa et manhua.",
+    "Le classement des séries les plus actives sur Les Poroiniens : jour, semaine, mois et tout temps, en manga, manhwa, manhua et light novel.",
 };
 
 /* Le classement repose sur l'activité en base : jamais de page figée. */
@@ -31,6 +31,7 @@ const TYPES: Array<{ cle: SeriesType | ""; label: string }> = [
   { cle: "manga", label: "Manga" },
   { cle: "manhwa", label: "Manhwa" },
   { cle: "manhua", label: "Manhua" },
+  { cle: "light_novel", label: "Light Novel" },
 ];
 
 function premier(sp: Record<string, string | string[] | undefined>, cle: string): string | undefined {

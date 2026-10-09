@@ -12,6 +12,10 @@
  * - `GET /tree?path=<rel>` — dossiers + fichiers (écran d'import Gérant).
  * - `GET /health` — `{ status, disk_free_pct, version }` (cron).
  * - `POST /move` `{ from, to }` — `staging/` → `public/`.
+ * - `POST /upload?path=<rel>[&overwrite=1]` — écrit le corps brut (octets) au
+ *   chemin relatif ; **texte uniquement** (`.txt`), 2 Mo max, crée les
+ *   dossiers parents, refuse d'écraser sauf `overwrite=1`. Comme `/move`,
+ *   l'API key est **toujours** exigée (import LN + création Gérant).
  * - `GET /file?path=<rel>` — octets d'un fichier (repli `/api/image`).
  *
  * Configuration (variables d'environnement) :
@@ -37,6 +41,7 @@ import {
   renameSync,
   statfsSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
@@ -47,7 +52,10 @@ const API_KEY = process.env.NAS_API_KEY || "";
 const CF_ID = process.env.CF_ACCESS_CLIENT_ID || "";
 const CF_SECRET = process.env.CF_ACCESS_CLIENT_SECRET || "";
 const RATE_LIMIT_PER_MIN = Number(process.env.RATE_LIMIT_PER_MIN || 600);
-const VERSION = "nas-api/1.0.0";
+const VERSION = "nas-api/1.1.0";
+/** `/upload` : texte seulement (chapitres light novel), 2 Mo par fichier. */
+const UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
+const UPLOAD_EXT = new Set([".txt"]);
 const STARTED_AT = Date.now();
 
 // ── Chemins ────────────────────────────────────────────────────────────────
@@ -299,6 +307,25 @@ function readBody(req, limit = 65536) {
   });
 }
 
+/** Corps en octets (upload) — même garde-fou de taille, sans décodage. */
+function readBodyBuffer(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error("body_too_large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
 // ── Endpoints ───────────────────────────────────────────────────────────────
 
 function handleList(url, req, res) {
@@ -491,6 +518,64 @@ async function handleMove(req, res) {
   send(res, 200, { ok: true, from: encodeRel(src.rel), to: encodeRel(dst.rel) });
 }
 
+/**
+ * `POST /upload?path=<rel>[&overwrite=1]` : écriture directe du corps brut.
+ * Même politique que `/move` : clé obligatoire. Extensions limitées à
+ * `UPLOAD_EXT` (un upload ne doit pas pouvoir remplacer une image servie).
+ */
+async function handleUpload(url, req, res) {
+  if (!API_KEY) {
+    send(res, 403, { error: "upload_requires_api_key" });
+    return;
+  }
+  const raw = (url.searchParams.get("path") ?? "").trim().replace(/^\/+/, "");
+  if (raw === "" || unsafeRefusal(raw)) {
+    send(res, 400, { error: raw === "" ? "missing_path" : "invalid_path" });
+    return;
+  }
+  const dst = confinedAbs(raw);
+  if (!dst) {
+    send(res, 400, { error: "invalid_path" });
+    return;
+  }
+  if (!UPLOAD_EXT.has(path.extname(dst.abs).toLowerCase())) {
+    send(res, 403, { error: "extension_not_allowed", allowed: [...UPLOAD_EXT] });
+    return;
+  }
+  let body;
+  try {
+    body = await readBodyBuffer(req, UPLOAD_MAX_BYTES);
+  } catch (e) {
+    send(res, e && e.message === "body_too_large" ? 413 : 400, {
+      error: e && e.message === "body_too_large" ? "body_too_large" : "body_read_failed",
+    });
+    return;
+  }
+  if (body.length === 0) {
+    send(res, 400, { error: "empty_body" });
+    return;
+  }
+  const overwrite = (url.searchParams.get("overwrite") ?? "") === "1";
+  if (!overwrite) {
+    try {
+      if (statSync(dst.abs)) {
+        send(res, 409, { error: "target_exists" });
+        return;
+      }
+    } catch {
+      /* cible libre : on continue */
+    }
+  }
+  try {
+    mkdirSync(path.dirname(dst.abs), { recursive: true });
+    writeFileSync(dst.abs, body);
+  } catch {
+    send(res, 500, { error: "upload_failed" });
+    return;
+  }
+  send(res, 200, { ok: true, path: encodeRel(dst.rel), bytes: body.length });
+}
+
 // ── Serveur ─────────────────────────────────────────────────────────────────
 
 const server = createServer(async (req, res) => {
@@ -534,6 +619,10 @@ const server = createServer(async (req, res) => {
     }
     if (routePath === "/move" && method === "POST") {
       await handleMove(req, res);
+      return;
+    }
+    if (routePath === "/upload" && method === "POST") {
+      await handleUpload(url, req, res);
       return;
     }
     done(404, { error: "not_found" });

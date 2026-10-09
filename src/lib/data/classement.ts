@@ -41,7 +41,12 @@ export function estPeriode(valeur: unknown): valeur is PeriodeCle {
 }
 
 export function estTypeSerie(valeur: unknown): valeur is SeriesType {
-  return valeur === "manga" || valeur === "manhwa" || valeur === "manhua";
+  return (
+    valeur === "manga" ||
+    valeur === "manhwa" ||
+    valeur === "manhua" ||
+    valeur === "light_novel"
+  );
 }
 
 export interface RangClassement {

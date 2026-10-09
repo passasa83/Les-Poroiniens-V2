@@ -12,7 +12,7 @@ export type Classification = "all" | "adult";
  * proposée à côté de la suppression définitive.
  */
 export type SeriesStatus = "en_cours" | "termine" | "hiatus" | "abandonne" | "archive";
-export type SeriesType = "manga" | "manhwa" | "manhua";
+export type SeriesType = "manga" | "manhwa" | "manhua" | "light_novel";
 /**
  * Unité de lecture d'une série : la majorité des dépôts sont découpés en
  * chapitres (`Chapitre 12`), d'autres en tomes (`Tome 3` — le tome est alors
@@ -66,6 +66,10 @@ export interface Chapter {
   publish_at: string | null;
   /** Origine des images : `nas` (chemins relatifs) ou `imgchest` (URLs CDN). */
   source: "nas" | "imgchest";
+  /** Light novel : chemin relatif du fichier texte sur le NAS
+   *  (`<Série>/Chapitre 1.txt`), lu via IMG_BASE_URL côté serveur. Vide ou
+   *  absent sur les chapitres image. */
+  contenu_chemin?: string | null;
   /** Équipes de scantrad du chapitre (clés de `chapters.groups` de l'ancien
    *  site, ordre stable) : pastilles sur les lignes de la fiche série.
    *  Absent des lignes créées avant cet attribut (lire avec `?? []`). */
@@ -289,4 +293,5 @@ export const SERIES_TYPE_LABELS: Record<SeriesType, string> = {
   manga: "Manga",
   manhwa: "Manhwa",
   manhua: "Manhua",
+  light_novel: "Light Novel",
 };

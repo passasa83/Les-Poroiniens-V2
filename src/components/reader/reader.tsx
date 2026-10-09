@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Flag, ImageOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Flag, ImageOff } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChapterLike } from "./chapter-like";
@@ -32,7 +32,7 @@ const SOLO_KEY = "lp-reader-first-solo";
 /** Progression des visiteurs : reprise sans compte. */
 const progressKey = (chapterId: string) => `lp-progress:${chapterId}`;
 
-const FITS: ReaderFit[] = ["auto", "largeur", "hauteur", "perso"];
+const FITS: ReaderFit[] = ["auto", "originale", "largeur", "hauteur", "perso"];
 const THEMES: ReaderTheme[] = ["site", "clair", "noir"];
 
 export type ReaderPage = { index: number; url: string; largeur?: number; hauteur?: number };
@@ -85,6 +85,7 @@ export function Reader({
   prevHref = null,
   nextHref = null,
   nextChapterId = null,
+  adult = false,
 }: {
   pages: ReaderPage[];
   chapterId: string;
@@ -107,6 +108,8 @@ export function Reader({
   nextHref?: string | null;
   /** Sert au préchargement de la première page du chapitre suivant. */
   nextChapterId?: string | null;
+  /** Série +18 : le webtoon s'affiche sans espacement (motif de l'ancien site). */
+  adult?: boolean;
 }) {
   const total = pages.length;
   const lastIndex = Math.max(total - 1, 0);
@@ -140,6 +143,10 @@ export function Reader({
   /** Pages dont le chargement a échec après reprise, envoyées par lots. */
   const failedRef = useRef<Set<number>>(new Set());
   const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Dernière page de la planche affichée (fin de chapitre en double page). */
+  const endRef = useRef(0);
+  /** Premier index de la planche affichée (progression, URL, barre). */
+  const startRef = useRef(0);
 
   useEffect(() => {
     pageRef.current = page;
@@ -302,25 +309,57 @@ export function Reader({
 
   /* ── Navigation ───────────────────────────────────────────────────── */
 
+  /* Double page : planches pré-calculées — une page paysage occupe sa
+     planche seule, sinon deux portraits se suivent ; `page` vaut alors le
+     premier index de la planche affichée. */
+  const spreads = useMemo(
+    () => (mode === "double" ? buildSpreads(pages, firstSolo) : []),
+    [mode, pages, firstSolo],
+  );
+
+  const spreadIndexAt = useCallback(
+    (index: number) => {
+      for (let i = 0; i < spreads.length; i++) {
+        if (index >= spreads[i].start && index < spreads[i].start + spreads[i].length) return i;
+      }
+      return -1;
+    },
+    [spreads],
+  );
+
+  /** Planche affichée : en double page, la planche contenant `page`. */
+  const spread = useMemo(() => {
+    if (mode !== "double") return { start: page, length: 1 };
+    const at = spreadIndexAt(page);
+    return at >= 0 ? spreads[at] : { start: clamp(page, 0, lastIndex), length: 1 };
+  }, [mode, spreads, spreadIndexAt, page, lastIndex]);
+
   const goTo = useCallback(
     (target: number) => {
       if (mode === "double") {
-        setPage(clamp(Math.round(target / 2) * 2, 0, lastIndex));
+        const at = spreadIndexAt(clamp(target, 0, lastIndex));
+        const planche = at >= 0 ? spreads[at] : undefined;
+        setPage(planche ? planche.start : clamp(target, 0, lastIndex));
         return;
       }
       const next = clamp(target, 0, lastIndex);
       setPage(next);
       if (mode === "vertical") scrollToPage(next);
     },
-    [mode, lastIndex, scrollToPage],
+    [mode, lastIndex, spreads, spreadIndexAt, scrollToPage],
   );
 
   const step = useCallback(
     (direction: 1 | -1) => {
-      const delta = mode === "double" ? 2 : 1;
-      goTo(pageRef.current + direction * delta);
+      if (mode === "double") {
+        const at = spreadIndexAt(pageRef.current);
+        const planche = spreads[clamp(at + direction, 0, spreads.length - 1)];
+        if (planche) setPage(planche.start);
+        return;
+      }
+      goTo(pageRef.current + direction);
     },
-    [mode, goTo],
+    [mode, spreads, spreadIndexAt, goTo],
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -426,7 +465,7 @@ export function Reader({
       if (Math.abs(event.deltaY) < 8) return;
       const index = pageRef.current;
       // Aux extrémités, on laisse défiler normalement (fin de chapitre, commentaires).
-      if (event.deltaY > 0 ? index >= lastIndex : index <= 0) return;
+      if (event.deltaY > 0 ? endRef.current >= lastIndex : index <= 0) return;
       event.preventDefault();
       if (locked) return;
       locked = true;
@@ -478,7 +517,6 @@ export function Reader({
   /* ── Sauvegarde de la progression (lots, debounce 2 s, max 1/10 s) ─ */
   const send = useCallback(async () => {
     lastSentRef.current = Date.now();
-    const current = pageRef.current;
     try {
       await fetch("/api/reading/progress", {
         method: "POST",
@@ -487,8 +525,8 @@ export function Reader({
           entries: [
             {
               chapterId,
-              page: current + 1,
-              completed: current >= lastIndex,
+              page: startRef.current + 1,
+              completed: endRef.current >= lastIndex,
             },
           ],
         }),
@@ -528,7 +566,7 @@ export function Reader({
 
   /* ── Progression locale des visiteurs (« reprise ») ───────────── */
   const saveLocalProgress = useCallback(() => {
-    store.set(progressKey(chapterId), String(pageRef.current + 1));
+    store.set(progressKey(chapterId), String(startRef.current + 1));
   }, [chapterId]);
 
   useEffect(() => {
@@ -540,6 +578,26 @@ export function Reader({
     window.addEventListener("pagehide", saveLocalProgress);
     return () => window.removeEventListener("pagehide", saveLocalProgress);
   }, [saveLocalProgress]);
+
+  /* ── URL : `?page=N` (replaceState, debounce 150 ms) ─────────────────
+     Le lien de lecture reste partageable ; `page=1` est retiré (défaut). */
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = window.setTimeout(() => {
+      try {
+        const url = new URL(window.location.href);
+        const numero = spread.start + 1;
+        if (numero <= 1) url.searchParams.delete("page");
+        else url.searchParams.set("page", String(numero));
+        const next = `${url.pathname}${url.search}${url.hash}`;
+        const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (next !== current) window.history.replaceState(window.history.state, "", next);
+      } catch {
+        /* URL indisponible : la lecture n'en dépend pas */
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [spread.start, hydrated]);
 
   /* ── Échecs de chargement : remontée groupée ─────────────────── */
   const flushFailures = useCallback(async () => {
@@ -596,17 +654,31 @@ export function Reader({
   }
 
   /* ── Rendu ────────────────────────────────────────────────────────── */
-  const isLast = page >= lastIndex;
+  /** Une planche paysage (ou la première page, si demandé) tient seule. */
+  const soloSpread = spread.length === 1;
+  const spreadEnd = spread.start + spread.length - 1;
+  const isLast = spreadEnd >= lastIndex;
   const showEnd = mode === "vertical" || isLast;
-  /** Une planche paysage s'affiche seule ; la première page aussi si demandé. */
-  const soloSpread = useMemo(
-    () => isLandscape(pages[page]) || (firstSolo && page === 0),
-    [pages, page, firstSolo],
-  );
   /** Ajustement « hauteur » : une planche tient dans la fenêtre (page / double). */
   const fitHeight = fit === "hauteur" && mode !== "vertical";
+  /** Ajustement « Originale » : taille native, zone scrollable horizontalement. */
+  const fitOriginale = fit === "originale";
+  /** Double page : pages gauche / droite (en D → G, la page paire est à gauche). */
+  const doubleLeft = sens === "rtl" ? spread.start + 1 : spread.start;
+  const doubleRight = sens === "rtl" ? spread.start : spread.start + 1;
+
+  /* Premier index de la planche : progression, URL et barre inférieure. */
+  useEffect(() => {
+    startRef.current = spread.start;
+  }, [spread.start]);
+
+  /* Dernière page de la planche : fin de chapitre et complétion. */
+  useEffect(() => {
+    endRef.current = spreadEnd;
+  }, [spreadEnd]);
 
   const contentStyle = useMemo<React.CSSProperties>(() => {
+    if (fit === "originale") return { width: "auto", maxWidth: "none" };
     if (fit === "perso") {
       return { width: "100%", maxWidth: `${clamp(maxw, 320, 2000)}px` };
     }
@@ -617,11 +689,20 @@ export function Reader({
   const zoneStyle = useMemo<React.CSSProperties>(() => {
     const style: React.CSSProperties = {};
     if (fitHeight) style.height = "calc(100dvh - 11rem)";
+    if (fitOriginale) {
+      // Centrage « safe » : passé la largeur des pages, on colle à gauche
+      // plutôt que de rogner le début (défilement horizontal conservé).
+      style.justifyContent = "safe center" as React.CSSProperties["justifyContent"];
+    }
     if (brightness !== 1) style.filter = `brightness(${brightness})`;
     return style;
-  }, [fitHeight, brightness]);
+  }, [fitHeight, fitOriginale, brightness]);
 
-  const imageClass = fitHeight ? "h-full w-full object-contain select-none" : "w-full select-none";
+  const imageClass = fitHeight
+    ? "h-full w-full object-contain select-none"
+    : fitOriginale
+      ? "max-w-none select-none"
+      : "w-full select-none";
 
   return (
     <div
@@ -652,11 +733,14 @@ export function Reader({
       >
         <div
           ref={pagesRef}
-          className={clsx("relative flex items-center justify-center py-4")}
+          className={clsx(
+            "relative flex items-center justify-center py-4",
+            fitOriginale && "overflow-x-auto",
+          )}
           style={zoneStyle}
         >
           {mode === "vertical" && (
-            <div className="space-y-2" style={contentStyle}>
+            <div className={adult ? "space-y-0" : "space-y-4"} style={contentStyle}>
               {pages.map((item, index) => (
                 <ReaderImage
                   key={`${index}:${item.url}`}
@@ -698,9 +782,9 @@ export function Reader({
             >
               {soloSpread ? (
                 <ReaderImage
-                  key={`${page}:${pages[page]?.url ?? ""}`}
-                  page={pages[page]}
-                  index={page}
+                  key={`${spread.start}:${pages[spread.start]?.url ?? ""}`}
+                  page={pages[spread.start]}
+                  index={spread.start}
                   chapterNumero={chapterNumero} unite={unite}
                   eager
                   onFailed={onPageFailed}
@@ -709,41 +793,47 @@ export function Reader({
                 />
               ) : (
                 <>
-                  <div className={clsx("w-1/2", fitHeight && "h-full")}>
-                    {pages[sens === "rtl" ? page + 1 : page] && (
+                  <div
+                    className={clsx(
+                      fitOriginale ? "flex-none" : "w-1/2",
+                      fitHeight && "h-full",
+                    )}
+                  >
+                    {pages[doubleLeft] && (
                       <ReaderImage
-                        key={`${sens === "rtl" ? page + 1 : page}:${
-                          pages[sens === "rtl" ? page + 1 : page].url
-                        }`}
-                        page={pages[sens === "rtl" ? page + 1 : page]}
-                        index={sens === "rtl" ? page + 1 : page}
+                        key={`${doubleLeft}:${pages[doubleLeft].url}`}
+                        page={pages[doubleLeft]}
+                        index={doubleLeft}
                         chapterNumero={chapterNumero} unite={unite}
-                        eager={page <= 2}
+                        eager={spread.start <= 2}
                         onFailed={onPageFailed}
                         onReport={openReport}
                         imageClass={imageClass}
                       />
                     )}
                   </div>
-                  <div className={clsx("w-1/2", fitHeight && "h-full")}>
-                    {pages[sens === "rtl" ? page : page + 1] && (
+                  <div
+                    className={clsx(
+                      fitOriginale ? "flex-none" : "w-1/2",
+                      fitHeight && "h-full",
+                    )}
+                  >
+                    {pages[doubleRight] && (
                       <ReaderImage
-                        key={`${sens === "rtl" ? page : page + 1}:${
-                          pages[sens === "rtl" ? page : page + 1].url
-                        }`}
-                        page={pages[sens === "rtl" ? page : page + 1]}
-                        index={sens === "rtl" ? page : page + 1}
+                        key={`${doubleRight}:${pages[doubleRight].url}`}
+                        page={pages[doubleRight]}
+                        index={doubleRight}
                         chapterNumero={chapterNumero} unite={unite}
-                        eager={page <= 2}
+                        eager={spread.start <= 2}
                         onFailed={onPageFailed}
                         onReport={openReport}
                         imageClass={imageClass}
                       />
                     )}
                   </div>
-                  <Prefetch pages={pages} from={page + 2} />
                 </>
               )}
+              <Prefetch pages={pages} from={spread.start + spread.length} />
             </div>
           )}
 
@@ -761,24 +851,44 @@ export function Reader({
         <NextChapterPrefetch chapterId={nextChapterId} active={isLast} />
 
         <div className="flex items-center justify-between gap-2 px-3 pb-3">
-          <NavButton
-            href={page > 0 ? null : prevHref}
-            onClick={() => step(-1)}
-            label={page > 0 ? "Page précédente" : libelleVoisin("précédent", unite)}
-            icon={<ChevronLeft className="size-4" />}
-            disabled={page <= 0 && !prevHref}
-          />
+          <div className="flex items-center gap-2">
+            <NavButton
+              href={null}
+              onClick={() => goTo(0)}
+              label="Première page"
+              icon={<ChevronsLeft className="size-4" />}
+              disabled={spread.start <= 0}
+              iconOnly
+            />
+            <NavButton
+              href={spread.start > 0 ? null : prevHref}
+              onClick={() => step(-1)}
+              label={spread.start > 0 ? "Page précédente" : libelleVoisin("précédent", unite)}
+              icon={<ChevronLeft className="size-4" />}
+              disabled={spread.start <= 0 && !prevHref}
+            />
+          </div>
           <span className="text-xs tabular-nums text-muted">
-            Page {page + 1} / {total}
+            Page {spread.start + 1} / {total}
           </span>
-          <NavButton
-            href={isLast ? nextHref : null}
-            onClick={() => step(1)}
-            label={isLast ? libelleVoisin("suivant", unite) : "Page suivante"}
-            icon={<ChevronRight className="size-4" />}
-            disabled={!isLast ? false : nextHref === null}
-            align="right"
-          />
+          <div className="flex items-center gap-2">
+            <NavButton
+              href={isLast ? nextHref : null}
+              onClick={() => step(1)}
+              label={isLast ? libelleVoisin("suivant", unite) : "Page suivante"}
+              icon={<ChevronRight className="size-4" />}
+              disabled={!isLast ? false : nextHref === null}
+              align="right"
+            />
+            <NavButton
+              href={null}
+              onClick={() => goTo(lastIndex)}
+              label="Dernière page"
+              icon={<ChevronsRight className="size-4" />}
+              disabled={isLast}
+              iconOnly
+            />
+          </div>
         </div>
 
         {showEnd && (
@@ -825,7 +935,7 @@ export function Reader({
 
       <ReaderBottomBar
         hidden={chromeHidden}
-        page={page}
+        page={spread.start}
         total={total}
         onSeek={goTo}
         prevHref={prevHref}
@@ -941,6 +1051,37 @@ function Prefetch({ pages, from }: { pages: ReaderPage[]; from: number }) {
 /** Une page est paysage quand sa largeur dépasse sa hauteur. */
 function isLandscape(page: ReaderPage | undefined): boolean {
   return Boolean(page?.largeur && page.hauteur && page.largeur > page.hauteur);
+}
+
+/**
+ * Double page : planches à afficher, dans l'ordre de lecture. Une page
+ * paysage occupe toujours sa planche ; sinon deux pages portrait se
+ * suivent (motif de l'ancien site `buildSpreads`) ; `firstSolo` isole la
+ * première page (réglage « première page seule »).
+ */
+function buildSpreads(
+  pages: ReaderPage[],
+  firstSolo: boolean,
+): Array<{ start: number; length: number }> {
+  const planches: Array<{ start: number; length: number }> = [];
+  let i = 0;
+  if (firstSolo && pages.length > 0) {
+    planches.push({ start: 0, length: 1 });
+    i = 1;
+  }
+  while (i < pages.length) {
+    if (isLandscape(pages[i])) {
+      planches.push({ start: i, length: 1 });
+      i += 1;
+    } else if (i + 1 < pages.length && !isLandscape(pages[i + 1])) {
+      planches.push({ start: i, length: 2 });
+      i += 2;
+    } else {
+      planches.push({ start: i, length: 1 });
+      i += 1;
+    }
+  }
+  return planches;
 }
 
 /**
@@ -1082,6 +1223,7 @@ function NavButton({
   icon,
   disabled,
   align = "left",
+  iconOnly = false,
 }: {
   href: string | null;
   onClick: () => void;
@@ -1089,27 +1231,37 @@ function NavButton({
   icon: React.ReactNode;
   disabled?: boolean;
   align?: "left" | "right";
+  /** Variante sans texte : bouton carré étiqueté pour les lecteurs d'écran. */
+  iconOnly?: boolean;
 }) {
-  const content =
-    align === "right" ? (
-      <>
-        {label} {icon}
-      </>
-    ) : (
-      <>
-        {icon} {label}
-      </>
-    );
+  const content = iconOnly ? (
+    icon
+  ) : align === "right" ? (
+    <>
+      {label} {icon}
+    </>
+  ) : (
+    <>
+      {icon} {label}
+    </>
+  );
+  const aria = iconOnly ? { "aria-label": label, title: label } : {};
 
   if (href) {
     return (
-      <Link href={href} className="btn-secondary text-sm">
+      <Link href={href} className={clsx("btn-secondary text-sm", iconOnly && "px-2.5")} {...aria}>
         {content}
       </Link>
     );
   }
   return (
-    <button type="button" className="btn-secondary text-sm" onClick={onClick} disabled={disabled}>
+    <button
+      type="button"
+      className={clsx("btn-secondary text-sm", iconOnly && "px-2.5")}
+      onClick={onClick}
+      disabled={disabled}
+      {...aria}
+    >
       {content}
     </button>
   );

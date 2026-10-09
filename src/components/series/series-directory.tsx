@@ -12,6 +12,7 @@ const TYPE_LABELS: Record<string, string> = {
   manga: "Manga",
   manhwa: "Manhwa",
   manhua: "Manhua",
+  light_novel: "Light Novel",
 };
 
 const STATUT_TONE: Record<SeriesStatus, "ok" | "primary" | "warn" | "neutral"> = {

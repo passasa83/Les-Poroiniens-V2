@@ -7,7 +7,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 export type ReaderMode = "vertical" | "single" | "double";
 export type ReaderSens = "ltr" | "rtl";
 /** Ajustement des pages dans la zone de lecture. */
-export type ReaderFit = "auto" | "largeur" | "hauteur" | "perso";
+export type ReaderFit = "auto" | "originale" | "largeur" | "hauteur" | "perso";
 /** Thème appliqué au seul lecteur, le reste de la page garde le thème du site. */
 export type ReaderTheme = "site" | "clair" | "noir";
 
@@ -34,6 +34,11 @@ export const READER_MODES: Array<{
 
 const FITS: Array<{ key: ReaderFit; label: string; aide: string }> = [
   { key: "auto", label: "Auto", aide: "Largeur naturelle de la zone de lecture." },
+  {
+    key: "originale",
+    label: "Originale",
+    aide: "Taille d’origine des pages, sans contrainte (défilement horizontal).",
+  },
   { key: "largeur", label: "Largeur", aide: "Ajuste la largeur des pages (pourcentage)." },
   { key: "hauteur", label: "Hauteur", aide: "Une planche tient dans la hauteur de la fenêtre." },
   { key: "perso", label: "Personnalisé", aide: "Largeur maximale des pages, en pixels." },
