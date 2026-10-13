@@ -16,6 +16,7 @@ import {
   saveLnSettings,
   type LnSettings,
 } from "./ln-reader-settings";
+import { LnParagraphe } from "./ln-format";
 import { libelleUnite, libelleUniteSingulier, libelleVoisin, titreUnite } from "@/lib/format";
 import type { Unite } from "@/lib/types";
 
@@ -275,16 +276,16 @@ export function LnReader({
           </p>
         </header>
 
-        {/* Aucun HTML injecté : chaque paragraphe est un nœud React, les
-            retours à la ligne internes passent par `whitespace-pre-line`. */}
+        {/* Aucun HTML injecté : les fragments hérités de l'ancien format
+            (`ln-sep`, `ln-box`, `em`… — cf. `ln-format.ts`) sont convertis en
+            nœuds React ; les retours à la ligne internes passent par
+            `whitespace-pre-line`. */}
         <div
           className="max-w-[820px] space-y-4 text-fg [overflow-wrap:anywhere]"
           style={textStyle}
         >
           {contenu.map((paragraph, index) => (
-            <p key={index} className="whitespace-pre-line">
-              {paragraph}
-            </p>
+            <LnParagraphe key={index} texte={paragraph} />
           ))}
         </div>
 
