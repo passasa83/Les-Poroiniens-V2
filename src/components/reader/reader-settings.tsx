@@ -32,16 +32,21 @@ export const READER_MODES: Array<{
   },
 ];
 
-const FITS: Array<{ key: ReaderFit; label: string; aide: string }> = [
+/** Ajustements possibles, dans l'ordre du bouton cyclique de la sidebar. */
+export const READER_FITS: Array<{ key: ReaderFit; label: string; aide: string }> = [
   { key: "auto", label: "Auto", aide: "Largeur naturelle de la zone de lecture." },
   {
     key: "originale",
     label: "Originale",
-    aide: "Taille d’origine des pages, sans contrainte (défilement horizontal).",
+    aide: "Taille d'origine des pages, sans contrainte (défilement horizontal).",
   },
   { key: "largeur", label: "Largeur", aide: "Ajuste la largeur des pages (pourcentage)." },
   { key: "hauteur", label: "Hauteur", aide: "Une planche tient dans la hauteur de la fenêtre." },
-  { key: "perso", label: "Personnalisé", aide: "Largeur maximale des pages, en pixels." },
+  {
+    key: "perso",
+    label: "Personnalisé",
+    aide: "Limites de largeur et de hauteur des pages, en pixels.",
+  },
 ];
 
 const THEMES: Array<{ key: ReaderTheme; label: string }> = [
@@ -134,6 +139,14 @@ export function ReaderSettings({
   onBrightness,
   firstSolo,
   onFirstSolo,
+  stretch,
+  onStretch,
+  limitW,
+  onLimitW,
+  limitH,
+  onLimitH,
+  maxh,
+  onMaxh,
 }: {
   open: boolean;
   onClose: () => void;
@@ -153,6 +166,15 @@ export function ReaderSettings({
   onBrightness: (b: number) => void;
   firstSolo: boolean;
   onFirstSolo: (v: boolean) => void;
+  /** Ajustement « Personnalisé » (réglages hérités de l'ancien lecteur). */
+  stretch: boolean;
+  onStretch: (v: boolean) => void;
+  limitW: boolean;
+  onLimitW: (v: boolean) => void;
+  limitH: boolean;
+  onLimitH: (v: boolean) => void;
+  maxh: number;
+  onMaxh: (h: number) => void;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -258,12 +280,12 @@ export function ReaderSettings({
           />
         </Reglage>
 
-        <Reglage titre="Ajustement" aide={FITS.find((f) => f.key === fit)?.aide}>
+        <Reglage titre="Ajustement" aide={READER_FITS.find((f) => f.key === fit)?.aide}>
           <Segmented
             label="Ajustement des pages"
             value={fit}
             onChange={onFit}
-            options={FITS.map((f) => ({ key: f.key, label: f.label }))}
+            options={READER_FITS.map((f) => ({ key: f.key, label: f.label }))}
           />
           {fit === "largeur" && (
             <div>
@@ -283,20 +305,70 @@ export function ReaderSettings({
             </div>
           )}
           {fit === "perso" && (
-            <div>
-              <label className="label" htmlFor="reader-maxw">
-                Largeur maximale : {maxw} px
+            /* Ajustement hérité de l'ancien lecteur : étirement et deux
+               limites indépendantes (largeur / hauteur), de 400 à 3000 px. */
+            <div className="space-y-3">
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-fg">
+                <input
+                  type="checkbox"
+                  checked={stretch}
+                  onChange={(e) => onStretch(e.target.checked)}
+                  className="size-4 accent-primary"
+                />
+                Étirer les petites pages
               </label>
-              <input
-                id="reader-maxw"
-                type="range"
-                min={320}
-                max={1600}
-                step={40}
-                value={maxw}
-                onChange={(e) => onMaxw(Number(e.target.value))}
-                className="reader-progress w-full accent-primary"
-              />
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-fg">
+                <input
+                  type="checkbox"
+                  checked={limitW}
+                  onChange={(e) => onLimitW(e.target.checked)}
+                  className="size-4 accent-primary"
+                />
+                Limiter la largeur
+              </label>
+              {limitW && (
+                <div>
+                  <label className="label" htmlFor="reader-maxw">
+                    Largeur maximale : {maxw} px
+                  </label>
+                  <input
+                    id="reader-maxw"
+                    type="range"
+                    min={400}
+                    max={3000}
+                    step={10}
+                    value={maxw}
+                    onChange={(e) => onMaxw(Number(e.target.value))}
+                    className="reader-progress w-full accent-primary"
+                  />
+                </div>
+              )}
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-fg">
+                <input
+                  type="checkbox"
+                  checked={limitH}
+                  onChange={(e) => onLimitH(e.target.checked)}
+                  className="size-4 accent-primary"
+                />
+                Limiter la hauteur
+              </label>
+              {limitH && (
+                <div>
+                  <label className="label" htmlFor="reader-maxh">
+                    Hauteur maximale : {maxh} px
+                  </label>
+                  <input
+                    id="reader-maxh"
+                    type="range"
+                    min={400}
+                    max={3000}
+                    step={10}
+                    value={maxh}
+                    onChange={(e) => onMaxh(Number(e.target.value))}
+                    className="reader-progress w-full accent-primary"
+                  />
+                </div>
+              )}
             </div>
           )}
         </Reglage>

@@ -127,6 +127,7 @@ export function ReaderTopBar({
   onReport,
   fullscreen,
   onFullscreen,
+  mobileOnly = false,
 }: {
   hidden: boolean;
   serieHref: string;
@@ -140,6 +141,8 @@ export function ReaderTopBar({
   onReport: () => void;
   fullscreen: boolean;
   onFullscreen: () => void;
+  /** Manga : masquée sur grand écran, où la sidebar tient les contrôles. */
+  mobileOnly?: boolean;
 }) {
   const router = useRouter();
 
@@ -147,7 +150,7 @@ export function ReaderTopBar({
     <header
       data-hidden={hidden ? "true" : "false"}
       data-reader-bar="haut"
-      className="fixed inset-x-0 top-0 z-50 h-16 border-b border-line bg-header/95 text-fg backdrop-blur transition-transform duration-200 motion-reduce:transition-none data-[hidden=true]:-translate-y-full"
+      className={`fixed inset-x-0 top-0 z-50 h-16 border-b border-line bg-header/95 text-fg backdrop-blur transition-transform duration-200 motion-reduce:transition-none data-[hidden=true]:-translate-y-full ${mobileOnly ? "lg:hidden" : ""}`}
     >
       <div className="mx-auto flex h-full w-full max-w-7xl items-center gap-2 px-3 sm:px-6 lg:px-8">
         <Link
@@ -219,6 +222,7 @@ export function ReaderBottomBar({
   prevHref,
   nextHref,
   unite,
+  mobileOnly = false,
 }: {
   hidden: boolean;
   page: number;
@@ -228,12 +232,14 @@ export function ReaderBottomBar({
   nextHref: string | null;
   /** Organisation de la série (étiquettes ARIA : « Tome suivant »). */
   unite?: Unite | null;
+  /** Manga : masquée sur grand écran, où la sidebar tient les contrôles. */
+  mobileOnly?: boolean;
 }) {
   return (
     <footer
       data-hidden={hidden ? "true" : "false"}
       data-reader-bar="bas"
-      className="fixed inset-x-0 bottom-0 z-50 h-14 border-t border-line bg-header/95 text-fg backdrop-blur transition-transform duration-200 motion-reduce:transition-none data-[hidden=true]:translate-y-full"
+      className={`fixed inset-x-0 bottom-0 z-50 h-14 border-t border-line bg-header/95 text-fg backdrop-blur transition-transform duration-200 motion-reduce:transition-none data-[hidden=true]:translate-y-full ${mobileOnly ? "lg:hidden" : ""}`}
     >
       <div className="mx-auto flex h-full w-full max-w-7xl items-center gap-3 px-3 sm:px-6 lg:px-8">
         <span className="shrink-0 text-xs font-semibold tabular-nums text-fg" aria-hidden="true">

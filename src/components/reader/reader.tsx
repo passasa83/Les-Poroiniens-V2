@@ -8,6 +8,12 @@ import { ChapterLike } from "./chapter-like";
 import { ReaderBottomBar, ReaderTopBar, useReaderChrome } from "./reader-chrome";
 import { ReportDialog } from "./reader-report";
 import {
+  ReaderProgressTicks,
+  ReaderSidebar,
+  ReaderSidebarToggle,
+  SIDEBAR_WIDTH,
+} from "./reader-sidebar";
+import {
   READER_MODES,
   ReaderSettings,
   type ReaderFit,
@@ -26,6 +32,12 @@ const SENS_KEY = "lp-reader-sens:";
 const FIT_KEY = "lp-reader-fit";
 const WIDTH_KEY = "lp-reader-width";
 const MAXW_KEY = "lp-reader-maxw";
+const MAXH_KEY = "lp-reader-maxh";
+const STRETCH_KEY = "lp-reader-stretch";
+const LIMITW_KEY = "lp-reader-limit-w";
+const LIMITH_KEY = "lp-reader-limit-h";
+/** Sidebar repliée ou non (grand écran). */
+const SIDEBAR_KEY = "lp-reader-sidebar";
 const THEME_KEY = "lp-reader-theme";
 const BRIGHT_KEY = "lp-reader-brightness";
 const SOLO_KEY = "lp-reader-first-solo";
@@ -34,6 +46,10 @@ const progressKey = (chapterId: string) => `lp-progress:${chapterId}`;
 
 const FITS: ReaderFit[] = ["auto", "originale", "largeur", "hauteur", "perso"];
 const THEMES: ReaderTheme[] = ["site", "clair", "noir"];
+
+/** Bornes des limites de l'ajustement « Personnalisé » (ancien lecteur). */
+const PX_MIN = 400;
+const PX_MAX = 3000;
 
 export type ReaderPage = { index: number; url: string; largeur?: number; hauteur?: number };
 
@@ -61,16 +77,20 @@ const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * Lecteur de scans : chrome immersif auto-masquable (barre haute avec
- * sélecteur de chapitre, barre inférieure avec progression), modes webtoon /
- * page / double page, sens mémorisé par série, ajustement, thème et
- * luminosité, zones tactiles, molette, raccourcis clavier, plein écran,
- * progression (compte ou local), signalement et écran de fin dédié.
+ * Lecteur de scans : colonne de contrôles latérale de 360 px sur grand
+ * écran (motif de l'ancien lecteur : chapitre, pages, mode, sens, ajustement
+ * et réglages « Personnalisé » complets) avec barre de progression à ticks,
+ * barres auto-masquables sur mobile, modes webtoon / page / double page,
+ * sens mémorisé par série, thème et luminosité, zones tactiles, molette,
+ * raccourcis clavier, plein écran, progression (compte ou local),
+ * signalement et écran de fin dédié.
  */
 export function Reader({
   pages,
   chapterId,
   chapterNumero,
+  chapterTitre,
+  chapitreDate,
   serieId,
   serieSlug,
   serieTitre,
@@ -90,6 +110,10 @@ export function Reader({
   pages: ReaderPage[];
   chapterId: string;
   chapterNumero: number;
+  /** Titre du chapitre, affiché dans la sidebar (motif de l'ancien lecteur). */
+  chapterTitre?: string;
+  /** Date de publication, affichée dans la sidebar (« il y a 3 j »). */
+  chapitreDate?: string | null;
   serieId: string;
   serieSlug: string;
   serieTitre: string;
@@ -115,10 +139,15 @@ export function Reader({
   const lastIndex = Math.max(total - 1, 0);
 
   const [mode, setMode] = useState<ReaderMode>(initialMode ?? "vertical");
-  const [sens, setSens] = useState<ReaderSens>(initialSens ?? "rtl");
+  const [sens, setSens] = useState<ReaderSens>(initialSens ?? "ltr");
   const [fit, setFit] = useState<ReaderFit>("auto");
   const [width, setWidth] = useState(100);
-  const [maxw, setMaxw] = useState(900);
+  const [maxw, setMaxw] = useState(1200);
+  const [maxh, setMaxh] = useState(1080);
+  const [stretch, setStretch] = useState(false);
+  const [limitW, setLimitW] = useState(true);
+  const [limitH, setLimitH] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>("site");
   const [brightness, setBrightness] = useState(1);
   const [firstSolo, setFirstSolo] = useState(false);
@@ -135,6 +164,7 @@ export function Reader({
   const pageRef = useRef(page);
   const modeRef = useRef(mode);
   const sensRef = useRef(sens);
+  const fitRef = useRef(fit);
   const resumeDoneRef = useRef(false);
   const lastSentRef = useRef(0);
   const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -157,6 +187,9 @@ export function Reader({
   useEffect(() => {
     sensRef.current = sens;
   }, [sens]);
+  useEffect(() => {
+    fitRef.current = fit;
+  }, [fit]);
 
   /* ── Chrome immersif : visible au mouvement, masqué en lecture ─────── */
   const { hidden: chromeHidden, inView, reveal, hide } = useReaderChrome(
@@ -195,7 +228,16 @@ export function Reader({
         if (savedWidth >= 50 && savedWidth <= 100) setWidth(savedWidth);
 
         const savedMaxw = Number(store.get(MAXW_KEY));
-        if (savedMaxw >= 320 && savedMaxw <= 1600) setMaxw(savedMaxw);
+        if (savedMaxw >= PX_MIN && savedMaxw <= PX_MAX) setMaxw(savedMaxw);
+        else if (savedMaxw >= 320 && savedMaxw < PX_MIN) setMaxw(PX_MIN); // ancienne plage
+
+        const savedMaxh = Number(store.get(MAXH_KEY));
+        if (savedMaxh >= PX_MIN && savedMaxh <= PX_MAX) setMaxh(savedMaxh);
+
+        if (store.get(STRETCH_KEY) === "1") setStretch(true);
+        if (store.get(LIMITW_KEY) === "0") setLimitW(false);
+        if (store.get(LIMITH_KEY) === "1") setLimitH(true);
+        if (store.get(SIDEBAR_KEY) === "1") setCollapsed(true);
 
         const savedTheme = store.get(THEME_KEY);
         if (savedTheme && THEMES.includes(savedTheme as ReaderTheme)) {
@@ -288,6 +330,26 @@ export function Reader({
     setMaxw(next);
     store.set(MAXW_KEY, String(next));
   }, []);
+  const changeMaxh = useCallback((next: number) => {
+    setMaxh(next);
+    store.set(MAXH_KEY, String(next));
+  }, []);
+  const changeStretch = useCallback((next: boolean) => {
+    setStretch(next);
+    store.set(STRETCH_KEY, next ? "1" : "0");
+  }, []);
+  const changeLimitW = useCallback((next: boolean) => {
+    setLimitW(next);
+    store.set(LIMITW_KEY, next ? "1" : "0");
+  }, []);
+  const changeLimitH = useCallback((next: boolean) => {
+    setLimitH(next);
+    store.set(LIMITH_KEY, next ? "1" : "0");
+  }, []);
+  const changeCollapsed = useCallback((next: boolean) => {
+    setCollapsed(next);
+    store.set(SIDEBAR_KEY, next ? "1" : "0");
+  }, []);
   const changeTheme = useCallback((next: ReaderTheme) => {
     setTheme(next);
     store.set(THEME_KEY, next);
@@ -306,6 +368,12 @@ export function Reader({
     const next = READER_MODES[(index + 1) % READER_MODES.length].key;
     changeMode(next);
   }, [changeMode]);
+
+  /** Bouton cyclique « Ajustement » de la sidebar (motif de l'ancien lecteur). */
+  const cycleFit = useCallback(() => {
+    const index = FITS.indexOf(fitRef.current);
+    changeFit(FITS[(index + 1) % FITS.length]);
+  }, [changeFit]);
 
   /* ── Navigation ───────────────────────────────────────────────────── */
 
@@ -347,6 +415,30 @@ export function Reader({
       if (mode === "vertical") scrollToPage(next);
     },
     [mode, lastIndex, spreads, spreadIndexAt, scrollToPage],
+  );
+
+  /* Planches de navigation : les planches réelles en mode double, sinon une
+     planche par page — sert à la barre de ticks et au sélecteur de la sidebar. */
+  const planches = useMemo(
+    () => (mode === "double" ? spreads : pages.map((_, index) => ({ start: index, length: 1 }))),
+    [mode, spreads, pages],
+  );
+  const plancheIndex = mode === "double" ? Math.max(spreadIndexAt(page), 0) : page;
+
+  const goToPlanche = useCallback(
+    (index: number) => {
+      const planche = planches[clamp(index, 0, planches.length - 1)];
+      if (planche) goTo(planche.start);
+    },
+    [planches, goTo],
+  );
+
+  const plancheLabels = useMemo(
+    () =>
+      planches.map((p) =>
+        p.length > 1 ? `Page ${p.start + 1}-${p.start + p.length}` : `Page ${p.start + 1}`,
+      ),
+    [planches],
   );
 
   const step = useCallback(
@@ -666,6 +758,14 @@ export function Reader({
   /** Double page : pages gauche / droite (en D → G, la page paire est à gauche). */
   const doubleLeft = sens === "rtl" ? spread.start + 1 : spread.start;
   const doubleRight = sens === "rtl" ? spread.start : spread.start + 1;
+  /** Position de la planche dans le chapitre (placement des pages seules). */
+  const spreadPosition = mode === "double" ? Math.max(spreadIndexAt(page), 0) : 0;
+  /** Planche paysage : image seule, centrée, sans placeholder (ancien lecteur). */
+  const soloLandscape = soloSpread && isLandscape(pages[spread.start]);
+  /** Page seule : comme l'ancien lecteur, la première planche part d'un bord
+      de la grille et les suivantes de l'autre (un placeholder occupe l'autre
+      moitié), en fonction du sens de lecture. */
+  const soloImageFirst = sens === "rtl" ? spreadPosition === 0 : spreadPosition !== 0;
 
   /* Premier index de la planche : progression, URL et barre inférieure. */
   useEffect(() => {
@@ -680,11 +780,21 @@ export function Reader({
   const contentStyle = useMemo<React.CSSProperties>(() => {
     if (fit === "originale") return { width: "auto", maxWidth: "none" };
     if (fit === "perso") {
-      return { width: "100%", maxWidth: `${clamp(maxw, 320, 2000)}px` };
+      return {
+        width: "100%",
+        maxWidth: limitW ? `${clamp(maxw, PX_MIN, PX_MAX)}px` : undefined,
+      };
     }
     if (fit === "largeur") return { width: `${clamp(width, 50, 100)}%` };
     return { width: "100%" };
-  }, [fit, maxw, width]);
+  }, [fit, maxw, width, limitW]);
+
+  /** Ajustement « Personnalisé » : borne de hauteur (motif de l'ancien site). */
+  const imageStyle = useMemo<React.CSSProperties | undefined>(
+    () =>
+      fit === "perso" && limitH ? { maxHeight: `${clamp(maxh, PX_MIN, PX_MAX)}px` } : undefined,
+    [fit, limitH, maxh],
+  );
 
   const zoneStyle = useMemo<React.CSSProperties>(() => {
     const style: React.CSSProperties = {};
@@ -702,13 +812,51 @@ export function Reader({
     ? "h-full w-full object-contain select-none"
     : fitOriginale
       ? "max-w-none select-none"
-      : "w-full select-none";
+      : stretch && mode !== "vertical"
+        /* « Étirer les petites pages » : la page remplit sa boîte (contenue),
+           bornée par la limite de hauteur si elle est active. */
+        ? "h-full w-full object-contain select-none"
+        : "w-full select-none";
+
+  /* Double page collée : grille de deux moitiés qui se rejoignent au centre,
+     placeholder sur l'autre moitié pour une page portrait seule (motifs de
+     l'ancien lecteur, `reader.css` .double-mode). */
+  const placeholderEl = (
+    <div aria-hidden="true" className={clsx("h-full w-full", fitOriginale && "flex-none")} />
+  );
+  const soloImageSlot = (
+    <div
+      className={clsx(
+        "flex",
+        soloImageFirst ? "justify-end" : "justify-start",
+        fitHeight && "h-full",
+        fitOriginale && "flex-none",
+      )}
+    >
+      {pages[spread.start] && (
+        <ReaderImage
+          key={`${spread.start}:${pages[spread.start].url}`}
+          page={pages[spread.start]}
+          index={spread.start}
+          chapterNumero={chapterNumero} unite={unite}
+          eager
+          onFailed={onPageFailed}
+          onReport={openReport}
+          imageClass={imageClass}
+          imageStyle={imageStyle}
+        />
+      )}
+    </div>
+  );
 
   return (
     <div
       data-theme={theme === "site" ? undefined : theme === "clair" ? "light" : "dark"}
       data-reader-theme={theme}
-      className="relative -mx-4"
+      /* Grand écran : sidebar de contrôles (360 px, repliable) + colonne de
+         lecture ; mobile : colonne seule avec les barres auto-masquables. */
+      className="relative -mx-4 lg:grid lg:grid-cols-[var(--reader-sidebar-w)_1fr] lg:transition-[grid-template-columns] lg:duration-300 lg:ease-in-out lg:motion-reduce:transition-none"
+      style={{ "--reader-sidebar-w": `${collapsed ? 0 : SIDEBAR_WIDTH}px` } as React.CSSProperties}
     >
       <ReaderTopBar
         hidden={chromeHidden}
@@ -722,6 +870,53 @@ export function Reader({
         onReport={() => openReport(null)}
         fullscreen={fullscreen}
         onFullscreen={toggleFullscreen}
+        mobileOnly
+      />
+
+      <ReaderSidebar
+        collapsed={collapsed}
+        serieHref={`/serie/${serieSlug}`}
+        serieTitre={serieTitre}
+        unite={unite}
+        chapitres={chapitres}
+        courant={`/serie/${serieSlug}/chapitre-${chapterNumero}`}
+        chapterNumero={chapterNumero}
+        chapterTitre={chapterTitre}
+        chapitreDate={chapitreDate}
+        likes={initialLikes}
+        chapterId={chapterId}
+        plancheLabels={plancheLabels}
+        plancheIndex={plancheIndex}
+        onSeekPlanche={goToPlanche}
+        onFirst={() => goTo(0)}
+        onPrevPage={() => step(-1)}
+        onNextPage={() => step(1)}
+        onLast={() => goTo(lastIndex)}
+        hasPrev={spread.start > 0}
+        hasNext={!isLast}
+        prevHref={prevHref}
+        nextHref={nextHref}
+        mode={mode}
+        onMode={changeMode}
+        sens={sens}
+        onSens={changeSens}
+        fit={fit}
+        onFitCycle={cycleFit}
+        firstSolo={firstSolo}
+        onFirstSolo={changeFirstSolo}
+        stretch={stretch}
+        onStretch={changeStretch}
+        limitW={limitW}
+        onLimitW={changeLimitW}
+        maxw={maxw}
+        onMaxw={changeMaxw}
+        limitH={limitH}
+        onLimitH={changeLimitH}
+        maxh={maxh}
+        onMaxh={changeMaxh}
+        fullscreen={fullscreen}
+        onFullscreen={toggleFullscreen}
+        onReport={() => openReport(null)}
       />
 
       <div
@@ -740,7 +935,7 @@ export function Reader({
           style={zoneStyle}
         >
           {mode === "vertical" && (
-            <div className={adult ? "space-y-0" : "space-y-4"} style={contentStyle}>
+            <div className={adult ? "space-y-0" : "space-y-[26px]"} style={contentStyle}>
               {pages.map((item, index) => (
                 <ReaderImage
                   key={`${index}:${item.url}`}
@@ -767,6 +962,7 @@ export function Reader({
                 onFailed={onPageFailed}
                 onReport={openReport}
                 imageClass={imageClass}
+                imageStyle={imageStyle}
               />
               <Prefetch pages={pages} from={page + 1} />
             </div>
@@ -775,27 +971,41 @@ export function Reader({
           {mode === "double" && (
             <div
               className={clsx(
-                soloSpread ? "w-full" : "flex w-full items-start justify-center gap-1",
-                fitHeight && "h-full items-stretch",
+                "w-full",
+                fitHeight && "h-full",
+                soloSpread && soloLandscape
+                  ? "flex items-center justify-center"
+                  : "grid grid-cols-2 items-start",
               )}
               style={contentStyle}
             >
               {soloSpread ? (
-                <ReaderImage
-                  key={`${spread.start}:${pages[spread.start]?.url ?? ""}`}
-                  page={pages[spread.start]}
-                  index={spread.start}
-                  chapterNumero={chapterNumero} unite={unite}
-                  eager
-                  onFailed={onPageFailed}
-                  onReport={openReport}
-                  imageClass={imageClass}
-                />
+                soloLandscape ? (
+                  pages[spread.start] && (
+                    <ReaderImage
+                      key={`${spread.start}:${pages[spread.start].url}`}
+                      page={pages[spread.start]}
+                      index={spread.start}
+                      chapterNumero={chapterNumero} unite={unite}
+                      eager
+                      onFailed={onPageFailed}
+                      onReport={openReport}
+                      imageClass={imageClass}
+                      imageStyle={imageStyle}
+                    />
+                  )
+                ) : (
+                  <>
+                    {soloImageFirst ? soloImageSlot : placeholderEl}
+                    {soloImageFirst ? placeholderEl : soloImageSlot}
+                  </>
+                )
               ) : (
                 <>
                   <div
                     className={clsx(
-                      fitOriginale ? "flex-none" : "w-1/2",
+                      "flex justify-end",
+                      fitOriginale ? "flex-none" : "w-full",
                       fitHeight && "h-full",
                     )}
                   >
@@ -809,12 +1019,14 @@ export function Reader({
                         onFailed={onPageFailed}
                         onReport={openReport}
                         imageClass={imageClass}
+                        imageStyle={imageStyle}
                       />
                     )}
                   </div>
                   <div
                     className={clsx(
-                      fitOriginale ? "flex-none" : "w-1/2",
+                      "flex justify-start",
+                      fitOriginale ? "flex-none" : "w-full",
                       fitHeight && "h-full",
                     )}
                   >
@@ -828,6 +1040,7 @@ export function Reader({
                         onFailed={onPageFailed}
                         onReport={openReport}
                         imageClass={imageClass}
+                        imageStyle={imageStyle}
                       />
                     )}
                   </div>
@@ -850,7 +1063,9 @@ export function Reader({
 
         <NextChapterPrefetch chapterId={nextChapterId} active={isLast} />
 
-        <div className="flex items-center justify-between gap-2 px-3 pb-3">
+        {/* Navigation de pages sous la lecture : mobile uniquement (grand
+            écran, la sidebar reprend ces contrôles, comme l'ancien lecteur). */}
+        <div className="flex items-center justify-between gap-2 px-3 pb-3 lg:hidden">
           <div className="flex items-center gap-2">
             <NavButton
               href={null}
@@ -933,6 +1148,18 @@ export function Reader({
         )}
       </div>
 
+      <ReaderSidebarToggle
+        collapsed={collapsed}
+        onToggle={() => changeCollapsed(!collapsed)}
+      />
+      <ReaderProgressTicks
+        planches={planches.length}
+        current={plancheIndex}
+        rtl={sens === "rtl"}
+        onSeek={goToPlanche}
+        left={collapsed ? 0 : SIDEBAR_WIDTH}
+      />
+
       <ReaderBottomBar
         hidden={chromeHidden}
         page={spread.start}
@@ -941,6 +1168,7 @@ export function Reader({
         prevHref={prevHref}
         nextHref={nextHref}
         unite={unite}
+        mobileOnly
       />
 
       <ReaderSettings
@@ -962,6 +1190,14 @@ export function Reader({
         onBrightness={changeBrightness}
         firstSolo={firstSolo}
         onFirstSolo={changeFirstSolo}
+        stretch={stretch}
+        onStretch={changeStretch}
+        limitW={limitW}
+        onLimitW={changeLimitW}
+        limitH={limitH}
+        onLimitH={changeLimitH}
+        maxh={maxh}
+        onMaxh={changeMaxh}
       />
 
       <ReportDialog
@@ -1101,6 +1337,7 @@ function ReaderImage({
   onFailed,
   onReport,
   imageClass = "w-full select-none",
+  imageStyle,
 }: {
   page: ReaderPage;
   index: number;
@@ -1111,6 +1348,8 @@ function ReaderImage({
   onFailed: (index: number) => void;
   onReport: (index: number) => void;
   imageClass?: string;
+  /** Ajustement « Personnalisé » : borne de hauteur (ancien lecteur). */
+  imageStyle?: React.CSSProperties;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -1181,6 +1420,7 @@ function ReaderImage({
       decoding={eager ? undefined : "async"}
       onError={onError}
       className={imageClass}
+      style={imageStyle}
       draggable={false}
     />
   );

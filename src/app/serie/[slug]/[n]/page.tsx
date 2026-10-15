@@ -305,6 +305,8 @@ export default async function ChapitrePage({
                 pages={context.pages}
                 chapterId={context.chapter.id}
                 chapterNumero={context.chapter.numero}
+                chapterTitre={context.chapter.titre}
+                chapitreDate={context.chapter.publish_at ?? context.chapter.created_at}
                 serieId={series.id}
                 serieSlug={series.slug}
                 serieTitre={series.titre}
