@@ -11,6 +11,7 @@ import {
   Clock,
   Flag,
   Heart,
+  Keyboard,
   Maximize,
   MessageCircle,
   Minimize,
@@ -253,6 +254,7 @@ export function ReaderSidebar({
   fullscreen,
   onFullscreen,
   onReport,
+  onHelp,
 }: {
   collapsed: boolean;
   serieHref: string;
@@ -297,6 +299,8 @@ export function ReaderSidebar({
   fullscreen: boolean;
   onFullscreen: () => void;
   onReport: () => void;
+  /** Modale d'aide aux raccourcis (aussi ouverte par la touche `?`). */
+  onHelp: () => void;
 }) {
   const router = useRouter();
   const [commentaires, setCommentaires] = useState<number | null>(null);
@@ -356,6 +360,15 @@ export function ReaderSidebar({
           onClick={onReport}
         >
           <Flag className="size-4" />
+        </button>
+        <button
+          type="button"
+          className="btn-ghost px-2"
+          aria-label="Raccourcis clavier"
+          title="Raccourcis clavier (?)"
+          onClick={onHelp}
+        >
+          <Keyboard className="size-4" />
         </button>
       </div>
 

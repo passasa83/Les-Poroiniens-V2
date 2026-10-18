@@ -320,6 +320,29 @@
   cursor: pointer;
 }
 
+/* Transition de planche (modes page et double) : court fondu à chaque
+   changement de page, neutralisé par `prefers-reduced-motion`. */
+@keyframes reader-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reader-page-enter {
+  animation: reader-page-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-page-enter {
+    animation: none;
+  }
+}
+
 /* Thème « noir » du lecteur : appliqué au seul lecteur, après les
    thèmes du site pour l'emporter sur eux. */
 [data-reader-theme="noir"] {

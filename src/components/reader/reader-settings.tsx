@@ -2,7 +2,8 @@
 
 import clsx from "clsx";
 import { Columns2, MoveHorizontal, Rows3, Square, X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { READER_SHORTCUTS } from "./reader-help";
 
 export type ReaderMode = "vertical" | "single" | "double";
 export type ReaderSens = "ltr" | "rtl";
@@ -55,17 +56,105 @@ const THEMES: Array<{ key: ReaderTheme; label: string }> = [
   { key: "noir", label: "Noir" },
 ];
 
-const SHORTCUTS: Array<[string, string]> = [
-  ["← / →", "Page précédente / suivante (selon le sens)"],
-  ["↑ / ↓", "Page précédente / suivante"],
-  ["Espace", "Page suivante"],
-  ["F", "Plein écran"],
-  ["M", "Ouvrir ou fermer ce tiroir"],
-  ["D", "Changer de mode de lecture"],
-  ["Échap", "Fermer le tiroir, puis la fenêtre, puis le plein écran"],
-  ["Molette", "Tourner les pages (mode page et double page)"],
-  ["Tactile", "Zones gauche / centre / droite et balayage"],
-];
+/** Préfixe de toutes les clés de réglages du lecteur (export / import). */
+const SETTINGS_PREFIX = "lp-reader-";
+
+/**
+ * Export / import des réglages de lecture : télécharge ou restaure toutes les
+ * clés `lp-reader-*` (donc toutes les séries) via un fichier JSON versionné.
+ */
+function ReglagesDonnees() {
+  const [etat, setEtat] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  function exporter() {
+    try {
+      const settings: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith(SETTINGS_PREFIX)) continue;
+        const value = localStorage.getItem(key);
+        if (value !== null) settings[key] = value;
+      }
+      const blob = new Blob([JSON.stringify({ version: 1, settings }, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "poroiniens-reglages-lecteur.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setEtat("Réglages exportés.");
+    } catch {
+      setEtat("Export impossible sur cet appareil.");
+    }
+  }
+
+  async function importer(file: File) {
+    try {
+      const data = JSON.parse(await file.text()) as {
+        version?: number;
+        settings?: Record<string, unknown>;
+      };
+      if (data?.version !== 1 || !data.settings || typeof data.settings !== "object") {
+        setEtat("Fichier de réglages invalide.");
+        return;
+      }
+      let count = 0;
+      for (const [key, value] of Object.entries(data.settings)) {
+        // Liste blanche stricte : seules les clés de réglages sont réécrites.
+        if (!key.startsWith(SETTINGS_PREFIX) || typeof value !== "string" || count >= 200) {
+          continue;
+        }
+        localStorage.setItem(key, value);
+        count += 1;
+      }
+      if (count === 0) {
+        setEtat("Aucun réglage à importer dans ce fichier.");
+        return;
+      }
+      setEtat("Réglages importés : rechargement…");
+      window.setTimeout(() => window.location.reload(), 600);
+    } catch {
+      setEtat("Fichier illisible.");
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-secondary text-sm" onClick={exporter}>
+          Exporter
+        </button>
+        <button
+          type="button"
+          className="btn-secondary text-sm"
+          onClick={() => fileRef.current?.click()}
+        >
+          Importer
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          aria-label="Fichier de réglages à importer"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void importer(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      {etat && (
+        <p className="text-xs text-muted" role="status">
+          {etat}
+        </p>
+      )}
+    </div>
+  );
+}
 
 /** Petit groupe de réglages : libellé, contrôle, aide. */
 function Reglage({ titre, aide, children }: { titre: string; aide?: string; children: ReactNode }) {
@@ -250,7 +339,7 @@ export function ReaderSettings({
 
         <Reglage
           titre="Mode de lecture"
-          aide="Le mode est mémorisé pour tout le site."
+          aide="Mémorisé pour cette série ; les autres séries gardent le dernier mode choisi."
         >
           <Segmented
             label="Mode de lecture"
@@ -415,20 +504,30 @@ export function ReaderSettings({
 
         <Reglage titre="Aide aux raccourcis">
           <dl className="space-y-1 text-xs text-muted">
-            {SHORTCUTS.map(([touches, effet]) => (
+            {READER_SHORTCUTS.map(([touches, effet]) => (
               <div key={touches} className="flex items-baseline justify-between gap-3">
                 <dt className="shrink-0 font-mono text-fg">{touches}</dt>
                 <dd className="text-right">{effet}</dd>
               </div>
             ))}
           </dl>
+          <p className="text-xs text-muted">
+            L&apos;aide s&apos;ouvre aussi avec la touche <span className="font-mono text-fg">?</span> sur
+            clavier.
+          </p>
+        </Reglage>
+
+        <Reglage
+          titre="Mes réglages"
+          aide="Mode, sens, ajustement et décalage sont mémorisés par série. L’export regroupe tous les réglages de l’appareil (toutes séries comprises)."
+        >
+          <ReglagesDonnees />
         </Reglage>
 
         <div className="flex items-center gap-1 text-xs text-muted">
           <MoveHorizontal className="size-4 shrink-0" />
           <p>
-            Mode, sens et réglages sont conservés sur cet appareil ; le mode et le sens suivent
-            aussi votre compte.
+            Réglages conservés sur cet appareil ; le mode et le sens suivent aussi votre compte.
           </p>
         </div>
       </div>

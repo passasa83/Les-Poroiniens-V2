@@ -1,11 +1,20 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Flag, ImageOff } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Flag,
+  ImageOff,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChapterLike } from "./chapter-like";
 import { ReaderBottomBar, ReaderTopBar, useReaderChrome } from "./reader-chrome";
+import { ReaderHelp } from "./reader-help";
 import { ReportDialog } from "./reader-report";
 import {
   ReaderProgressTicks,
@@ -25,11 +34,14 @@ import { libelleUnite, libelleUniteSingulier, libelleVoisin } from "@/lib/format
 import type { Unite } from "@/lib/types";
 
 /* ── Clés de stockage local (« réglages mémorisés ») ───────────── */
-/** Mode : global, le même pour toutes les séries. */
+/** Mode : mémorisé par série, avec repli sur la clé globale du site. */
 const MODE_KEY = "lp-reader-mode";
+const MODE_SERIE_KEY = "lp-reader-mode:";
 /** Sens : mémorisé par série (prioritaire sur la préférence du compte). */
 const SENS_KEY = "lp-reader-sens:";
 const FIT_KEY = "lp-reader-fit";
+const FIT_SERIE_KEY = "lp-reader-fit:";
+const SOLO_SERIE_KEY = "lp-reader-solo:";
 const WIDTH_KEY = "lp-reader-width";
 const MAXW_KEY = "lp-reader-maxw";
 const MAXH_KEY = "lp-reader-maxh";
@@ -81,9 +93,11 @@ const prefersReducedMotion = () =>
  * écran (motif de l'ancien lecteur : chapitre, pages, mode, sens, ajustement
  * et réglages « Personnalisé » complets) avec barre de progression à ticks,
  * barres auto-masquables sur mobile, modes webtoon / page / double page,
- * sens mémorisé par série, thème et luminosité, zones tactiles, molette,
- * raccourcis clavier, plein écran, progression (compte ou local),
- * signalement et écran de fin dédié.
+ * réglages mémorisés par série (exportables), thème et luminosité, transitions
+ * de planche, zones tactiles, molette, raccourcis clavier (+ aide `?`),
+ * plein écran, progression (compte ou local), signalement et écran de fin
+ * dédié ; le webtoon ajoute une barre de progression fine et un retour en
+ * haut.
  */
 export function Reader({
   pages,
@@ -154,8 +168,12 @@ export function Reader({
   const [page, setPage] = useState(() => clamp(initialPage - 1, 0, lastIndex));
   const [fullscreen, setFullscreen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportPage, setReportPage] = useState<number | null>(null);
+  /** Progression du défilement (0 à 1) et bouton « remonter » (webtoon). */
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [showTop, setShowTop] = useState(false);
   /** État post-hydration : les préférences et la reprise sont lues en différé. */
   const [hydrated, setHydrated] = useState(false);
 
@@ -165,6 +183,7 @@ export function Reader({
   const modeRef = useRef(mode);
   const sensRef = useRef(sens);
   const fitRef = useRef(fit);
+  const themeRef = useRef(theme);
   const resumeDoneRef = useRef(false);
   const lastSentRef = useRef(0);
   const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +209,9 @@ export function Reader({
   useEffect(() => {
     fitRef.current = fit;
   }, [fit]);
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
 
   /* ── Chrome immersif : visible au mouvement, masqué en lecture ─────── */
   const { hidden: chromeHidden, inView, reveal, hide } = useReaderChrome(
@@ -213,7 +235,8 @@ export function Reader({
     const timer = window.setTimeout(() => {
       let resumeIndex = -1;
       try {
-        const savedMode = store.get(MODE_KEY);
+        // Mode, ajustement et décalage : local par série > clé globale
+        const savedMode = store.get(MODE_SERIE_KEY + serieId) ?? store.get(MODE_KEY);
         if (savedMode === "vertical" || savedMode === "single" || savedMode === "double") {
           setMode(savedMode);
         }
@@ -221,7 +244,7 @@ export function Reader({
         const savedSens = store.get(SENS_KEY + serieId);
         if (savedSens === "ltr" || savedSens === "rtl") setSens(savedSens);
 
-        const savedFit = store.get(FIT_KEY);
+        const savedFit = store.get(FIT_SERIE_KEY + serieId) ?? store.get(FIT_KEY);
         if (savedFit && FITS.includes(savedFit as ReaderFit)) setFit(savedFit as ReaderFit);
 
         const savedWidth = Number(store.get(WIDTH_KEY));
@@ -247,7 +270,7 @@ export function Reader({
         const savedBrightness = Number(store.get(BRIGHT_KEY));
         if (savedBrightness >= 0.6 && savedBrightness <= 1.3) setBrightness(savedBrightness);
 
-        const savedSolo = store.get(SOLO_KEY);
+        const savedSolo = store.get(SOLO_SERIE_KEY + serieId) ?? store.get(SOLO_KEY);
         if (savedSolo === "1" || savedSolo === "0") setFirstSolo(savedSolo === "1");
 
         // Reprise : l'historique du compte l'emporte, sinon la progression locale
@@ -304,9 +327,10 @@ export function Reader({
     (next: ReaderMode) => {
       setMode(next);
       store.set(MODE_KEY, next);
+      store.set(MODE_SERIE_KEY + serieId, next);
       syncPrefs();
     },
-    [syncPrefs],
+    [serieId, syncPrefs],
   );
 
   const changeSens = useCallback(
@@ -318,10 +342,14 @@ export function Reader({
     [serieId, syncPrefs],
   );
 
-  const changeFit = useCallback((next: ReaderFit) => {
-    setFit(next);
-    store.set(FIT_KEY, next);
-  }, []);
+  const changeFit = useCallback(
+    (next: ReaderFit) => {
+      setFit(next);
+      store.set(FIT_KEY, next);
+      store.set(FIT_SERIE_KEY + serieId, next);
+    },
+    [serieId],
+  );
   const changeWidth = useCallback((next: number) => {
     setWidth(next);
     store.set(WIDTH_KEY, String(next));
@@ -358,10 +386,14 @@ export function Reader({
     setBrightness(next);
     store.set(BRIGHT_KEY, String(next));
   }, []);
-  const changeFirstSolo = useCallback((next: boolean) => {
-    setFirstSolo(next);
-    store.set(SOLO_KEY, next ? "1" : "0");
-  }, []);
+  const changeFirstSolo = useCallback(
+    (next: boolean) => {
+      setFirstSolo(next);
+      store.set(SOLO_KEY, next ? "1" : "0");
+      store.set(SOLO_SERIE_KEY + serieId, next ? "1" : "0");
+    },
+    [serieId],
+  );
 
   const cycleMode = useCallback(() => {
     const index = READER_MODES.findIndex((m) => m.key === modeRef.current);
@@ -374,6 +406,12 @@ export function Reader({
     const index = FITS.indexOf(fitRef.current);
     changeFit(FITS[(index + 1) % FITS.length]);
   }, [changeFit]);
+
+  /** Touche `T` : bascule le thème du lecteur (site → clair → noir → site). */
+  const cycleTheme = useCallback(() => {
+    const index = THEMES.indexOf(themeRef.current);
+    changeTheme(THEMES[(index + 1) % THEMES.length]);
+  }, [changeTheme]);
 
   /* ── Navigation ───────────────────────────────────────────────────── */
 
@@ -478,8 +516,13 @@ export function Reader({
   /* ── Raccourcis clavier ─────────────────────────────────────── */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      // Échap : tiroir > modale > plein écran
+      // Échap : aide > tiroir > modale > plein écran
       if (event.key === "Escape") {
+        if (helpOpen) {
+          event.preventDefault();
+          setHelpOpen(false);
+          return;
+        }
         if (settingsOpen) {
           event.preventDefault();
           setSettingsOpen(false);
@@ -493,6 +536,13 @@ export function Reader({
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      // `?` (Shift + é sur AZERTY) : aide aux raccourcis
+      if (event.key === "?") {
+        event.preventDefault();
+        setHelpOpen((open) => !open);
+        return;
+      }
 
       const forward: 1 | -1 = sens === "rtl" ? -1 : 1;
       const backward: 1 | -1 = sens === "rtl" ? 1 : -1;
@@ -518,6 +568,14 @@ export function Reader({
           event.preventDefault();
           step(1);
           break;
+        case "Home":
+          event.preventDefault();
+          goTo(0);
+          break;
+        case "End":
+          event.preventDefault();
+          goTo(lastIndex);
+          break;
         case "f":
         case "F":
           event.preventDefault();
@@ -533,11 +591,28 @@ export function Reader({
           event.preventDefault();
           cycleMode();
           break;
+        case "t":
+        case "T":
+          event.preventDefault();
+          cycleTheme();
+          break;
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [sens, step, toggleFullscreen, toggleSettings, cycleMode, settingsOpen, reportOpen]);
+  }, [
+    sens,
+    step,
+    goTo,
+    lastIndex,
+    toggleFullscreen,
+    toggleSettings,
+    cycleMode,
+    cycleTheme,
+    helpOpen,
+    settingsOpen,
+    reportOpen,
+  ]);
 
   /* ── Plein écran ──────────────────────────────────────────────────── */
   useEffect(() => {
@@ -575,7 +650,9 @@ export function Reader({
     };
   }, [mode, step, lastIndex]);
 
-  /* ── Suivi du scroll en mode vertical ─────────────────────────────── */
+  /* ── Suivi du scroll en mode vertical ───────────────────────────────
+     Suit aussi la progression (0-1, arrondie au % pour limiter les rendus)
+     et l'affichage du bouton « remonter » du webtoon. */
   useEffect(() => {
     if (mode !== "vertical") return;
     let frame: number | null = null;
@@ -596,6 +673,13 @@ export function Reader({
           }
         });
         setPage((current) => (current === best ? current : best));
+
+        // Barre de progression mobile et bouton « remonter »
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        const ratio = max > 0 ? clamp(window.scrollY / max, 0, 1) : 0;
+        const pct = Math.round(ratio * 100);
+        setScrollProgress((current) => (current === pct ? current : pct));
+        setShowTop(window.scrollY > window.innerHeight * 0.8);
       });
     }
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -809,14 +893,14 @@ export function Reader({
   }, [fitHeight, fitOriginale, brightness]);
 
   const imageClass = fitHeight
-    ? "h-full w-full object-contain select-none"
+    ? "h-full w-full object-contain select-none bg-surface2"
     : fitOriginale
-      ? "max-w-none select-none"
+      ? "max-w-none select-none bg-surface2"
       : stretch && mode !== "vertical"
         /* « Étirer les petites pages » : la page remplit sa boîte (contenue),
            bornée par la limite de hauteur si elle est active. */
-        ? "h-full w-full object-contain select-none"
-        : "w-full select-none";
+        ? "h-full w-full object-contain select-none bg-surface2"
+        : "w-full select-none bg-surface2";
 
   /* Double page collée : grille de deux moitiés qui se rejoignent au centre,
      placeholder sur l'autre moitié pour une page portrait seule (motifs de
@@ -917,6 +1001,7 @@ export function Reader({
         fullscreen={fullscreen}
         onFullscreen={toggleFullscreen}
         onReport={() => openReport(null)}
+        onHelp={() => setHelpOpen(true)}
       />
 
       <div
@@ -948,11 +1033,17 @@ export function Reader({
                   imageClass={imageClass}
                 />
               ))}
+              {/* Deux planches d'avance, en plus du chargement paresseux natif */}
+              <Prefetch pages={pages} from={page + 3} count={2} />
             </div>
           )}
 
           {mode === "single" && pages[page] && (
-            <div className={clsx("w-full", fitHeight && "h-full")} style={contentStyle}>
+            <div
+              key={page}
+              className={clsx("w-full reader-page-enter", fitHeight && "h-full")}
+              style={contentStyle}
+            >
               <ReaderImage
                 key={`${page}:${pages[page].url}`}
                 page={pages[page]}
@@ -970,8 +1061,9 @@ export function Reader({
 
           {mode === "double" && (
             <div
+              key={spread.start}
               className={clsx(
-                "w-full",
+                "w-full reader-page-enter",
                 fitHeight && "h-full",
                 soloSpread && soloLandscape
                   ? "flex items-center justify-center"
@@ -1160,6 +1252,32 @@ export function Reader({
         left={collapsed ? 0 : SIDEBAR_WIDTH}
       />
 
+      {/* Webtoon : barre de progression fine en bas (visible sur mobile où
+          la barre à ticks est réservée au grand écran). */}
+      {mode === "vertical" && (
+        <div className="fixed inset-x-0 bottom-0 z-[65] h-[3px] lg:hidden" aria-hidden="true">
+          <div
+            className="h-full bg-primary transition-[width] duration-150 motion-reduce:transition-none"
+            style={{ width: `${scrollProgress}%` }}
+          />
+        </div>
+      )}
+
+      {/* Webtoon : retour en haut après un écran de défilement. */}
+      {mode === "vertical" && showTop && (
+        <button
+          type="button"
+          onClick={() => {
+            window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+            reveal();
+          }}
+          className="fixed bottom-20 right-4 z-40 flex size-11 items-center justify-center rounded-full border border-line bg-surface/90 text-fg shadow-lg backdrop-blur hover:text-primary lg:bottom-10"
+          aria-label="Revenir en haut de la page"
+        >
+          <ArrowUp className="size-5" />
+        </button>
+      )}
+
       <ReaderBottomBar
         hidden={chromeHidden}
         page={spread.start}
@@ -1208,6 +1326,8 @@ export function Reader({
         chapterNumero={chapterNumero} unite={unite}
         page={reportPage}
       />
+
+      <ReaderHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
@@ -1230,7 +1350,7 @@ function TouchZones({
 }) {
   const leftIsNext = sens === "rtl";
   const zone =
-    "group pointer-events-auto flex min-h-11 flex-1 items-center justify-center text-fg";
+    "group pointer-events-auto flex min-h-11 flex-1 touch-manipulation items-center justify-center text-fg transition-colors active:bg-fg/10 motion-reduce:transition-none";
   const icon =
     "size-8 opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-100 motion-reduce:transition-none";
 
@@ -1270,9 +1390,17 @@ function TouchZones({
   );
 }
 
-/** Préchargement des 2 à 3 pages suivantes en mode page / double page. */
-function Prefetch({ pages, from }: { pages: ReaderPage[]; from: number }) {
-  const next = pages.slice(from, from + 3);
+/** Préchargement des prochaines pages (mode page / double / webtoon). */
+function Prefetch({
+  pages,
+  from,
+  count = 3,
+}: {
+  pages: ReaderPage[];
+  from: number;
+  count?: number;
+}) {
+  const next = pages.slice(from, from + count);
   if (next.length === 0) return null;
   return (
     <div className="hidden" aria-hidden>
