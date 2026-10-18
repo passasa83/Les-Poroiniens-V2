@@ -398,19 +398,24 @@ export function Reader({
   const cycleMode = useCallback(() => {
     const index = READER_MODES.findIndex((m) => m.key === modeRef.current);
     const next = READER_MODES[(index + 1) % READER_MODES.length].key;
+    modeRef.current = next; // optimiste : deux clics rapprochés avant le rendu
     changeMode(next);
   }, [changeMode]);
 
   /** Bouton cyclique « Ajustement » de la sidebar (motif de l'ancien lecteur). */
   const cycleFit = useCallback(() => {
     const index = FITS.indexOf(fitRef.current);
-    changeFit(FITS[(index + 1) % FITS.length]);
+    const next = FITS[(index + 1) % FITS.length];
+    fitRef.current = next;
+    changeFit(next);
   }, [changeFit]);
 
   /** Touche `T` : bascule le thème du lecteur (site → clair → noir → site). */
   const cycleTheme = useCallback(() => {
     const index = THEMES.indexOf(themeRef.current);
-    changeTheme(THEMES[(index + 1) % THEMES.length]);
+    const next = THEMES[(index + 1) % THEMES.length];
+    themeRef.current = next;
+    changeTheme(next);
   }, [changeTheme]);
 
   /* ── Navigation ───────────────────────────────────────────────────── */

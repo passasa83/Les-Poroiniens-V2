@@ -19,7 +19,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { libelleUnite, libelleUniteSingulier, libelleVoisin, relativeTime } from "@/lib/format";
+import { libelleUnite, libelleUniteSingulier, libelleVoisin, relativeTime, titreUnite } from "@/lib/format";
 import type { Unite } from "@/lib/types";
 import {
   READER_FITS,
@@ -326,6 +326,10 @@ export function ReaderSidebar({
   const fitLabel = READER_FITS.find((f) => f.key === fit)?.label ?? "";
   const fitAide = READER_FITS.find((f) => f.key === fit)?.aide ?? "";
   const titre = libelleUnite(chapterNumero, unite);
+  // « Chapitre 8 : Le vrai titre » — seulement si le Gérant a saisi un titre
+  // autre que l'intitulé par défaut (évite « Chapitre 26 : Chapitre 26 »).
+  const detail = titreUnite(chapterNumero, chapterTitre, unite);
+  const titreAffiche = detail === titre ? titre : `${titre} : ${detail}`;
 
   return (
     <aside
@@ -374,10 +378,7 @@ export function ReaderSidebar({
 
       {/* Info : chapitre, série, statistiques */}
       <div className="space-y-1">
-        <h2 className="text-sm font-bold text-fg">
-          {titre}
-          {chapterTitre ? ` : ${chapterTitre}` : ""}
-        </h2>
+        <h2 className="text-sm font-bold text-fg">{titreAffiche}</h2>
         <Link href={serieHref} className="block truncate text-xs text-muted hover:text-fg">
           {serieTitre}
         </Link>
