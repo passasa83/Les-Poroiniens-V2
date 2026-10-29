@@ -430,7 +430,9 @@ export function Reader({
     const measure = () => {
       const r = el.getBoundingClientRect();
       const left = Math.round(r.left);
-      const right = Math.max(0, Math.round(window.innerWidth - r.right));
+      /* `clientWidth` (et non innerWidth) : le décalage droit d'un élément
+         fixed se mesure depuis la fenêtre de mise en page, sans scrollbar. */
+      const right = Math.max(0, Math.round(document.documentElement.clientWidth - r.right));
       setInset((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
     };
     measure();
