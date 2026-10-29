@@ -19,7 +19,7 @@ import { ReportDialog } from "./reader-report";
 import {
   ReaderProgressTicks,
   ReaderSidebar,
-  ReaderSidebarToggle,
+  ReaderSidebarReexpand,
   SIDEBAR_WIDTH,
 } from "./reader-sidebar";
 import {
@@ -1007,6 +1007,7 @@ export function Reader({
         onFullscreen={toggleFullscreen}
         onReport={() => openReport(null)}
         onHelp={() => setHelpOpen(true)}
+        onCollapse={() => changeCollapsed(true)}
       />
 
       <div
@@ -1245,10 +1246,9 @@ export function Reader({
         )}
       </div>
 
-      <ReaderSidebarToggle
-        collapsed={collapsed}
-        onToggle={() => changeCollapsed(!collapsed)}
-      />
+      {/* Replié, la barre de pied a disparu avec la colonne : ce bouton
+          en bas à gauche suffit à rouvrir les contrôles. */}
+      {collapsed && <ReaderSidebarReexpand onToggle={() => changeCollapsed(false)} />}
       <ReaderProgressTicks
         planches={planches.length}
         current={plancheIndex}

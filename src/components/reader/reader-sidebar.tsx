@@ -168,43 +168,29 @@ export function ReaderProgressTicks({
   );
 }
 
-/* ── Bouton de repli de la sidebar ────────────────────────────────── */
+/* ── Réouverture de la sidebar (état replié) ───────────────────────── */
 
-/* Largeur de l'onglet (w-7) : le positionnement en dépend pour rester
-   affleurant à la tranche droite de la sidebar sans déborder sur la
-   bande de lecture. */
-const TOGGLE_WIDTH = 28;
-
-export function ReaderSidebarToggle({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const label = collapsed ? "Afficher les contrôles" : "Masquer les contrôles";
+/**
+ * Quand la colonne vaut 0, la barre de pied a disparu avec elle : ce petit
+ * anneau fixe en bas à gauche sert alors à rouvrir les contrôles. Sur grand
+ * écran, il se pose dans la marge du conteneur ; sinon il touche le coin bas
+ * gauche de la lecture (une seule fois replié, comme l'onglet de l'ancien site).
+ */
+export function ReaderSidebarReexpand({ onToggle }: { onToggle: () => void }) {
   return (
     <button
       type="button"
       className={clsx(
-        "fixed top-1/2 z-40 hidden h-[50px] w-7 -translate-y-1/2 items-center justify-center",
-        "rounded-r-lg border border-l-0 border-line bg-surface text-muted shadow-md hover:bg-surface2 hover:text-fg",
-        "transition-[left] duration-300 ease-in-out lg:flex lg:motion-reduce:transition-none",
+        "fixed bottom-0 left-0 z-40 hidden h-11 items-center gap-1.5",
+        "rounded-tr-lg border border-b-0 border-l-0 border-line bg-surface px-3",
+        "text-muted shadow-md hover:bg-surface2 hover:text-fg lg:flex",
       )}
-      /* Onglet logé DANS la tranche droite de la sidebar (332 px) : il ne
-         recouvre plus la lecture ; replié, il revient au bord gauche. */
-      style={{ left: `${collapsed ? 0 : SIDEBAR_WIDTH - TOGGLE_WIDTH}px` }}
       onClick={onToggle}
-      aria-label={label}
-      title={label}
-      aria-expanded={!collapsed}
+      aria-label="Afficher les contrôles"
+      title="Afficher les contrôles"
     >
-      <ChevronLeft
-        className={clsx(
-          "size-4 transition-transform duration-300 motion-reduce:transition-none",
-          collapsed && "rotate-180",
-        )}
-      />
+      <ChevronRight className="size-4" />
+      <span className="text-xs">Contrôles</span>
     </button>
   );
 }
@@ -262,6 +248,7 @@ export function ReaderSidebar({
   onFullscreen,
   onReport,
   onHelp,
+  onCollapse,
 }: {
   collapsed: boolean;
   serieHref: string;
@@ -308,6 +295,8 @@ export function ReaderSidebar({
   onReport: () => void;
   /** Modale d'aide aux raccourcis (aussi ouverte par la touche `?`). */
   onHelp: () => void;
+  /** Rabat la colonne de contrôles (barre en pied de sidebar). */
+  onCollapse: () => void;
 }) {
   const router = useRouter();
   const [commentaires, setCommentaires] = useState<number | null>(null);
@@ -342,7 +331,7 @@ export function ReaderSidebar({
     <aside
       aria-label="Contrôles du lecteur"
       className={clsx(
-        "sticky top-0 hidden h-screen flex-col gap-5 overflow-y-auto border-r border-line bg-surface p-4 pb-10 lg:flex",
+        "sticky top-0 hidden h-screen flex-col gap-5 overflow-y-auto border-r border-line bg-surface p-4 lg:flex",
         collapsed && "invisible overflow-hidden opacity-0",
       )}
     >
@@ -627,6 +616,21 @@ export function ReaderSidebar({
       <a href="#commentaires" className="btn-ghost min-h-11 w-full justify-center text-xs">
         <MessageCircle className="size-4" /> Commentaires du chapitre
       </a>
+
+      {/* Barre de repli : ancrée en pied de colonne — elle reste collée en
+          bas de la sidebar quand le contenu déborde (sticky), et reçoit le
+          fond perdu des marges latérales (-mx-4) pour habiller le bord. */}
+      <div className="sticky bottom-0 -mx-4 mt-auto border-t border-line bg-surface px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.25)]">
+        <button
+          type="button"
+          className="btn-ghost min-h-11 w-full justify-center text-xs"
+          onClick={onCollapse}
+          aria-label="Rabattre les contrôles"
+          title="Rabattre les contrôles"
+        >
+          <ChevronLeft className="size-4" /> Rabattre les contrôles
+        </button>
+      </div>
     </aside>
   );
 }
