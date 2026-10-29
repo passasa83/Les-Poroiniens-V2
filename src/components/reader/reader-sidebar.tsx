@@ -170,6 +170,11 @@ export function ReaderProgressTicks({
 
 /* ── Bouton de repli de la sidebar ────────────────────────────────── */
 
+/* Largeur de l'onglet (w-7) : le positionnement en dépend pour rester
+   affleurant à la tranche droite de la sidebar sans déborder sur la
+   bande de lecture. */
+const TOGGLE_WIDTH = 28;
+
 export function ReaderSidebarToggle({
   collapsed,
   onToggle,
@@ -183,10 +188,12 @@ export function ReaderSidebarToggle({
       type="button"
       className={clsx(
         "fixed top-1/2 z-40 hidden h-[50px] w-7 -translate-y-1/2 items-center justify-center",
-        "rounded-r-lg border border-l-0 border-line bg-surface text-muted shadow-md hover:text-fg",
+        "rounded-r-lg border border-l-0 border-line bg-surface text-muted shadow-md hover:bg-surface2 hover:text-fg",
         "transition-[left] duration-300 ease-in-out lg:flex lg:motion-reduce:transition-none",
       )}
-      style={{ left: `${collapsed ? 0 : SIDEBAR_WIDTH}px` }}
+      /* Onglet logé DANS la tranche droite de la sidebar (332 px) : il ne
+         recouvre plus la lecture ; replié, il revient au bord gauche. */
+      style={{ left: `${collapsed ? 0 : SIDEBAR_WIDTH - TOGGLE_WIDTH}px` }}
       onClick={onToggle}
       aria-label={label}
       title={label}
