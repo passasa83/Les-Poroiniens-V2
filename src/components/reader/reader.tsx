@@ -418,6 +418,27 @@ export function Reader({
     changeTheme(next);
   }, [changeTheme]);
 
+  /* Marges du conteneur centré : le site centre le lecteur au-delà de
+     1280 px, la barre de ticks s'aligne alors sur la colonne de lecture
+     (et non sur le bord de la fenêtre) — mesurée au montage et à chaque
+     redimensionnement. */
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [inset, setInset] = useState({ left: 0, right: 0 });
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const left = Math.round(r.left);
+      const right = Math.max(0, Math.round(window.innerWidth - r.right));
+      setInset((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   /* ── Navigation ───────────────────────────────────────────────────── */
 
   /* Double page : planches pré-calculées — une page paysage occupe sa
@@ -940,6 +961,7 @@ export function Reader({
 
   return (
     <div
+      ref={rootRef}
       data-theme={theme === "site" ? undefined : theme === "clair" ? "light" : "dark"}
       data-reader-theme={theme}
       /* Grand écran : sidebar de contrôles (360 px, repliable) + colonne de
@@ -1254,7 +1276,8 @@ export function Reader({
         current={plancheIndex}
         rtl={sens === "rtl"}
         onSeek={goToPlanche}
-        left={collapsed ? 0 : SIDEBAR_WIDTH}
+        left={inset.left + (collapsed ? 0 : SIDEBAR_WIDTH)}
+        right={inset.right}
       />
 
       {/* Webtoon : barre de progression fine en bas (visible sur mobile où

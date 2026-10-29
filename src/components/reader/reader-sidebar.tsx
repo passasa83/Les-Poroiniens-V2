@@ -123,6 +123,7 @@ export function ReaderProgressTicks({
   rtl,
   onSeek,
   left,
+  right,
 }: {
   planches: number;
   current: number;
@@ -130,6 +131,8 @@ export function ReaderProgressTicks({
   onSeek: (index: number) => void;
   /** Décalage gauche (largeur de la sidebar), en pixels. */
   left: number;
+  /** Décalage droit (marge du conteneur centré), en pixels. */
+  right: number;
 }) {
   function onClick(event: React.MouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -144,9 +147,9 @@ export function ReaderProgressTicks({
       role="group"
       aria-label="Progression de lecture"
       onClick={onClick}
-      style={{ left: `${left}px` }}
+      style={{ left: `${left}px`, right: `${right}px` }}
       className={clsx(
-        "fixed bottom-0 right-0 z-40 hidden h-[22px] cursor-pointer items-center gap-[2px] border-t border-line bg-surface/85 px-[5px] backdrop-blur transition-[left] duration-300 ease-in-out lg:flex lg:motion-reduce:transition-none",
+        "fixed bottom-0 z-40 hidden h-[22px] cursor-pointer items-center gap-[2px] border-t border-line bg-surface/85 px-[5px] backdrop-blur transition-[left] duration-300 ease-in-out lg:flex lg:motion-reduce:transition-none",
         rtl && "flex-row-reverse",
       )}
     >
@@ -181,8 +184,9 @@ export function ReaderSidebarReexpand({ onToggle }: { onToggle: () => void }) {
     <button
       type="button"
       className={clsx(
-        "fixed bottom-0 left-0 z-40 hidden h-11 items-center gap-1.5",
-        "rounded-tr-lg border border-b-0 border-l-0 border-line bg-surface px-3",
+        /* Pose sur la barre de ticks (h-[22px]) plutôt que derrière elle. */
+        "fixed bottom-[22px] left-0 z-40 hidden h-11 items-center gap-1.5",
+        "rounded-r-lg border border-l-0 border-line bg-surface px-3",
         "text-muted shadow-md hover:bg-surface2 hover:text-fg lg:flex",
       )}
       onClick={onToggle}
