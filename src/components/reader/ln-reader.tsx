@@ -17,7 +17,7 @@ import {
   type LnSettings,
 } from "./ln-reader-settings";
 import { LnParagraphe } from "./ln-format";
-import { libelleUnite, libelleUniteSingulier, libelleVoisin, titreUnite } from "@/lib/format";
+import { libelleUnite, libelleUniteSingulier, libelleUnitesPluriel, libelleVoisin, titreUnite } from "@/lib/format";
 import type { Unite } from "@/lib/types";
 
 /** Position de lecture mémorisée par chapitre (fraction 0–1 du défilement). */
@@ -326,6 +326,9 @@ export function LnReader({
                 {libelleVoisin("précédent", unite)}
               </span>
             )}
+            <Link href={`/serie/${serieSlug}#chapitres`} className="btn-ghost">
+              Tous les {libelleUnitesPluriel(unite).toLowerCase()}
+            </Link>
             <a href="#commentaires" className="btn-ghost">
               Commentaires du {libelleUniteSingulier(unite).toLowerCase()}
             </a>

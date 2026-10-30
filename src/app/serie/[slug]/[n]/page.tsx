@@ -326,8 +326,9 @@ export default async function ChapitrePage({
             )}
           </div>
 
-          {navigation}
-
+          {/* Rangée « précédent / tous les chapitres / suivant » retirée :
+              les deux lecteurs affichent déjà leur bloc « chapitre terminé »
+              avec la navigation complète (doublon signalé par un lecteur). */}
           {/* Fin de chapitre : suite de la lecture ou suggestions. */}
           {recommandees.length > 0 && (
             <section className="container-site" aria-labelledby="recommandees-titre">

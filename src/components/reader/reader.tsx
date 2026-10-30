@@ -30,7 +30,7 @@ import {
   type ReaderSens,
   type ReaderTheme,
 } from "./reader-settings";
-import { libelleUnite, libelleUniteSingulier, libelleVoisin } from "@/lib/format";
+import { libelleUnite, libelleUniteSingulier, libelleUnitesPluriel, libelleVoisin } from "@/lib/format";
 import type { Unite } from "@/lib/types";
 
 /* ── Clés de stockage local (« réglages mémorisés ») ───────────── */
@@ -1258,6 +1258,9 @@ export function Reader({
                   {libelleVoisin("précédent", unite)}
                 </span>
               )}
+              <Link href={`/serie/${serieSlug}#chapitres`} className="btn-ghost">
+                Tous les {libelleUnitesPluriel(unite).toLowerCase()}
+              </Link>
               <a href="#commentaires" className="btn-ghost">
                 Commentaires du {libelleUniteSingulier(unite).toLowerCase()}
               </a>
@@ -1273,18 +1276,23 @@ export function Reader({
       {/* Replié, la barre de pied a disparu avec la colonne : ce bouton
           en bas à gauche suffit à rouvrir les contrôles. */}
       {collapsed && <ReaderSidebarReexpand onToggle={() => changeCollapsed(false)} />}
-      <ReaderProgressTicks
-        planches={planches.length}
-        current={plancheIndex}
-        rtl={sens === "rtl"}
-        onSeek={goToPlanche}
-        left={inset.left + (collapsed ? 0 : SIDEBAR_WIDTH)}
-        right={inset.right}
-      />
+      {/* Barre de progression : seulement dans la zone de lecture — hors du
+          champ, elle s'efface (aucune barre sur les commentaires ou les
+          suggestions de fin de chapitre). */}
+      {inView && (
+        <ReaderProgressTicks
+          planches={planches.length}
+          current={plancheIndex}
+          rtl={sens === "rtl"}
+          onSeek={goToPlanche}
+          left={inset.left + (collapsed ? 0 : SIDEBAR_WIDTH)}
+          right={inset.right}
+        />
+      )}
 
       {/* Webtoon : barre de progression fine en bas (visible sur mobile où
           la barre à ticks est réservée au grand écran). */}
-      {mode === "vertical" && (
+      {mode === "vertical" && inView && (
         <div className="fixed inset-x-0 bottom-0 z-[65] h-[3px] lg:hidden" aria-hidden="true">
           <div
             className="h-full bg-primary transition-[width] duration-150 motion-reduce:transition-none"
