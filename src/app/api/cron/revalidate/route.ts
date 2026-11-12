@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { invalidate } from "@/lib/db";
+import { invalidate } from "@/server/cache";
 import { publishDueChapters } from "@/lib/publishing";
 
 export const runtime = "nodejs";
@@ -37,7 +37,10 @@ export async function GET(request: Request) {
     );
   }
   if (!authorized) {
-    return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
+    return NextResponse.json(
+      { error: "unauthorized", code: "CRON_SECRET_INVALID" },
+      { status: 401 },
+    );
   }
 
   // Chapitres programmés dont l'échéance est passée (étape 4) : la

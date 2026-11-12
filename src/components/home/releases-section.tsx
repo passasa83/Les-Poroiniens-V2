@@ -115,7 +115,11 @@ export function ReleasesSection({
     <section aria-busy={busy}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="section-title">Dernières sorties</h2>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrer par format">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Filtrer par format"
+        >
           {TABS.map((tab) => (
             <button
               key={tab.value}

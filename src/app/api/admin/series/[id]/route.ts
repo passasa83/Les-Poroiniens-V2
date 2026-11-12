@@ -1,18 +1,12 @@
+import { deleteChapterCascade, invalidateChapters } from "@/lib/data/chapters";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
-import { purgeImageErrors } from "@/lib/data/image-errors";
 import { deleteSeries, getSeriesById, getSeriesBySlug, saveSeries } from "@/lib/data/series";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, listAll, parLots, TABLES } from "@/server/db";
 import type { Series } from "@/lib/types";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
-
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
-}
 
 function listField(maxItems: number, maxLen: number) {
   return z.preprocess(
@@ -40,9 +34,7 @@ const patchInput = z.object({
   synopsis: z.string().max(8000).optional(),
   couverture: z.string().trim().max(500).optional(),
   banniere: z.string().trim().max(500).optional(),
-  statut: z
-    .enum(["en_cours", "termine", "hiatus", "abandonne", "archive"])
-    .optional(),
+  statut: z.enum(["en_cours", "termine", "hiatus", "abandonne", "archive"]).optional(),
   type: z.enum(["manga", "manhwa", "manhua", "light_novel"]).optional(),
   unite: z.enum(["chapitre", "tome"]).optional(),
   annee: z.number().int().min(1900).max(2100).nullable().optional(),
@@ -74,118 +66,93 @@ function snapshot(series: Series): Record<string, unknown> {
 }
 
 /** PATCH /api/admin/series/[id] — édition de la fiche (admin+). */
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "edit_series")) {
-    return jsonError("Réservé aux administrateurs.", "forbidden", 403);
-  }
+export const PATCH = route(
+  {
+    auth: "edit_series",
+    forbidden: "Réservé aux administrateurs.",
+    rateLimit: {
+      key: "admin:series:patch",
+      limit: 60,
+      windowMs: 60_000,
+      message: "Trop de requêtes.",
+    },
+    body: patchInput,
+    invalidBody: "issue",
+  },
+  async ({ body, params, user, ip }) => {
+    const { id } = params;
+    const existing = await getSeriesById(id);
+    if (!existing) fail(404, "Série introuvable.", "not_found");
 
-  const limit = rateLimit(`admin:series:patch:${clientIp(request)}`, {
-    limit: 60,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
-
-  const existing = await getSeriesById(id);
-  if (!existing) return jsonError("Série introuvable.", "not_found", 404);
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
-
-  const parsed = patchInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(
-      parsed.error.issues[0]?.message ?? "Champs invalides.",
-      "invalid_body",
-      400,
-    );
-  }
-
-  const patch = parsed.data;
-  if (patch.slug && patch.slug !== existing.slug) {
-    const clash = await getSeriesBySlug(patch.slug, { includeArchived: true });
-    if (clash && clash.id !== id) {
-      return jsonError("Ce slug est déjà utilisé.", "slug_taken", 409);
+    const patch = body;
+    if (patch.slug && patch.slug !== existing.slug) {
+      const clash = await getSeriesBySlug(patch.slug, { includeArchived: true });
+      if (clash && clash.id !== id) {
+        fail(409, "Ce slug est déjà utilisé.", "slug_taken");
+      }
     }
-  }
 
-  const series = await saveSeries({ ...(patch as Partial<Series>), id });
+    const series = await saveSeries({ ...patch, id });
 
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "series.update",
-    cible: `series:${id}`,
-    avant: snapshot(existing),
-    apres: snapshot(series),
-    ip: clientIp(request),
-  });
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "series.update",
+      cible: `series:${id}`,
+      avant: snapshot(existing),
+      apres: snapshot(series),
+      ip,
+    });
 
-  return Response.json({ series });
-}
+    return Response.json({ series });
+  },
+);
 
 /** DELETE /api/admin/series/[id] — suppression de la fiche et de ses chapitres (admin+). */
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "edit_series")) {
-    return jsonError("Réservé aux administrateurs.", "forbidden", 403);
-  }
+export const DELETE = route(
+  {
+    auth: "edit_series",
+    forbidden: "Réservé aux administrateurs.",
+    rateLimit: {
+      key: "admin:series:delete",
+      limit: 20,
+      windowMs: 60_000,
+      message: "Trop de requêtes.",
+    },
+  },
+  async ({ params, user, ip }) => {
+    const { id } = params;
+    const existing = await getSeriesById(id);
+    if (!existing) fail(404, "Série introuvable.", "not_found");
 
-  const limit = rateLimit(`admin:series:delete:${clientIp(request)}`, {
-    limit: 20,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
+    const db = getDb();
+    const [chapters, recos] = await Promise.all([
+      listAll(TABLES.chapters, {
+        filters: [{ field: "series_id", op: "eq", value: id }],
+        select: ["series_id"],
+      }),
+      listAll(TABLES.recommendations, {
+        filters: [{ field: "series_id", op: "eq", value: id }],
+        select: ["series_id"],
+      }),
+    ]);
+    // Chapitres 3 par 3 (chacun supprime déjà ses pages 10 par 10).
+    await parLots(chapters, (chapter) => deleteChapterCascade(chapter.id), 3);
+    await parLots(recos, (reco) => db.remove(TABLES.recommendations, reco.id));
 
-  const existing = await getSeriesById(id);
-  if (!existing) return jsonError("Série introuvable.", "not_found", 404);
+    await deleteSeries(id);
+    invalidateChapters({ seriesId: id });
 
-  const db = getDb();
-  const { items: chapters } = await db.list<{ id: string }>(TABLES.chapters, {
-    filters: [{ field: "series_id", op: "eq", value: id }],
-    limit: 5000,
-  });
-  for (const chapter of chapters) {
-    const { items: pages } = await db.list<{ id: string }>(TABLES.pages, {
-      filters: [{ field: "chapter_id", op: "eq", value: chapter.id }],
-      limit: 5000,
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "series.delete",
+      cible: `series:${id}`,
+      avant: snapshot(existing),
+      apres: null,
+      ip,
     });
-    for (const page of pages) await db.remove(TABLES.pages, page.id);
-    await db.remove(TABLES.chapters, chapter.id);
-    await purgeImageErrors(chapter.id);
-  }
 
-  const { items: recos } = await db.list<{ id: string }>(TABLES.recommendations, {
-    filters: [{ field: "series_id", op: "eq", value: id }],
-    limit: 200,
-  });
-  for (const reco of recos) await db.remove(TABLES.recommendations, reco.id);
-
-  await deleteSeries(id);
-
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "series.delete",
-    cible: `series:${id}`,
-    avant: snapshot(existing),
-    apres: null,
-    ip: clientIp(request),
-  });
-
-  return Response.json({ ok: true, deletedChapters: chapters.length });
-}
+    return Response.json({ ok: true, deletedChapters: chapters.length });
+  },
+);

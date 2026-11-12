@@ -126,11 +126,7 @@ export function ConnexionForm({
         </p>
       </div>
 
-      <form
-        onSubmit={submit}
-        className={embedded ? "space-y-4" : "card space-y-4 p-6"}
-        noValidate
-      >
+      <form onSubmit={submit} className={embedded ? "space-y-4" : "card space-y-4 p-6"} noValidate>
         <Field
           label="Identifiant ou adresse e-mail"
           htmlFor={ids.identifier}
@@ -226,7 +222,10 @@ export function ConnexionForm({
               Mot de passe oublié ?
             </button>
           ) : (
-            <Link href="/mot-de-passe-oublie" className="link-muted inline-flex min-h-11 items-center gap-1.5">
+            <Link
+              href="/mot-de-passe-oublie"
+              className="link-muted inline-flex min-h-11 items-center gap-1.5"
+            >
               <KeyRound className="size-3.5" />
               Mot de passe oublié ?
             </Link>
@@ -240,7 +239,10 @@ export function ConnexionForm({
               Créer un compte
             </button>
           ) : (
-            <Link href="/inscription" className="link-muted inline-flex min-h-11 items-center font-semibold">
+            <Link
+              href="/inscription"
+              className="link-muted inline-flex min-h-11 items-center font-semibold"
+            >
               Créer un compte
             </Link>
           )}

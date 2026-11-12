@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { adminClient, avatarBucket, storage, users } from "@/lib/appwrite";
-import { getCurrentUser, logout } from "@/lib/auth";
+import { adminClient, avatarBucket, storage, users } from "@/server/appwrite";
+import { logout } from "@/server/auth";
 import { audit } from "@/lib/data/moderation";
-import { clearHistory, listLibrary } from "@/lib/data/library";
+import { clearHistory } from "@/lib/data/history";
+import { clearLibrary } from "@/lib/data/library";
+import { deleteNotifications } from "@/lib/data/notifications";
 import { getProfile } from "@/lib/data/users";
-import { dataMode, getDb, rowId, TABLES } from "@/lib/db";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
-import type { Comment, Notification } from "@/lib/types";
+import { dataMode, getDb, listAll, parLots, TABLES } from "@/server/db";
+import { route } from "@/server/http";
 
 /** Supprime l'éventuel fichier d'avatar Appwrite (RGPD : aucune donnée résiduelle). */
 async function deleteAvatarFile(avatar: string | null): Promise<void> {
@@ -30,80 +30,65 @@ async function deleteAvatarFile(avatar: string | null): Promise<void> {
  * « supprimé » (le fil de discussion est conservé, le contenu retiré) ; compte
  * Appwrite supprimé en mode production ; session détruite à la fin.
  */
-export async function DELETE(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
+export const DELETE = route(
+  {
+    auth: "user",
+    rateLimit: {
+      key: "account:delete",
+      by: "ip+user",
+      limit: 5,
+      windowMs: 600_000,
+      message: "Trop de tentatives. Réessayez plus tard.",
+    },
+  },
+  async ({ user, ip }) => {
+    const db = getDb();
+    const profile = await getProfile(user.id);
 
-  const limit = rateLimit(`account:delete:${user.id}:${clientIp(request)}`, {
-    limit: 5,
-    windowMs: 600_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Trop de tentatives. Réessayez plus tard.", code: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
+    /* 1–4. Historique, bibliothèque, commentaires, notifications : toutes
+       les lignes (lues par lots, sans plafond — l'ancien `limit` laissait
+       des données au-delà de 1000), écritures 10 par 10. */
+    const comments = await listAll(TABLES.comments, {
+      filters: [
+        { field: "user_id", op: "eq", value: user.id },
+        { field: "statut", op: "neq", value: "supprime" },
+      ],
+      select: ["user_id"],
+    });
+    await Promise.all([
+      clearHistory(user.id),
+      clearLibrary(user.id),
+      // Commentaires : contenu retiré, structure du fil conservée.
+      parLots(comments, (c) => db.update(TABLES.comments, c.id, { statut: "supprime" })),
+      deleteNotifications(user.id),
+    ]);
 
-  const db = getDb();
-  const profile = await getProfile(user.id);
+    // 5. Journal d'audit, avant toute suppression de profil
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "account_delete",
+      cible: user.id,
+      ip,
+    });
 
-  // 1. Historique de lecture
-  await clearHistory(user.id);
-
-  // 2. Bibliothèque
-  for (const entry of await listLibrary(user.id)) {
-    await db.remove(TABLES.library, rowId(user.id, entry.series_id));
-  }
-
-  // 3. Commentaires : contenu retiré, structure conservée
-  const { items: comments } = await db.list<Comment>(TABLES.comments, {
-    filters: [{ field: "user_id", op: "eq", value: user.id }],
-    limit: 1000,
-  });
-  for (const comment of comments) {
-    await db.update<Comment>(TABLES.comments, comment.id, { statut: "supprime" });
-  }
-
-  // 4. Notifications
-  const { items: notifications } = await db.list<Notification>(TABLES.notifications, {
-    filters: [{ field: "user_id", op: "eq", value: user.id }],
-    limit: 500,
-  });
-  for (const notification of notifications) {
-    await db.remove(TABLES.notifications, notification.id);
-  }
-
-  // 5. Journal d'audit, avant toute suppression de profil
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "account_delete",
-    cible: user.id,
-    ip: clientIp(request),
-  });
-
-  // 6. Profil + compte
-  if (dataMode() === "appwrite") {
-    await deleteAvatarFile(profile?.avatar ?? user.avatar);
-    try {
-      await users(adminClient()).delete({ userId: user.id });
-    } catch {
-      /* le compte a pu être supprimé entre-temps */
+    // 6. Profil + compte
+    if (dataMode() === "appwrite") {
+      await deleteAvatarFile(profile?.avatar ?? user.avatar);
+      try {
+        await users(adminClient()).delete({ userId: user.id });
+      } catch {
+        /* le compte a pu être supprimé entre-temps */
+      }
+      await db.remove(TABLES.profiles, user.id);
+    } else {
+      await db.remove(TABLES.profiles, user.id);
+      await db.remove(TABLES.users, user.id);
     }
-    await db.remove(TABLES.profiles, user.id);
-  } else {
-    await db.remove(TABLES.profiles, user.id);
-    await db.remove(TABLES.users, user.id);
-  }
 
-  // 7. Session détruite
-  await logout();
+    // 7. Session détruite
+    await logout();
 
-  return NextResponse.json({ ok: true });
-}
+    return Response.json({ ok: true });
+  },
+);

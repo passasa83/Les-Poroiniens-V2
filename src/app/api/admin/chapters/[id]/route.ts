@@ -1,19 +1,17 @@
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { atLeast, can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
-import { getChapterById, refreshSeriesChapterCount, saveChapter } from "@/lib/data/chapters";
-import { purgeImageErrors } from "@/lib/data/image-errors";
-import { getDb, TABLES } from "@/lib/db";
+import {
+  deleteChapterCascade,
+  getChapterById,
+  refreshSeriesChapterCount,
+  saveChapter,
+} from "@/lib/data/chapters";
+import { getDb, TABLES } from "@/server/db";
 import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
 import type { Chapter } from "@/lib/types";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
-
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
-}
 
 /**
  * Les lignes stockées en base portent les noms SQL (`series_id`, `nb_pages`)
@@ -30,198 +28,159 @@ const patchInput = z.object({
   teams: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
 });
 
-/**
- * Matrice 4.3 : la lecture est ouverte aux admins, mais la publication,
- * la dépublication, la planification et la suppression d'un chapitre sont
- * réservées au Gérant — même les administrateurs n'y ont pas accès.
- */
-async function requireOwner(): Promise<{ ok: true } | { ok: false; response: Response }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, response: jsonError("Authentification requise.", "unauthorized", 401) };
-  if (!can(user.role, "publish_chapter")) {
-    return {
-      ok: false,
-      response: jsonError(
-        "Publication des chapitres réservée au Gérant.",
-        "owner_only",
-        403,
-      ),
-    };
-  }
-  return { ok: true };
-}
-
 /** GET /api/admin/chapters/[id] — lecture (admin+). */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!atLeast(user.role, "admin")) return jsonError("Réservé aux administrateurs.", "forbidden", 403);
-
-  const chapter = (await getChapterById(id)) as ChapterRow | null;
-  if (!chapter) return jsonError("Chapitre introuvable.", "not_found", 404);
-  const { total } = await getDb().list(TABLES.pages, {
-    filters: [{ field: "chapter_id", op: "eq", value: id }],
-    limit: 1,
-  });
-  return Response.json({ chapter, nbPages: total });
-}
-
-/** PATCH /api/admin/chapters/[id] — statut, planification, métadonnées (Gérant). */
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const guard = await requireOwner();
-  if (!guard.ok) return guard.response;
-  const user = (await getCurrentUser())!;
-
-  const limit = rateLimit(`admin:chapters:patch:${clientIp(request)}`, {
-    limit: 60,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
-
-  const existing = (await getChapterById(id)) as ChapterRow | null;
-  if (!existing) return jsonError("Chapitre introuvable.", "not_found", 404);
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
-  const parsed = patchInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? "Champs invalides.", "invalid_body", 400);
-  }
-
-  const patch = parsed.data;
-  const data: Record<string, unknown> = { ...patch };
-
-  if (patch.statut === "scheduled") {
-    if (!patch.publish_at && !existing.publish_at) {
-      return jsonError("Une date de publication est requise.", "publish_at_required", 400);
-    }
-    const when = new Date(patch.publish_at ?? existing.publish_at ?? "");
-    if (Number.isNaN(when.getTime())) {
-      return jsonError("Date de publication invalide.", "invalid_publish_at", 400);
-    }
-    data.publish_at = when.toISOString();
-  }
-  if (patch.statut === "published") {
-    // Publication immédiate : la date devient maintenant si elle était vide/pas encore atteinte.
-    const current = existing.publish_at ? new Date(existing.publish_at).getTime() : 0;
-    data.publish_at = current && current <= Date.now() ? existing.publish_at : new Date().toISOString();
-  }
-  if (patch.publish_at === null && patch.statut === undefined) {
-    // Simple retrait de la date de planification (zod a déjà validé le format).
-    data.publish_at = null;
-  }
-  if (patch.numero && patch.numero !== existing.numero) {
-    const { total } = await getDb().list(TABLES.chapters, {
-      filters: [
-        { field: "series_id", op: "eq", value: existing.series_id },
-        { field: "numero", op: "eq", value: patch.numero },
-      ],
+export const GET = route(
+  {
+    auth: "admin_area",
+    forbidden: "Réservé aux administrateurs.",
+  },
+  async ({ params }) => {
+    const { id } = params;
+    const chapter = (await getChapterById(id)) as ChapterRow | null;
+    if (!chapter) fail(404, "Chapitre introuvable.", "not_found");
+    const { total } = await getDb().list(TABLES.pages, {
+      filters: [{ field: "chapter_id", op: "eq", value: id }],
       limit: 1,
     });
-    if (total > 0) {
-      return jsonError("Un chapitre porte déjà ce numéro.", "chapter_exists", 409);
+    return Response.json({ chapter, nbPages: total });
+  },
+);
+
+/** PATCH /api/admin/chapters/[id] — statut, planification, métadonnées (Gérant). */
+export const PATCH = route(
+  {
+    auth: "publish_chapter",
+    forbidden: "Publication des chapitres réservée au Gérant.",
+    rateLimit: {
+      key: "admin:chapters:patch",
+      limit: 60,
+      windowMs: 60_000,
+      message: "Trop de requêtes.",
+    },
+    body: patchInput,
+    invalidBody: "issue",
+  },
+  async ({ params, user, body, ip }) => {
+    const { id } = params;
+    const existing = (await getChapterById(id)) as ChapterRow | null;
+    if (!existing) fail(404, "Chapitre introuvable.", "not_found");
+
+    const patch = body;
+    const data: Partial<Chapter> = { ...patch };
+
+    if (patch.statut === "scheduled") {
+      if (!patch.publish_at && !existing.publish_at) {
+        fail(400, "Une date de publication est requise.", "publish_at_required");
+      }
+      const when = new Date(patch.publish_at ?? existing.publish_at ?? "");
+      if (Number.isNaN(when.getTime())) {
+        fail(400, "Date de publication invalide.", "invalid_publish_at");
+      }
+      data.publish_at = when.toISOString();
     }
-  }
+    if (patch.statut === "published") {
+      // Publication immédiate : la date devient maintenant si elle était vide/pas encore atteinte.
+      const current = existing.publish_at ? new Date(existing.publish_at).getTime() : 0;
+      data.publish_at =
+        current && current <= Date.now() ? existing.publish_at : new Date().toISOString();
+    }
+    if (patch.publish_at === null && patch.statut === undefined) {
+      // Simple retrait de la date de planification (zod a déjà validé le format).
+      data.publish_at = null;
+    }
+    if (patch.numero && patch.numero !== existing.numero) {
+      const { total } = await getDb().list(TABLES.chapters, {
+        filters: [
+          { field: "series_id", op: "eq", value: existing.series_id },
+          { field: "numero", op: "eq", value: patch.numero },
+        ],
+        limit: 1,
+      });
+      if (total > 0) {
+        fail(409, "Un chapitre porte déjà ce numéro.", "chapter_exists");
+      }
+    }
 
-  const chapter = await saveChapter({ ...(data as unknown as Partial<Chapter>), id });
+    const chapter = await saveChapter({ ...data, id });
 
-  const action =
-    chapter.statut === "published" && existing.statut !== "published"
-      ? "chapter.publish"
-      : chapter.statut !== "published" && existing.statut === "published"
-        ? "chapter.unpublish"
-        : chapter.statut === "scheduled"
-          ? "chapter.schedule"
-          : "chapter.update";
+    const action =
+      chapter.statut === "published" && existing.statut !== "published"
+        ? "chapter.publish"
+        : chapter.statut !== "published" && existing.statut === "published"
+          ? "chapter.unpublish"
+          : chapter.statut === "scheduled"
+            ? "chapter.schedule"
+            : "chapter.update";
 
-  // Passage `staging/` ↔ `public/` + purge ciblée (étape 5).
-  let nas: FileTransition | undefined;
-  if (action === "chapter.publish") nas = await transitionChapterFiles(chapter, "publish");
-  if (action === "chapter.unpublish") nas = await transitionChapterFiles(chapter, "unpublish");
+    // Passage `staging/` ↔ `public/` + purge ciblée (étape 5).
+    let nas: FileTransition | undefined;
+    if (action === "chapter.publish") nas = await transitionChapterFiles(chapter, "publish");
+    if (action === "chapter.unpublish") nas = await transitionChapterFiles(chapter, "unpublish");
 
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action,
-    cible: `chapter:${id}`,
-    avant: {
-      statut: existing.statut,
-      publish_at: existing.publish_at,
-      titre: existing.titre,
-      numero: existing.numero,
-      classification: existing.classification,
-      teams: (existing as { teams?: string[] }).teams ?? [],
-    },
-    apres: {
-      statut: chapter.statut,
-      publish_at: chapter.publish_at,
-      titre: chapter.titre,
-      numero: chapter.numero,
-      classification: chapter.classification,
-      teams: chapter.teams ?? [],
-      ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
-    },
-    ip: clientIp(request),
-  });
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action,
+      cible: `chapter:${id}`,
+      avant: {
+        statut: existing.statut,
+        publish_at: existing.publish_at,
+        titre: existing.titre,
+        numero: existing.numero,
+        classification: existing.classification,
+        teams: (existing as { teams?: string[] }).teams ?? [],
+      },
+      apres: {
+        statut: chapter.statut,
+        publish_at: chapter.publish_at,
+        titre: chapter.titre,
+        numero: chapter.numero,
+        classification: chapter.classification,
+        teams: chapter.teams ?? [],
+        ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
+      },
+      ip,
+    });
 
-  return Response.json({ chapter, ...(nas ? { nas } : {}) });
-}
+    return Response.json({ chapter, ...(nas ? { nas } : {}) });
+  },
+);
 
 /** DELETE /api/admin/chapters/[id] — suppression (Gérant). */
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const guard = await requireOwner();
-  if (!guard.ok) return guard.response;
-  const user = (await getCurrentUser())!;
-
-  const limit = rateLimit(`admin:chapters:delete:${clientIp(request)}`, {
-    limit: 30,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
-
-  const existing = (await getChapterById(id)) as ChapterRow | null;
-  if (!existing) return jsonError("Chapitre introuvable.", "not_found", 404);
-
-  const db = getDb();
-  const { items: pages } = await db.list<{ id: string }>(TABLES.pages, {
-    filters: [{ field: "chapter_id", op: "eq", value: id }],
-    limit: 5000,
-  });
-  for (const page of pages) await db.remove(TABLES.pages, page.id);
-  await db.remove(TABLES.chapters, id);
-  await refreshSeriesChapterCount(existing.series_id);
-  await purgeImageErrors(id);
-
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "chapter.delete",
-    cible: `chapter:${id}`,
-    avant: {
-      numero: existing.numero,
-      statut: existing.statut,
-      nb_pages: existing.nb_pages,
-      series_id: existing.series_id,
+export const DELETE = route(
+  {
+    auth: "publish_chapter",
+    forbidden: "Publication des chapitres réservée au Gérant.",
+    rateLimit: {
+      key: "admin:chapters:delete",
+      limit: 30,
+      windowMs: 60_000,
+      message: "Trop de requêtes.",
     },
-    apres: null,
-    ip: clientIp(request),
-  });
+  },
+  async ({ params, user, ip }) => {
+    const { id } = params;
+    const existing = (await getChapterById(id)) as ChapterRow | null;
+    if (!existing) fail(404, "Chapitre introuvable.", "not_found");
 
-  return Response.json({ ok: true, deletedPages: pages.length });
-}
+    const deletedPages = await deleteChapterCascade(id);
+    await refreshSeriesChapterCount(existing.series_id);
+
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "chapter.delete",
+      cible: `chapter:${id}`,
+      avant: {
+        numero: existing.numero,
+        statut: existing.statut,
+        nb_pages: existing.nb_pages,
+        series_id: existing.series_id,
+      },
+      apres: null,
+      ip,
+    });
+
+    return Response.json({ ok: true, deletedPages });
+  },
+);

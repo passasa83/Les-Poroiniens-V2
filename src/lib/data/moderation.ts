@@ -1,11 +1,9 @@
 import "server-only";
-import { cached, getDb, invalidate, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
+import { cached, invalidate } from "@/server/cache";
 import { idDeDemo } from "@/lib/demo-gate";
-import type { AuditEntry, ImportJob, Notification, Report, SiteSetting } from "@/lib/types";
-
-function newId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
+import { newId } from "@/lib/ids";
+import type { AuditEntry, ImportJob, Report } from "@/lib/types";
 
 /* ── Signalements ────────────────────────────────────────── */
 
@@ -19,12 +17,12 @@ export async function createReport(
     handled_by: null,
     created_at: new Date().toISOString(),
   };
-  await getDb().create<Report>(TABLES.reports, report.id, report as unknown as Record<string, unknown>);
+  await getDb().create(TABLES.reports, report.id, report);
   return report;
 }
 
 export async function listReports(statut?: Report["statut"]): Promise<Report[]> {
-  const { items } = await getDb().list<Report>(TABLES.reports, {
+  const { items } = await getDb().list(TABLES.reports, {
     filters: statut ? [{ field: "statut", op: "eq", value: statut }] : undefined,
     order: { field: "created_at", dir: "desc" },
     limit: 200,
@@ -39,7 +37,7 @@ export async function handleReport(
   statut: Report["statut"],
   handlerId: string,
 ): Promise<void> {
-  await getDb().update<Report>(TABLES.reports, id, { statut, handled_by: handlerId });
+  await getDb().update(TABLES.reports, id, { statut, handled_by: handlerId });
 }
 
 /* ── Journal d'audit ──────────────────────────────────────────── */
@@ -64,13 +62,13 @@ export async function audit(entry: {
     ip: entry.ip ?? "local",
     created_at: new Date().toISOString(),
   };
-  await getDb().create<AuditEntry>(TABLES.audit, row.id, row as unknown as Record<string, unknown>);
+  await getDb().create(TABLES.audit, row.id, row);
 }
 
 /** L'écriture est possible par tous les rôles autorisés, la lecture complète
  *  est réservée au Gérant ; les admins n'en voient qu'une version tronquée. */
 export async function listAudit(opts: { full: boolean; limit?: number }): Promise<AuditEntry[]> {
-  const { items } = await getDb().list<AuditEntry>(TABLES.audit, {
+  const { items } = await getDb().list(TABLES.audit, {
     order: { field: "created_at", dir: "desc" },
     limit: opts.full ? (opts.limit ?? 200) : 30,
   });
@@ -84,23 +82,23 @@ export async function getSettings(): Promise<Record<string, string>> {
      un aller-retour vers le backend à chaque rendu. Écritures invalidées par
      `setSetting` — l'admin voit sa valeur immédiatement après enregistrement. */
   return cached("settings:tout", 60_000, async () => {
-    const { items } = await getDb().list<SiteSetting>(TABLES.settings, { limit: 200 });
+    const { items } = await getDb().list(TABLES.settings, { limit: 200 });
     return Object.fromEntries(items.map((s) => [s.cle, s.valeur]));
   });
 }
 
 export async function setSetting(cle: string, valeur: string): Promise<void> {
   const db = getDb();
-  const existing = await db.get<SiteSetting>(TABLES.settings, cle);
-  if (existing) await db.update<SiteSetting>(TABLES.settings, cle, { valeur });
-  else await db.create<SiteSetting>(TABLES.settings, cle, { cle, valeur });
+  const existing = await db.get(TABLES.settings, cle);
+  if (existing) await db.update(TABLES.settings, cle, { valeur });
+  else await db.create(TABLES.settings, cle, { cle, valeur });
   invalidate("settings:");
 }
 
 /* ── Jobs d'import (espace Gérant) ───────────────────────────────────── */
 
 export async function listImportJobs(limit = 50): Promise<ImportJob[]> {
-  const { items } = await getDb().list<ImportJob>(TABLES.importJobs, {
+  const { items } = await getDb().list(TABLES.importJobs, {
     order: { field: "created_at", dir: "desc" },
     limit,
   });
@@ -111,50 +109,10 @@ export async function createImportJob(
   job: Omit<ImportJob, "id" | "created_at">,
 ): Promise<ImportJob> {
   const row: ImportJob = { ...job, id: newId("job"), created_at: new Date().toISOString() };
-  await getDb().create<ImportJob>(TABLES.importJobs, row.id, row as unknown as Record<string, unknown>);
+  await getDb().create(TABLES.importJobs, row.id, row);
   return row;
 }
 
 export async function updateImportJob(id: string, patch: Partial<ImportJob>): Promise<void> {
-  await getDb().update<ImportJob>(TABLES.importJobs, id, patch as Record<string, unknown>);
-}
-
-/* ── Notifications in-app ─────────────────────────────────────── */
-
-export async function listNotifications(userId: string): Promise<Notification[]> {
-  /* La cloche de l'en-tête est rendue à CHAQUE page : 30 s de cache valent
-     un aller-retour en moins par navigation ; `notify` et
-     `markNotificationsRead` invalident la clé. */
-  return cached(`notifications:${userId}`, 30_000, async () => {
-    const { items } = await getDb().list<Notification>(TABLES.notifications, {
-      filters: [{ field: "user_id", op: "eq", value: userId }],
-      order: { field: "created_at", dir: "desc" },
-      limit: 50,
-    });
-    return items;
-  });
-}
-
-export async function notify(userId: string, type: Notification["type"], payload: Record<string, unknown>) {
-  const n: Notification = {
-    id: newId("n"),
-    user_id: userId,
-    type,
-    payload,
-    lu: false,
-    created_at: new Date().toISOString(),
-  };
-  await getDb().create<Notification>(TABLES.notifications, n.id, n as unknown as Record<string, unknown>);
-  invalidate(`notifications:${userId}`);
-}
-
-export async function markNotificationsRead(userId: string): Promise<void> {
-  /* On purge d'abord : la liste doit être fraîche (une notification venue
-     moins de 30 s avant ne serait pas dans le cache). */
-  invalidate(`notifications:${userId}`);
-  const items = await listNotifications(userId);
-  for (const n of items.filter((x) => !x.lu)) {
-    await getDb().update<Notification>(TABLES.notifications, n.id, { lu: true });
-  }
-  invalidate(`notifications:${userId}`);
+  await getDb().update(TABLES.importJobs, id, patch as Record<string, unknown>);
 }

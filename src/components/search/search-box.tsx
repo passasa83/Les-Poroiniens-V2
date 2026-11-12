@@ -85,10 +85,9 @@ export function SearchBox({
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/catalogue/search?q=${encodeURIComponent(value.trim())}`,
-          { signal: controller.signal },
-        );
+        const res = await fetch(`/api/catalogue/search?q=${encodeURIComponent(value.trim())}`, {
+          signal: controller.signal,
+        });
         if (res.status === 429) {
           setLimited(true);
           setResults([]);
@@ -212,9 +211,7 @@ export function SearchBox({
           <ul
             id="recherche-instantanee"
             role="listbox"
-            aria-label={
-              showHistory ? "Historique des recherches" : "Résultats de recherche"
-            }
+            aria-label={showHistory ? "Historique des recherches" : "Résultats de recherche"}
             className="max-h-80 py-1"
           >
             {showHistory &&
@@ -272,8 +269,7 @@ export function SearchBox({
                       {serie.titre}
                     </span>
                     <span className="block truncate text-xs text-muted">
-                      {SERIES_TYPE_LABELS[serie.type]} ·{" "}
-                      {SERIES_STATUT_LABELS[serie.statut]}
+                      {SERIES_TYPE_LABELS[serie.type]} · {SERIES_STATUT_LABELS[serie.statut]}
                     </span>
                   </span>
                   {serie.classification === "adult" && <Badge tone="adult">+18</Badge>}

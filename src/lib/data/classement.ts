@@ -1,8 +1,8 @@
 import "server-only";
-import { cached, getDb, TABLES } from "@/lib/db";
-import { filtresSansDemo } from "@/lib/demo-gate";
-import { mapSeries } from "@/lib/data/series";
-import type { Chapter, HistoryEntry, Series, SeriesType } from "@/lib/types";
+import { listAll, TABLES } from "@/server/db";
+import { cached } from "@/server/cache";
+import { seriesIndex, seriesParIds, type SeriesIndexEntry } from "@/lib/data/series";
+import type { Series, SeriesType } from "@/lib/types";
 
 /**
  * Classement : onglets Jour / Semaine / Mois / Tout temps, filtre par
@@ -42,10 +42,7 @@ export function estPeriode(valeur: unknown): valeur is PeriodeCle {
 
 export function estTypeSerie(valeur: unknown): valeur is SeriesType {
   return (
-    valeur === "manga" ||
-    valeur === "manhwa" ||
-    valeur === "manhua" ||
-    valeur === "light_novel"
+    valeur === "manga" || valeur === "manhwa" || valeur === "manhua" || valeur === "light_novel"
   );
 }
 
@@ -85,7 +82,10 @@ const vide = (): Activite => ({
 });
 
 /** Tri d'une période : vues des sorties, lectures, sorties, vues cumulées, titre. */
-function comparer(a: { serie: Series; act: Activite }, b: { serie: Series; act: Activite }): number {
+function comparer(
+  a: { serie: SeriesIndexEntry; act: Activite },
+  b: { serie: SeriesIndexEntry; act: Activite },
+): number {
   return (
     b.act.vuesSorties - a.act.vuesSorties ||
     b.act.lectures - a.act.lectures ||
@@ -95,14 +95,12 @@ function comparer(a: { serie: Series; act: Activite }, b: { serie: Series; act: 
   );
 }
 
-export async function classement(
-  opts: {
-    periode: PeriodeCle;
-    type?: SeriesType | "";
-    includeAdult?: boolean;
-    limite?: number;
-  },
-): Promise<RangClassement[]> {
+export async function classement(opts: {
+  periode: PeriodeCle;
+  type?: SeriesType | "";
+  includeAdult?: boolean;
+  limite?: number;
+}): Promise<RangClassement[]> {
   const type = opts.type ?? "";
   const includeAdult = Boolean(opts.includeAdult);
   const limite = Math.min(Math.max(opts.limite ?? 50, 1), 100);
@@ -116,13 +114,9 @@ async function calculer(
   includeAdult: boolean,
   limite: number,
 ): Promise<RangClassement[]> {
-  const { items } = await getDb().list<Series>(TABLES.series, {
-    filters: filtresSansDemo("series"),
-    order: { field: "vues", dir: "desc" },
-    limit: 500,
-  });
-  const series = items
-    .map(mapSeries)
+  /* Index léger (toutes les séries publiques, sans plafond) ; seules les
+     séries classées sont ensuite chargées en entier. */
+  const series = (await seriesIndex())
     .filter((s) => (includeAdult ? true : s.classification !== "adult"))
     .filter((s) => (type ? s.type === type : true));
 
@@ -130,20 +124,24 @@ async function calculer(
 
   /* ── Tout temps : catalogue entier par vues cumulées ─────────────────── */
   if (definition.dureeMs === null) {
-    return [...series]
+    const top = [...series]
       .sort(
-        (a, b) => b.vues - a.vues || b.populaire - a.populaire || a.titre.localeCompare(b.titre, "fr"),
+        (a, b) =>
+          b.vues - a.vues || b.populaire - a.populaire || a.titre.localeCompare(b.titre, "fr"),
       )
-      .slice(0, limite)
-      .map((serie, index) => ({
-        serie,
+      .slice(0, limite);
+    const full = await seriesParIds(top.map((s) => s.id));
+    return top
+      .filter((s) => full.has(s.id))
+      .map((s, index) => ({
+        serie: full.get(s.id)!,
         rang: index + 1,
         evolution: null,
         nouveau: false,
         sorties: 0,
         lectures: 0,
         vuesSorties: 0,
-        vues: serie.vues,
+        vues: s.vues,
       }));
   }
 
@@ -155,19 +153,19 @@ async function calculer(
   const isoPrecedent = new Date(debutPrecedent).toISOString();
   const ids = new Set(series.map((s) => s.id));
 
-  const [chapitresRes, lecturesRes] = await Promise.all([
-    getDb().list<Chapter>(TABLES.chapters, {
+  /* Toute l'activité des deux fenêtres (au plus 60 jours), colonnes utiles
+     seulement : un `limit: 1000` faussait le classement dès 1000 lectures. */
+  const [chapitres, lectures] = await Promise.all([
+    listAll(TABLES.chapters, {
       filters: [
         { field: "statut", op: "eq", value: "published" },
         { field: "publish_at", op: "gte", value: isoPrecedent },
       ],
-      order: { field: "publish_at", dir: "desc" },
-      limit: 1000,
+      select: ["series_id", "publish_at", "vues"],
     }),
-    getDb().list<HistoryEntry>(TABLES.history, {
+    listAll(TABLES.history, {
       filters: [{ field: "read_at", op: "gte", value: isoPrecedent }],
-      order: { field: "read_at", dir: "desc" },
-      limit: 1000,
+      select: ["series_id", "read_at"],
     }),
   ]);
 
@@ -182,7 +180,7 @@ async function calculer(
     return a;
   };
 
-  for (const chapitre of chapitresRes.items) {
+  for (const chapitre of chapitres) {
     const temps = Date.parse(chapitre.publish_at ?? "");
     if (Number.isNaN(temps) || temps > maintenant) continue; // publié à l'avenir
     const a = get(chapitre.series_id);
@@ -197,7 +195,7 @@ async function calculer(
     }
   }
 
-  for (const lecture of lecturesRes.items) {
+  for (const lecture of lectures) {
     const temps = Date.parse(lecture.read_at ?? "");
     if (Number.isNaN(temps) || temps > maintenant) continue;
     const a = get(lecture.series_id);
@@ -220,24 +218,29 @@ async function calculer(
       return Boolean(a && (a.sortiesPrec > 0 || a.lecturesPrec > 0));
     })
     .map((serie) => ({ serie, act: activite.get(serie.id) ?? vide() }))
-    .sort((a, b) =>
-      /* même tri, mais sur les compteurs de la fenêtre précédente */
-      b.act.vuesSortiesPrec - a.act.vuesSortiesPrec ||
-      b.act.lecturesPrec - a.act.lecturesPrec ||
-      b.act.sortiesPrec - a.act.sortiesPrec ||
-      b.serie.vues - a.serie.vues ||
-      a.serie.titre.localeCompare(b.serie.titre, "fr"),
+    .sort(
+      (a, b) =>
+        /* même tri, mais sur les compteurs de la fenêtre précédente */
+        b.act.vuesSortiesPrec - a.act.vuesSortiesPrec ||
+        b.act.lecturesPrec - a.act.lecturesPrec ||
+        b.act.sortiesPrec - a.act.sortiesPrec ||
+        b.serie.vues - a.serie.vues ||
+        a.serie.titre.localeCompare(b.serie.titre, "fr"),
     );
 
   const rangsPrec = new Map<string, number>();
   precedents.forEach((entry, index) => rangsPrec.set(entry.serie.id, index + 1));
   const comparaisonPossible = rangsPrec.size > 0;
 
-  return courants.slice(0, limite).map((entry, index) => {
+  const retenus = courants.slice(0, limite);
+  const full = await seriesParIds(retenus.map((entry) => entry.serie.id));
+  return retenus.flatMap((entry, index) => {
+    const serie = full.get(entry.serie.id);
+    if (!serie) return [];
     const rangPrec = rangsPrec.get(entry.serie.id) ?? null;
     const nouveau = comparaisonPossible && rangPrec === null;
     return {
-      serie: entry.serie,
+      serie,
       rang: index + 1,
       evolution: rangPrec === null ? null : rangPrec - (index + 1),
       nouveau,

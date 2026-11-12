@@ -31,6 +31,8 @@ export const PERMISSIONS = {
   library: ["membre", "modo", "admin", "owner"],
   comment: ["membre", "modo", "admin", "owner"],
   moderate: ["modo", "admin", "owner"],
+  /** Espace d'administration (lecture du back-office). */
+  admin_area: ["admin", "owner"],
   edit_series: ["admin", "owner"],
   manage_recommendations: ["admin", "owner"],
   manage_users: ["admin", "owner"],
@@ -46,7 +48,5 @@ export const PERMISSIONS = {
 export type Permission = keyof typeof PERMISSIONS;
 
 export function can(role: Role | undefined, permission: Permission): boolean {
-  return (PERMISSIONS[permission] as readonly Role[]).includes(
-    (role ?? "visiteur") as Role,
-  );
+  return (PERMISSIONS[permission] as readonly Role[]).includes((role ?? "visiteur") as Role);
 }

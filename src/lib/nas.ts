@@ -29,12 +29,7 @@ export type NasHealth = {
 };
 
 export type NasErrorCode =
-  | "unconfigured"
-  | "invalid_path"
-  | "http_error"
-  | "unreachable"
-  | "timeout"
-  | "protocol";
+  "unconfigured" | "invalid_path" | "http_error" | "unreachable" | "timeout" | "protocol";
 
 export class NasError extends Error {
   readonly code: NasErrorCode;
@@ -182,8 +177,7 @@ function toEntry(raw: unknown, basePath: string): NasEntry | null {
   if (!rawName) return null;
   const name = rawName.replace(/\/+$/, "").split("/").pop() ?? rawName;
   const type = str(row.type);
-  const isDir =
-    type === "dir" || type === "directory" || type === "folder" || row.is_dir === true;
+  const isDir = type === "dir" || type === "directory" || type === "folder" || row.is_dir === true;
   const location = str(row.path) || str(row.url) || normalizePath(basePath, name);
   // Même repli que ci-dessus si `url` est absolue.
   const path = /^https?:\/\//i.test(location)
@@ -222,7 +216,9 @@ function natural(a: string, b: string): number {
 /** `GET /list?path=` — pages d'un dossier de chapitre.
  *  L'API renvoie un tableau d'URLs absolues `img.` (ou des objets
  *  `{ name, path, … }`) : seul le chemin relatif est conservé. */
-export async function nasList(path: string): Promise<{ path: string; count: number; pages: NasPage[] }> {
+export async function nasList(
+  path: string,
+): Promise<{ path: string; count: number; pages: NasPage[] }> {
   if (!isSafePath(path)) {
     throw new NasError("invalid_path", "Chemin refusé (validation anti traversal).");
   }
@@ -273,7 +269,8 @@ export async function nasHealth(): Promise<NasHealth> {
     if (err instanceof NasError && err.code === "http_error") {
       const status = err.status ?? 0;
       // `/health` absent (404) : l'API répond, donc elle est en service.
-      if (status === 404 || status === 405) return { ok: true, latencyMs, reason: "health_unsupported" };
+      if (status === 404 || status === 405)
+        return { ok: true, latencyMs, reason: "health_unsupported" };
       if (status === 401 || status === 403) return { ok: false, latencyMs, reason: "auth_failed" };
       if (status >= 500) return { ok: false, latencyMs, reason: `http_${status}` };
       return { ok: true, latencyMs };
@@ -347,24 +344,6 @@ export async function nasUpload(
   }
   if (!res.ok) {
     throw new NasError("http_error", `L'écriture sur le NAS a échoué (${res.status}).`, res.status);
-  }
-}
-
-/** `HEAD /file?path=` — existence d'un fichier (reprise d'import, anti écrasement). */
-export async function nasFileExists(rel: string): Promise<boolean> {
-  if (!isSafePath(rel)) return false;
-  const base = imageEnv().nasApiBase;
-  if (!base) return false;
-  try {
-    const res = await fetch(`${base}/file?path=${encodeURIComponent(rel)}`, {
-      method: "HEAD",
-      headers: nasHeaders(),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    return res.ok;
-  } catch {
-    return false;
   }
 }
 

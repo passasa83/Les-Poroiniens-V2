@@ -155,7 +155,7 @@ function etatCouverture(raw: unknown): EtatCouverture {
   return "autre";
 }
 
-/** Même algorithme que `slugify()` de `src/lib/db/seed.ts`. */
+/** Même algorithme que `slugify()` de `src/server/db/seed.ts`. */
 function slugify(input: string): string {
   return input
     .toLowerCase()

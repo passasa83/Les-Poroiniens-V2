@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { loginWithDiscord } from "@/lib/auth";
+import { loginWithDiscord } from "@/server/auth";
 import { exchangeDiscordCode, retourErreur, OAUTH_COOKIE, type EtatOAuth } from "@/lib/discord";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/server/http/rate-limit";
 
 export const runtime = "nodejs";
 

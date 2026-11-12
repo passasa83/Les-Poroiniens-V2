@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
-import { SeriesForm } from "@/components/series/series-actions";
+import { SeriesForm } from "@/components/series/actions/series-form";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +22,8 @@ export default async function GerantNouvelleSeriePage() {
         </Link>
         <h1 className="section-title mt-2">Nouvelle série</h1>
         <p className="mt-1 text-sm text-muted">
-          La fiche doit exister avant l&apos;import : les chapitres s&apos;attachent à sa série.
-          Une série sans chapitres est visible immédiatement dans le catalogue.
+          La fiche doit exister avant l&apos;import : les chapitres s&apos;attachent à sa série. Une
+          série sans chapitres est visible immédiatement dans le catalogue.
         </p>
       </div>
 

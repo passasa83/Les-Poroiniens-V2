@@ -23,10 +23,7 @@ export function CatalogueCard({
   const auteurs = series.auteurs.filter(Boolean).join(", ");
 
   return (
-    <Link
-      href={`/serie/${series.slug}`}
-      className="group block"
-    >
+    <Link href={`/serie/${series.slug}`} className="group block">
       <div className="relative overflow-hidden rounded-xl border border-line bg-surface2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

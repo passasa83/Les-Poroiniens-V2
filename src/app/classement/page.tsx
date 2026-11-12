@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import clsx from "clsx";
-import { adultGateAccepted } from "@/lib/auth";
+import { adultGateAccepted } from "@/server/auth";
 import { compteUnites, libelleUniteSingulier } from "@/lib/format";
 import { Badge, EmptyState, Rating } from "@/components/ui/kit";
 import {
@@ -34,7 +34,10 @@ const TYPES: Array<{ cle: SeriesType | ""; label: string }> = [
   { cle: "light_novel", label: "Light Novel" },
 ];
 
-function premier(sp: Record<string, string | string[] | undefined>, cle: string): string | undefined {
+function premier(
+  sp: Record<string, string | string[] | undefined>,
+  cle: string,
+): string | undefined {
   const brut = sp[cle];
   const valeur = Array.isArray(brut) ? brut[0] : brut;
   const propre = valeur?.trim();

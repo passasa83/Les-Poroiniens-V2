@@ -12,7 +12,8 @@
     "appwrite:seed": "node scripts/post-cron.mjs seed",
     "appwrite:revalidate": "node scripts/post-cron.mjs revalidate",
     "appwrite:diag": "tsx scripts/appwrite-diag.mts",
-    "import:ancien": "tsx scripts/import-ancien.mts"
+    "import:ancien": "tsx scripts/import-ancien.mts",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"scripts/**/*.{mts,mjs}\""
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -30,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "prettier": "^3.10.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

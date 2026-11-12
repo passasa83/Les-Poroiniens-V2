@@ -12,8 +12,8 @@ import {
 import { CatalogueGrid } from "@/components/series/catalogue-card";
 import { FilterDrawer, SortMenu } from "@/components/series/catalogue-controls";
 import { EmptyState, Pagination } from "@/components/ui/kit";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
-import { allSeries, listSeries, popularSeries } from "@/lib/data/series";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
+import { catalogueFacets, listSeries, popularSeries } from "@/lib/data/series";
 import {
   SERIES_STATUT_LABELS,
   SERIES_TYPE_LABELS,
@@ -54,10 +54,7 @@ function pick(sp: Search, key: string): string | undefined {
 }
 
 /** URL de la recherche : le mot-clé est conservé, les filtres changent. */
-function hrefWith(
-  keep: Record<string, string>,
-  patch: Record<string, string | undefined>,
-): string {
+function hrefWith(keep: Record<string, string>, patch: Record<string, string | undefined>): string {
   const next: Record<string, string> = { ...keep };
   delete next.page;
   for (const [key, value] of Object.entries(patch)) {
@@ -68,11 +65,7 @@ function hrefWith(
   return qs ? `/recherche?${qs}` : "/recherche";
 }
 
-export default async function RecherchePage({
-  searchParams,
-}: {
-  searchParams: Promise<Search>;
-}) {
+export default async function RecherchePage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
 
   const parsed = Schema.safeParse({
@@ -116,8 +109,7 @@ export default async function RecherchePage({
         <div>
           <h1 className="section-title text-2xl">Recherche</h1>
           <p className="mt-1 text-sm text-muted">
-            Titres, titres alternatifs et auteurs — les fautes de frappe sont
-            tolérées.
+            Titres, titres alternatifs et auteurs — les fautes de frappe sont tolérées.
           </p>
         </div>
         <SearchBox className="max-w-xl" autoFocus />
@@ -126,7 +118,11 @@ export default async function RecherchePage({
             Suggestions populaires
           </h2>
           {suggestions.length > 0 ? (
-            <CatalogueGrid series={suggestions} adultAllowed={gateOk} authenticated={Boolean(user)} />
+            <CatalogueGrid
+              series={suggestions}
+              adultAllowed={gateOk}
+              authenticated={Boolean(user)}
+            />
           ) : (
             <EmptyState
               title="Aucune suggestion"
@@ -148,7 +144,7 @@ export default async function RecherchePage({
   const statut: SeriesStatus | undefined =
     p.statut && p.statut !== "one_shot" ? p.statut : undefined;
 
-  const [result, all] = await Promise.all([
+  const [result, facets] = await Promise.all([
     listSeries({
       q: query,
       genre: p.genre || undefined,
@@ -163,18 +159,10 @@ export default async function RecherchePage({
       page: p.page,
       includeAdult,
     }),
-    allSeries(),
+    catalogueFacets(),
   ]);
 
-  const genres = [...new Set(all.flatMap((s) => s.genres))].sort((a, b) =>
-    a.localeCompare(b, "fr"),
-  );
-  const years = [
-    ...new Set(all.map((s) => s.annee).filter((y): y is number => typeof y === "number")),
-  ].sort((a, b) => b - a);
-  const langues = [...new Set(all.map((s) => s.langue).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, "fr"),
-  );
+  const { genres, years, langues } = facets;
 
   const tabs: CatalogueTab[] = [
     { value: "", label: "Tout", href: hrefWith(keep, { statut: undefined }) },
@@ -193,8 +181,7 @@ export default async function RecherchePage({
       href: hrefWith(keep, { genre: remaining.join(",") }),
     });
   }
-  if (p.tag)
-    chips.push({ id: "tag", label: p.tag, href: hrefWith(keep, { tag: undefined }) });
+  if (p.tag) chips.push({ id: "tag", label: p.tag, href: hrefWith(keep, { tag: undefined }) });
   if (p.statut)
     chips.push({
       id: "statut",
@@ -248,7 +235,10 @@ export default async function RecherchePage({
               langues={langues}
               total={result.total}
               adultAllowed={includeAdult}
-              adultHref={hrefWith({ ...(adultParam ? { adult: "1" } : {}), q: query }, { adult: "1" })}
+              adultHref={hrefWith(
+                { ...(adultParam ? { adult: "1" } : {}), q: query },
+                { adult: "1" },
+              )}
               keepQuery
             />
           </div>
@@ -269,7 +259,11 @@ export default async function RecherchePage({
         />
       ) : (
         <>
-          <CatalogueGrid series={result.items} adultAllowed={gateOk} authenticated={Boolean(user)} />
+          <CatalogueGrid
+            series={result.items}
+            adultAllowed={gateOk}
+            authenticated={Boolean(user)}
+          />
           <Pagination
             page={result.page}
             pageCount={result.pageCount}

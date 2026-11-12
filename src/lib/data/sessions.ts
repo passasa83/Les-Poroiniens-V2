@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { accounts, sessionClient } from "@/lib/appwrite";
-import { appwriteMode, clearSessionCookie, SESSION_COOKIE } from "@/lib/auth";
+import { accounts, sessionClient } from "@/server/appwrite";
+import { appwriteMode, clearSessionCookie, SESSION_COOKIE } from "@/server/auth";
 import type { SessionInfo } from "@/lib/types";
 
 /**
@@ -14,8 +14,7 @@ import type { SessionInfo } from "@/lib/types";
 export type { SessionInfo };
 
 export type RevokeResult =
-  | { ok: true; courante: boolean }
-  | { ok: false; code: "inconnue" | "echec" };
+  { ok: true; courante: boolean } | { ok: false; code: "inconnue" | "echec" };
 
 const FOURNISSEURS: Record<string, string> = {
   email: "E-mail et mot de passe",

@@ -18,13 +18,10 @@ export function SeriesCard({
   const cover = series.couverture || `/api/img/cover/${series.slug}`;
   // Variante floue servie par le CDN quand la transformation est activée ;
   // sinon le flou reste appliqué en CSS sur la vignette verrouillée.
-  const src = hidden ? coverBlurUrl(cover) ?? cover : cover;
+  const src = hidden ? (coverBlurUrl(cover) ?? cover) : cover;
 
   return (
-    <Link
-      href={`/serie/${series.slug}`}
-      className="group block"
-    >
+    <Link href={`/serie/${series.slug}`} className="group block">
       <div className="relative overflow-hidden rounded-xl border border-line bg-surface2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

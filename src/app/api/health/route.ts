@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { dataMode } from "@/lib/db";
+import { dataMode } from "@/server/db";
 
 export const runtime = "nodejs";
 

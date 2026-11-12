@@ -20,9 +20,7 @@ export function RankList({
   adultAllowed?: boolean;
   columns?: 1 | 2;
 }) {
-  const rows = series
-    .filter((s) => adultAllowed || s.classification !== "adult")
-    .slice(0, 10);
+  const rows = series.filter((s) => adultAllowed || s.classification !== "adult").slice(0, 10);
 
   if (rows.length === 0) return null;
 

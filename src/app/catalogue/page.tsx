@@ -12,9 +12,14 @@ import {
 import { CatalogueGrid } from "@/components/series/catalogue-card";
 import { FilterDrawer, SortMenu } from "@/components/series/catalogue-controls";
 import { EmptyState, Pagination } from "@/components/ui/kit";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
-import { allSeries, listSeries } from "@/lib/data/series";
-import { SERIES_STATUT_LABELS, SERIES_TYPE_LABELS, type SeriesStatus, type SeriesType } from "@/lib/types";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
+import { catalogueFacets, listSeries } from "@/lib/data/series";
+import {
+  SERIES_STATUT_LABELS,
+  SERIES_TYPE_LABELS,
+  type SeriesStatus,
+  type SeriesType,
+} from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Catalogue",
@@ -49,10 +54,7 @@ function pick(sp: Search, key: string): string | undefined {
 }
 
 /** URL du catalogue avec un ou plusieurs paramètres modifiés (page 1 par défaut). */
-function hrefWith(
-  keep: Record<string, string>,
-  patch: Record<string, string | undefined>,
-): string {
+function hrefWith(keep: Record<string, string>, patch: Record<string, string | undefined>): string {
   const next: Record<string, string> = { ...keep };
   delete next.page;
   for (const [key, value] of Object.entries(patch)) {
@@ -63,11 +65,7 @@ function hrefWith(
   return qs ? `/catalogue?${qs}` : "/catalogue";
 }
 
-export default async function CataloguePage({
-  searchParams,
-}: {
-  searchParams: Promise<Search>;
-}) {
+export default async function CataloguePage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
 
   const parsed = Schema.safeParse({
@@ -97,7 +95,7 @@ export default async function CataloguePage({
   const statut: SeriesStatus | undefined =
     p.statut && p.statut !== "one_shot" ? p.statut : undefined;
 
-  const [result, all] = await Promise.all([
+  const [result, facets] = await Promise.all([
     listSeries({
       q: p.q || undefined,
       genre: p.genre || undefined,
@@ -113,18 +111,10 @@ export default async function CataloguePage({
       page: p.page,
       includeAdult,
     }),
-    allSeries(),
+    catalogueFacets(),
   ]);
 
-  const genres = [...new Set(all.flatMap((s) => s.genres))].sort((a, b) =>
-    a.localeCompare(b, "fr"),
-  );
-  const years = [
-    ...new Set(all.map((s) => s.annee).filter((y): y is number => typeof y === "number")),
-  ].sort((a, b) => b - a);
-  const langues = [...new Set(all.map((s) => s.langue).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, "fr"),
-  );
+  const { genres, years, langues } = facets;
 
   const keep: Record<string, string> = {};
   if (p.q) keep.q = p.q;
@@ -154,11 +144,10 @@ export default async function CataloguePage({
 
   /* Chips de filtres actifs : chacune retire son propre critère. */
   const chips: CatalogueChip[] = [];
-  if (p.q) chips.push({ id: "q", label: `Recherche : ${p.q}`, href: hrefWith(keep, { q: undefined }) });
+  if (p.q)
+    chips.push({ id: "q", label: `Recherche : ${p.q}`, href: hrefWith(keep, { q: undefined }) });
   for (const value of (p.genre ?? "").split(",").filter(Boolean)) {
-    const remaining = (p.genre ?? "")
-      .split(",")
-      .filter((genre) => genre && genre !== value);
+    const remaining = (p.genre ?? "").split(",").filter((genre) => genre && genre !== value);
     chips.push({
       id: `genre:${value}`,
       label: value,
@@ -244,7 +233,11 @@ export default async function CataloguePage({
             searchParams={keep}
             className="mt-6"
           />
-          <CatalogueGrid series={result.items} adultAllowed={gateOk} authenticated={Boolean(user)} />
+          <CatalogueGrid
+            series={result.items}
+            adultAllowed={gateOk}
+            authenticated={Boolean(user)}
+          />
           <Pagination
             page={result.page}
             pageCount={result.pageCount}

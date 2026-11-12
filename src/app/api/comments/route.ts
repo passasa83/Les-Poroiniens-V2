@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { adultGateAccepted } from "@/server/auth";
 import { getChapterById } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
 import {
@@ -12,10 +11,11 @@ import {
   validateComment,
   type CommentThread,
 } from "@/lib/data/comments";
-import { notify } from "@/lib/data/moderation";
+import { notify } from "@/lib/data/notifications";
 import { can } from "@/lib/roles";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, listParValeurs, TABLES } from "@/server/db";
 import type { Comment } from "@/lib/types";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -72,9 +72,19 @@ async function decorate(
 ): Promise<ApiComment[]> {
   const liked = new Set<string>();
   if (userId) {
-    const { items } = await getDb().list<{ target_id: string }>(TABLES.commentLikes, {
+    /* Likes du membre sur les commentaires affichés seulement (avant : ses
+       500 derniers likes, tous fils confondus — au-delà, les cœurs
+       disparaissaient). */
+    const ids: string[] = [];
+    const collect = (list: CommentThread[]) =>
+      list.forEach((t) => {
+        ids.push(t.id);
+        collect(t.children ?? []);
+      });
+    collect(threads);
+    const items = await listParValeurs(TABLES.commentLikes, ids, "target_id", {
       filters: [{ field: "user_id", op: "eq", value: userId }],
-      limit: 500,
+      select: ["target_id"],
     });
     for (const l of items) liked.add(l.target_id);
   }
@@ -91,151 +101,115 @@ async function decorate(
   return walk(threads);
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+export const GET = route({ auth: "optional" }, async ({ user, searchParams }) => {
   const raw = searchParams.get("target") ?? "";
   const sep = raw.indexOf(":");
   const targetType = sep > 0 ? raw.slice(0, sep) : "";
   const targetId = sep > 0 ? raw.slice(sep + 1) : "";
 
   if ((targetType !== "series" && targetType !== "chapter") || !targetId) {
-    return NextResponse.json(
-      { error: "Paramètre target invalide (format type:id).", code: "VALIDATION" },
-      { status: 400 },
-    );
+    fail(400, "Paramètre target invalide (format type:id).", "VALIDATION");
   }
 
   const info = await targetInfo(targetType, targetId);
   if (!info) {
-    return NextResponse.json(
-      { error: "contenu introuvable", code: "NOT_FOUND" },
-      { status: 404 },
-    );
+    fail(404, "contenu introuvable", "NOT_FOUND");
   }
 
   if (info.adult && !(await adultGateAccepted())) {
-    return NextResponse.json(
-      { error: "Ce contenu est réservé aux majeurs.", code: "ADULT_GATE" },
-      { status: 403 },
-    );
+    fail(403, "Ce contenu est réservé aux majeurs.", "ADULT_GATE");
   }
 
-  const user = await getCurrentUser();
   const moderate = user ? can(user.role, "moderate") : false;
   const { roots, total } = await listComments(targetType, targetId);
   const comments = await decorate(roots, user ? user.id : null, moderate);
 
-  return NextResponse.json({ comments, total });
-}
+  return Response.json({ comments, total });
+});
 
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Connexion requise pour commenter.", code: "UNAUTHORIZED" },
-      { status: 401 },
-    );
-  }
+export const POST = route(
+  {
+    auth: "user",
+    unauthorized: "Connexion requise pour commenter.",
+    rateLimit: {
+      key: "comment",
+      by: "ip+user",
+      limit: 10,
+      windowMs: 60_000,
+      message: "trop de commentaires envoyés",
+    },
+    body: CreateSchema,
+    invalidBody: "corps invalide",
+  },
+  async ({ user, body }) => {
+    const { targetType, targetId, parentId, contenu, spoiler } = body;
 
-  const limit = rateLimit(`comment:${clientIp(request)}:${user.id}`, {
-    limit: 10,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "trop de commentaires envoyés", code: "RATE_LIMIT" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
+    const info = await targetInfo(targetType, targetId);
+    if (!info) {
+      fail(404, "contenu introuvable", "NOT_FOUND");
+    }
 
-  let json: unknown;
-  try {
-    json = await request.json();
-  } catch {
-    return NextResponse.json({ error: "corps invalide", code: "VALIDATION" }, { status: 400 });
-  }
+    if (info.adult && !(await adultGateAccepted())) {
+      fail(403, "Ce contenu est réservé aux majeurs.", "ADULT_GATE");
+    }
 
-  const parsed = CreateSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "corps invalide", code: "VALIDATION" }, { status: 400 });
-  }
+    // Vérifie aussi l'existence du parent et son rattachement à la même cible.
+    let parent: Comment | null = null;
+    if (parentId) {
+      parent = await getDb().get(TABLES.comments, parentId);
+      if (!parent || parent.target_type !== targetType || parent.target_id !== targetId) {
+        fail(404, "commentaire parent introuvable", "NOT_FOUND");
+      }
+    }
 
-  const { targetType, targetId, parentId, contenu, spoiler } = parsed.data;
-
-  const info = await targetInfo(targetType, targetId);
-  if (!info) {
-    return NextResponse.json(
-      { error: "contenu introuvable", code: "NOT_FOUND" },
-      { status: 404 },
-    );
-  }
-
-  if (info.adult && !(await adultGateAccepted())) {
-    return NextResponse.json(
-      { error: "Ce contenu est réservé aux majeurs.", code: "ADULT_GATE" },
-      { status: 403 },
-    );
-  }
-
-  // Vérifie aussi l'existence du parent et son rattachement à la même cible.
-  let parent: Comment | null = null;
-  if (parentId) {
-    parent = await getDb().get<Comment>(TABLES.comments, parentId);
-    if (!parent || parent.target_type !== targetType || parent.target_id !== targetId) {
+    const validation = await validateComment({
+      userId: user.id,
+      contenu,
+      parentId: parent ? parent.id : null,
+    });
+    if (!validation.ok) {
       return NextResponse.json(
-        { error: "commentaire parent introuvable", code: "NOT_FOUND" },
-        { status: 404 },
+        { error: rejectionMessage(validation.reason), code: validation.reason.toUpperCase() },
+        { status: 400 },
       );
     }
-  }
 
-  const validation = await validateComment({
-    userId: user.id,
-    contenu,
-    parentId: parent ? parent.id : null,
-  });
-  if (!validation.ok) {
-    return NextResponse.json(
-      { error: rejectionMessage(validation.reason), code: validation.reason.toUpperCase() },
-      { status: 400 },
-    );
-  }
-
-  const comment = await createComment({
-    targetType,
-    targetId,
-    parentId: parent ? parent.id : null,
-    userId: user.id,
-    pseudo: user.pseudo,
-    contenu: validation.contenu,
-  });
-
-  if (spoiler) {
-    await updateComment(comment.id, { spoiler: true });
-    comment.spoiler = true;
-  }
-
-  if (parent && parent.user_id !== user.id) {
-    await notify(parent.user_id, "mention", {
-      kind: "reply",
-      commentId: comment.id,
+    const comment = await createComment({
       targetType,
       targetId,
+      parentId: parent ? parent.id : null,
+      userId: user.id,
       pseudo: user.pseudo,
-      preview: comment.contenu.slice(0, 120),
+      contenu: validation.contenu,
     });
-  }
 
-  return NextResponse.json(
-    {
-      comment: {
-        ...comment,
-        liked: false,
-        canEdit: true,
-        canDelete: true,
-        children: [],
+    if (spoiler) {
+      await updateComment(comment.id, { spoiler: true });
+      comment.spoiler = true;
+    }
+
+    if (parent && parent.user_id !== user.id) {
+      await notify(parent.user_id, "mention", {
+        kind: "reply",
+        commentId: comment.id,
+        targetType,
+        targetId,
+        pseudo: user.pseudo,
+        preview: comment.contenu.slice(0, 120),
+      });
+    }
+
+    return NextResponse.json(
+      {
+        comment: {
+          ...comment,
+          liked: false,
+          canEdit: true,
+          canDelete: true,
+          children: [],
+        },
       },
-    },
-    { status: 201 },
-  );
-}
+      { status: 201 },
+    );
+  },
+);

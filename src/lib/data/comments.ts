@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb, rowId, TABLES } from "@/lib/db";
+import { getDb, rowId, TABLES } from "@/server/db";
 import type { Comment } from "@/lib/types";
 
 export interface CommentThread extends Comment {
@@ -32,7 +32,7 @@ export async function validateComment(input: {
   // Blocage des liens pour les comptes récents
   if (input.isNewcomer && LINK_PATTERN.test(contenu)) return { ok: false, reason: "lien" };
 
-  const recent = await getDb().list<Comment>(TABLES.comments, {
+  const recent = await getDb().list(TABLES.comments, {
     filters: [{ field: "user_id", op: "eq", value: input.userId }],
     order: { field: "created_at", dir: "desc" },
     limit: 5,
@@ -49,7 +49,7 @@ export async function listComments(
   targetType: Comment["target_type"],
   targetId: string,
 ): Promise<{ roots: CommentThread[]; total: number }> {
-  const { items, total } = await getDb().list<Comment>(TABLES.comments, {
+  const { items, total } = await getDb().list(TABLES.comments, {
     filters: [
       { field: "target_type", op: "eq", value: targetType },
       { field: "target_id", op: "eq", value: targetId },
@@ -97,12 +97,12 @@ export async function createComment(input: {
     created_at: now,
     updated_at: now,
   };
-  await getDb().create<Comment>(TABLES.comments, id, comment as unknown as Record<string, unknown>);
+  await getDb().create(TABLES.comments, id, comment);
   return comment;
 }
 
 export async function getComment(id: string): Promise<Comment | null> {
-  return getDb().get<Comment>(TABLES.comments, id);
+  return getDb().get(TABLES.comments, id);
 }
 
 /** Édition : fenêtre de 15 minutes pour l'auteur. */
@@ -115,11 +115,11 @@ export async function updateComment(
   const data: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.contenu !== undefined) data.contenu = sanitizeComment(patch.contenu);
   if (patch.spoiler !== undefined) data.spoiler = patch.spoiler;
-  return getDb().update<Comment>(TABLES.comments, id, data);
+  return getDb().update(TABLES.comments, id, data);
 }
 
 export async function softDeleteComment(id: string): Promise<void> {
-  await getDb().update<Comment>(TABLES.comments, id, { statut: "supprime" });
+  await getDb().update(TABLES.comments, id, { statut: "supprime" });
 }
 
 export function canEditComment(comment: Comment, userId: string, now = Date.now()): boolean {
@@ -134,14 +134,14 @@ export async function toggleLike(
 ): Promise<{ likes: number; liked: boolean }> {
   const db = getDb();
   const likeId = rowId(userId, commentId);
-  const existing = await db.get<{ id: string }>(TABLES.commentLikes, likeId);
+  const existing = await db.get(TABLES.commentLikes, likeId);
   const comment = await getComment(commentId);
   if (!comment) return { likes: 0, liked: false };
 
   if (existing) {
     await db.remove(TABLES.commentLikes, likeId);
     const likes = Math.max(0, comment.likes - 1);
-    await db.update<Comment>(TABLES.comments, commentId, { likes });
+    await db.update(TABLES.comments, commentId, { likes });
     return { likes, liked: false };
   }
   await db.create(TABLES.commentLikes, likeId, {
@@ -150,6 +150,6 @@ export async function toggleLike(
     created_at: new Date().toISOString(),
   });
   const likes = comment.likes + 1;
-  await db.update<Comment>(TABLES.comments, commentId, { likes });
+  await db.update(TABLES.comments, commentId, { likes });
   return { likes, liked: true };
 }

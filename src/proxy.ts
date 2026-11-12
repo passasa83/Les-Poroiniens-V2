@@ -1,11 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getChapter } from "@/lib/data/chapters";
-import { getSeriesBySlug } from "@/lib/data/series";
+import { findSeriesBySlug } from "@/lib/data/series";
 
 /**
- * Proxy Next 16 (ex-middleware) : contrôle d'accès rapide sur les routes
- * privées. Les vérifications de rôle fine et +18 restent côté serveur, dans
- * les layouts/pages et les routes API (jamais de confiance au client).
+ * Proxy Next 16 (ex-middleware).
+ *
+ * 1. Routes privées : redirection vers la connexion sans cookie de session.
+ *    Rôles fins et +18 restent vérifiés côté serveur (pages, routes API).
+ * 2. `/serie/*` chargé **en page complète** : vrai 404 pour une série ou un
+ *    chapitre absent, et connexion exigée pour une série +18 sans session.
+ *    Ces deux réponses doivent partir avant le streaming (après lui, le statut
+ *    reste 200 — cf. doc Next « Status codes »).
+ *
+ * Les navigations client et les prefetch (en-têtes `rsc` /
+ * `next-router-prefetch`) ne touchent jamais la base : la page y traite
+ * elle-même l'absence (`notFound()`) et le +18 (porte floutée, aucun contenu
+ * servi). Le catalogue prefetchait jusqu'ici une requête Appwrite par lien.
  */
 const PROTECTED = [
   "/compte",
@@ -18,27 +28,20 @@ const PROTECTED = [
   "/gerant",
 ];
 
-/* ── Vrai 404 ────────────────────────────────────────────────────── */
+const SESSION_COOKIE = "lp_session";
 
 /**
  * Chemin volontairement non routé : Next y rend `app/not-found.tsx` (layout
- * complet, charte du site) **avec un statut HTTP 404 réel**. C'est le seul
- * moyen d'obtenir un 404 non streamé sans toucher au rendu des pages
- * existantes : sous streaming, `notFound()` laisse un statut 200 (cf. README,
- * « 404 streamés ») que l'on compensait jusqu'ici par un simple `noindex`.
+ * complet, charte du site) avec un statut HTTP 404 réel.
  */
 const INTROUVABLE = "/__lp_page_introuvable__";
 
 /** `/serie/{slug}` et `/serie/{slug}/chapitre-{n}` (ou `/serie/{slug}/{n}`). */
 const SERIE_ROUTE = /^\/serie\/([^/]+)(?:\/([^/]+))?$/;
 
-/** `10`, `8.5`, `chapitre-10`, `chapitre-8.5` → nombre fini strictement
- *  positif (`numero` est un `double` en base). Le proxy doit accepter les
- * décimaux, sinon leurs URLs basculent en 404 réel. */
-function parseNumero(segment: string | null): number | null {
-  if (segment === null) return null;
-  const value = segment.replace(/^chapitre-/i, "");
-  const numero = Number(value);
+/** `10`, `8.5`, `chapitre-10`, `chapitre-8.5` → nombre fini strictement positif. */
+function parseNumero(segment: string): number | null {
+  const numero = Number(segment.replace(/^chapitre-/i, ""));
   return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
@@ -50,104 +53,90 @@ function decode(segment: string): string {
   }
 }
 
+/** Requête de navigation client ou de prefetch (charge utile RSC, pas un document). */
+function isRouterRequest(request: NextRequest): boolean {
+  return request.headers.has("rsc") || request.headers.has("next-router-prefetch");
+}
+
+/* ── Contrôle d'une page /serie/* ─────────────────────────────────────── */
+
+type Verdict = { absent: boolean; adult: boolean };
+
 /**
- * Cache court des résultats d'existence : le catalogue déclenche une requête
- * par lien prefetché, on ne doit pas multiplier les allers-retours base.
- * Positif 60 s (création rarement suivie d'un lien immédiat), négatif 10 s
- * (une publication récente ne doit pas rester « introuvable » longtemps).
+ * Cache court par instance : positif 60 s, négatif 10 s (une publication
+ * récente ne doit pas rester « introuvable » longtemps).
  */
 const TTL_POSITIF = 60_000;
 const TTL_NEGATIF = 10_000;
 const MAX_ENTREES = 500;
-const existence = new Map<string, { expires: number; absent: boolean }>();
+const verdicts = new Map<string, { expires: number; verdict: Verdict }>();
 
-function enCache(cle: string): boolean | null {
-  const hit = existence.get(cle);
-  return hit && hit.expires > Date.now() ? hit.absent : null;
+function verdictEnCache(cle: string): Verdict | null {
+  const hit = verdicts.get(cle);
+  return hit && hit.expires > Date.now() ? hit.verdict : null;
 }
 
-function metEnCache(cle: string, absent: boolean): void {
-  if (existence.size >= MAX_ENTREES) existence.clear();
-  existence.set(cle, {
-    absent,
-    expires: Date.now() + (absent ? TTL_NEGATIF : TTL_POSITIF),
+function mettreEnCache(cle: string, verdict: Verdict): void {
+  if (verdicts.size >= MAX_ENTREES) verdicts.clear();
+  verdicts.set(cle, {
+    verdict,
+    expires: Date.now() + (verdict.absent ? TTL_NEGATIF : TTL_POSITIF),
   });
 }
 
 /**
- * Contrôle d'existence avant rendu : renvoie `true` uniquement quand la
- * ressource est **absente**. Tout doute (base indisponible, segment illisible)
- * laisse la main au rendu normal : la page ne doit jamais disparaître à cause
- * d'une erreur technique, et `loading.tsx` / la reprise de lecture ne sont pas
- * concernés (la page réelle n'est pas modifiée).
+ * Verdict pour une URL de série, `null` en cas de doute (base indisponible,
+ * URL hors motif) : la page s'affiche alors normalement — elle ne doit jamais
+ * disparaître à cause d'une erreur technique.
  */
-async function ressourceAbsente(pathname: string): Promise<boolean> {
+async function verdictSerie(pathname: string): Promise<Verdict | null> {
   const match = SERIE_ROUTE.exec(pathname);
-  if (!match) return false;
-
+  if (!match) return null;
   const slug = decode(match[1]);
+  if (!slug) return null;
   const segment = match[2] === undefined ? null : decode(match[2]);
-  if (!slug) return false;
-
-  const numero = parseNumero(segment);
+  const numero = segment === null ? null : parseNumero(segment);
   // Segment non numérique : aucune page de chapitre ne peut correspondre.
-  if (segment !== null && numero === null) return true;
+  if (segment !== null && numero === null) return { absent: true, adult: false };
 
   const cle = `${slug}/${numero ?? ""}`;
-  const hit = enCache(cle);
-  if (hit !== null) return hit;
+  const hit = verdictEnCache(cle);
+  if (hit) return hit;
 
   try {
-    const serie = await getSeriesBySlug(slug);
-    const chapitreOk = serie && numero !== null ? await getChapter(serie.id, numero) : null;
-    const absent = !serie || (numero !== null && !chapitreOk);
-    metEnCache(cle, absent);
-    return absent;
+    const serie = await findSeriesBySlug(slug);
+    const chapitre = serie && numero !== null ? await getChapter(serie.id, numero) : null;
+    const verdict: Verdict = {
+      absent: !serie || (numero !== null && !chapitre),
+      adult: serie?.classification === "adult",
+    };
+    mettreEnCache(cle, verdict);
+    return verdict;
   } catch {
-    // Fail-open : sans base, on sert la page (qui affichera son propre état).
-    return false;
+    return null;
   }
 }
 
+function versConnexion(request: NextRequest, pathname: string): NextResponse {
+  const next = encodeURIComponent(`${pathname}${request.nextUrl.search}`);
+  return NextResponse.redirect(new URL(`/connexion?next=${next}`, request.url));
+}
+
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.url ? new URL(request.url) : { pathname: "" };
-  const needsAuth = PROTECTED.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
-  if (needsAuth) {
-    if (!request.cookies.has("lp_session")) {
-      const next = encodeURIComponent(`${pathname}${request.nextUrl.search}`);
-      return NextResponse.redirect(new URL(`/connexion?next=${next}`, request.url));
-    }
-    return NextResponse.next();
+  const { pathname } = request.nextUrl;
+  const connecte = request.cookies.has(SESSION_COOKIE);
+
+  if (PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return connecte ? NextResponse.next() : versConnexion(request, pathname);
   }
 
-  // +18 réservé aux membres. Sans cookie de session, l'utilisateur
-  // est forcément visiteur → redirection immédiate vers la connexion. (Un
-  // redirect() dans la page arriverait trop tard : le layout a déjà streamé
-  // l'en-tête en 200.) Avec cookie, la page tranche (session expirée ou
-  // membre sans opt-in → modale adaptée, jamais de contenu servi).
-  if (pathname.startsWith("/serie/") && !request.cookies.has("lp_session")) {
-    const match = SERIE_ROUTE.exec(pathname);
-    const slug = match ? decode(match[1]) : "";
-    if (slug) {
-      try {
-        const serie = await getSeriesBySlug(slug);
-        if (serie && serie.classification === "adult") {
-          const next = encodeURIComponent(`${pathname}${request.nextUrl.search}`);
-          return NextResponse.redirect(new URL(`/connexion?next=${next}`, request.url));
-        }
-      } catch {
-        // Fail-open : sans base, on sert la page (qui affichera son propre état).
-      }
-    }
-  }
+  if (!pathname.startsWith("/serie/") || isRouterRequest(request)) return NextResponse.next();
 
-  // série ou chapitre inexistant → 404 réel (voir INTROUVABLE).
-  if (pathname.startsWith("/serie/") && (await ressourceAbsente(pathname))) {
-    return NextResponse.rewrite(new URL(INTROUVABLE, request.url));
-  }
-
+  const verdict = await verdictSerie(pathname);
+  if (!verdict) return NextResponse.next();
+  if (verdict.absent) return NextResponse.rewrite(new URL(INTROUVABLE, request.url));
+  // +18 réservé aux membres : sans session, l'utilisateur est forcément visiteur.
+  if (verdict.adult && !connecte) return versConnexion(request, pathname);
   return NextResponse.next();
 }
 

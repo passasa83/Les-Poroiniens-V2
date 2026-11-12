@@ -44,10 +44,9 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
     setBusyKey(entry.key);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/reading/history?entry=${encodeURIComponent(entry.chapterId)}`,
-        { method: "DELETE" },
-      );
+      const res = await fetch(`/api/reading/history?entry=${encodeURIComponent(entry.chapterId)}`, {
+        method: "DELETE",
+      });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         setError(data.error || "Impossible de supprimer cette entrée.");
@@ -155,9 +154,7 @@ export function HistoriqueClient({ groupes }: { groupes: HistoriqueGroupe[] }) {
                       {entry.completed && <Badge tone="ok">Terminé</Badge>}
                     </div>
                     <p className="text-xs text-muted">
-                      {entry.numero !== null
-                        ? `${libelleUnite(entry.numero, entry.unite)} · `
-                        : ""}
+                      {entry.numero !== null ? `${libelleUnite(entry.numero, entry.unite)} · ` : ""}
                       page {Math.max(entry.page, 1)} ·{" "}
                       {new Date(entry.readAt).toLocaleTimeString("fr-FR", {
                         hour: "2-digit",

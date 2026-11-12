@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FolderUp } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card } from "@/components/ui/kit";
-import { ChapterActions, DeleteSeriesButton, ArchiveSeriesButton, SeriesForm } from "@/components/series/series-actions";
+import { ArchiveSeriesButton } from "@/components/series/actions/archive-button";
+import { ChapterActions } from "@/components/series/actions/chapter-actions";
+import { DeleteSeriesButton } from "@/components/series/actions/delete-button";
+import { SeriesForm } from "@/components/series/actions/series-form";
 import { LnChapterEditor, LnNewChapter } from "@/components/series/ln-content";
 import { listChapters } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
-import { compteUnites, libelleUniteSingulier, libelleUnitesPluriel, titreUnite } from "@/lib/format";
+import {
+  compteUnites,
+  libelleUniteSingulier,
+  libelleUnitesPluriel,
+  titreUnite,
+} from "@/lib/format";
 import { SERIES_STATUT_LABELS, type Chapter, type SeriesStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -38,11 +46,7 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 /** Édition d'une fiche série + chapitres + archivage / suppression (Gérant). */
-export default async function GerantSeriePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function GerantSeriePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!can(user?.role, "edit_series")) {
     return <AccessDenied required="owner" hint="La gestion des séries est réservée au Gérant." />;
@@ -63,7 +67,10 @@ export default async function GerantSeriePage({
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/gerant/series" className="link-muted inline-flex items-center gap-1.5 text-sm">
+          <Link
+            href="/gerant/series"
+            className="link-muted inline-flex items-center gap-1.5 text-sm"
+          >
             <ArrowLeft className="size-3.5" /> Répertoire des séries
           </Link>
           <h1 className="section-title mt-2">{series.titre}</h1>
@@ -135,9 +142,7 @@ export default async function GerantSeriePage({
                 <th className="px-4 py-3 font-semibold">N°</th>
                 <th className="px-4 py-3 font-semibold">Titre</th>
                 <th className="px-4 py-3 font-semibold">Statut</th>
-                <th className="px-4 py-3 text-right font-semibold">
-                  {isLn ? "Texte" : "Pages"}
-                </th>
+                <th className="px-4 py-3 text-right font-semibold">{isLn ? "Texte" : "Pages"}</th>
                 <th className="px-4 py-3 font-semibold">Publication</th>
                 <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>

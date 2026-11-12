@@ -134,7 +134,10 @@ export function UsersPanel({ rows, me }: { rows: UserRow[]; me: { id: string; ro
                   : undefined;
 
               return (
-                <tr key={row.userId} className="border-b border-line last:border-0 hover:bg-surface2/60">
+                <tr
+                  key={row.userId}
+                  className="border-b border-line last:border-0 hover:bg-surface2/60"
+                >
                   <td className="px-4 py-3">
                     <span className="font-medium text-fg">{row.pseudo}</span>
                     {isSelf && <span className="ml-2 text-xs text-muted">(vous)</span>}
@@ -154,7 +157,11 @@ export function UsersPanel({ rows, me }: { rows: UserRow[]; me: { id: string; ro
                       onChange={(e) => changeRole(row, e.target.value as Role)}
                     >
                       {ROLE_OPTIONS.map((role) => (
-                        <option key={role} value={role} disabled={!meIsOwner && HIGH_ROLES.includes(role)}>
+                        <option
+                          key={role}
+                          value={role}
+                          disabled={!meIsOwner && HIGH_ROLES.includes(role)}
+                        >
                           {ROLE_LABELS[role]}
                         </option>
                       ))}
@@ -167,7 +174,11 @@ export function UsersPanel({ rows, me }: { rows: UserRow[]; me: { id: string; ro
                   <td className="px-4 py-3 text-right">
                     <button
                       type="button"
-                      className={row.banni ? "btn-secondary px-2 py-1 text-xs" : "btn-danger px-2 py-1 text-xs"}
+                      className={
+                        row.banni
+                          ? "btn-secondary px-2 py-1 text-xs"
+                          : "btn-danger px-2 py-1 text-xs"
+                      }
                       disabled={busyId !== null || isSelf}
                       title={isSelf ? "Impossible de bannir son propre compte." : undefined}
                       onClick={() => toggleBan(row)}
@@ -198,10 +209,10 @@ export function UsersPanel({ rows, me }: { rows: UserRow[]; me: { id: string; ro
       </Card>
 
       <p className="text-xs text-muted">
-        Le drapeau <code className="font-mono">banni</code> est enregistré sur le profil
-        (colonne <code className="font-mono">profiles.banni</code>). Aucune route ne le bloque
-        encore : l&apos;application du bannissement (interdiction de commenter ou de signaler,
-        révocation de session) reste à brancher dans les routes concernées.
+        Le drapeau <code className="font-mono">banni</code> est enregistré sur le profil (colonne{" "}
+        <code className="font-mono">profiles.banni</code>). Aucune route ne le bloque encore :
+        l&apos;application du bannissement (interdiction de commenter ou de signaler, révocation de
+        session) reste à brancher dans les routes concernées.
       </p>
     </div>
   );

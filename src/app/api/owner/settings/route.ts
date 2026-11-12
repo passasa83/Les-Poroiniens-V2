@@ -1,17 +1,11 @@
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit, getSettings, setSetting } from "@/lib/data/moderation";
 import { imageEnv } from "@/lib/media";
 import { discordConfigured } from "@/lib/discord";
 import { turnstileEnabled } from "@/lib/turnstile";
+import { route } from "@/server/http";
 
 export const runtime = "nodejs";
-
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
-}
 
 /** Cles configurables depuis l'espace Gérant. */
 const settingsInput = z.object({
@@ -60,112 +54,100 @@ function secretStatus(): Record<string, { present: boolean; label: string }> {
 }
 
 /** GET /api/owner/settings — paramètres du site + état masqué des secrets (Gérant). */
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "site_settings")) {
-    return jsonError("Configuration réservée au Gérant.", "owner_only", 403);
-  }
-
-  const settings = await getSettings();
-  const secrets = secretStatus();
-  return Response.json({
-    settings: {
-      site_name: settings.site_name ?? "",
-      announcement: settings.announcement ?? "",
-      registration_open: settings.registration_open !== "0",
-      maintenance: settings.maintenance === "1",
-      legal_mentions: settings.legal_mentions ?? "",
-      legal_confidentialite: settings.legal_confidentialite ?? "",
-      social_discord: settings.social_discord ?? "",
-      social_x: settings.social_x ?? "",
-      social_youtube: settings.social_youtube ?? "",
-      adresses_secours: settings.adresses_secours ?? "",
-      nouveautes_serie: settings.nouveautes_serie ?? "",
-      annonce_bandeau: settings.annonce_bandeau === "1",
-    },
-    secrets: Object.fromEntries(
-      Object.entries(secrets).map(([key, value]) => [
-        key,
-        { label: value.label, present: value.present },
-      ]),
-    ),
-  });
-}
+export const GET = route(
+  {
+    auth: "site_settings",
+    forbidden: "Configuration réservée au Gérant.",
+  },
+  async () => {
+    const settings = await getSettings();
+    const secrets = secretStatus();
+    return Response.json({
+      settings: {
+        site_name: settings.site_name ?? "",
+        announcement: settings.announcement ?? "",
+        registration_open: settings.registration_open !== "0",
+        maintenance: settings.maintenance === "1",
+        legal_mentions: settings.legal_mentions ?? "",
+        legal_confidentialite: settings.legal_confidentialite ?? "",
+        social_discord: settings.social_discord ?? "",
+        social_x: settings.social_x ?? "",
+        social_youtube: settings.social_youtube ?? "",
+        adresses_secours: settings.adresses_secours ?? "",
+        nouveautes_serie: settings.nouveautes_serie ?? "",
+        annonce_bandeau: settings.annonce_bandeau === "1",
+      },
+      secrets: Object.fromEntries(
+        Object.entries(secrets).map(([key, value]) => [
+          key,
+          { label: value.label, present: value.present },
+        ]),
+      ),
+    });
+  },
+);
 
 /** PATCH /api/owner/settings — mise à jour (Gérant) + journal d'audit. */
-export async function PATCH(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "site_settings")) {
-    return jsonError("Configuration réservée au Gérant.", "owner_only", 403);
-  }
+export const PATCH = route(
+  {
+    auth: "site_settings",
+    forbidden: "Configuration réservée au Gérant.",
+    rateLimit: { key: "owner:settings", limit: 30, windowMs: 60_000, message: "Trop de requêtes." },
+    body: settingsInput,
+    invalidBody: "issue",
+  },
+  async ({ user, body, ip }) => {
+    const incoming = body;
+    const before = await getSettings();
 
-  const ip = clientIp(request);
-  const limit = rateLimit(`owner:settings:${ip}`, { limit: 30, windowMs: 60_000 });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
+    const toStore: Record<string, string> = {};
+    if (incoming.site_name !== undefined) toStore.site_name = incoming.site_name;
+    if (incoming.announcement !== undefined) toStore.announcement = incoming.announcement;
+    if (incoming.registration_open !== undefined) {
+      toStore.registration_open = incoming.registration_open ? "1" : "0";
+    }
+    if (incoming.maintenance !== undefined) {
+      toStore.maintenance = incoming.maintenance ? "1" : "0";
+    }
+    if (incoming.legal_mentions !== undefined) toStore.legal_mentions = incoming.legal_mentions;
+    if (incoming.legal_confidentialite !== undefined) {
+      toStore.legal_confidentialite = incoming.legal_confidentialite;
+    }
+    if (incoming.social_discord !== undefined) toStore.social_discord = incoming.social_discord;
+    if (incoming.social_x !== undefined) toStore.social_x = incoming.social_x;
+    if (incoming.social_youtube !== undefined) toStore.social_youtube = incoming.social_youtube;
+    if (incoming.adresses_secours !== undefined) {
+      toStore.adresses_secours = incoming.adresses_secours;
+    }
+    if (incoming.nouveautes_serie !== undefined) {
+      toStore.nouveautes_serie = incoming.nouveautes_serie;
+    }
+    if (incoming.annonce_bandeau !== undefined) {
+      toStore.annonce_bandeau = incoming.annonce_bandeau ? "1" : "0";
+    }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
-  const parsed = settingsInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? "Champs invalides.", "invalid_body", 400);
-  }
+    for (const [cle, valeur] of Object.entries(toStore)) {
+      await setSetting(cle, valeur);
+    }
 
-  const incoming = parsed.data;
-  const before = await getSettings();
+    const changed = Object.fromEntries(
+      Object.entries(toStore)
+        .filter(([cle, valeur]) => (before[cle] ?? "") !== valeur)
+        .map(([cle]) => [cle, { avant: before[cle] ?? null, apres: toStore[cle] }]),
+    );
 
-  const toStore: Record<string, string> = {};
-  if (incoming.site_name !== undefined) toStore.site_name = incoming.site_name;
-  if (incoming.announcement !== undefined) toStore.announcement = incoming.announcement;
-  if (incoming.registration_open !== undefined) {
-    toStore.registration_open = incoming.registration_open ? "1" : "0";
-  }
-  if (incoming.maintenance !== undefined) {
-    toStore.maintenance = incoming.maintenance ? "1" : "0";
-  }
-  if (incoming.legal_mentions !== undefined) toStore.legal_mentions = incoming.legal_mentions;
-  if (incoming.legal_confidentialite !== undefined) {
-    toStore.legal_confidentialite = incoming.legal_confidentialite;
-  }
-  if (incoming.social_discord !== undefined) toStore.social_discord = incoming.social_discord;
-  if (incoming.social_x !== undefined) toStore.social_x = incoming.social_x;
-  if (incoming.social_youtube !== undefined) toStore.social_youtube = incoming.social_youtube;
-  if (incoming.adresses_secours !== undefined) {
-    toStore.adresses_secours = incoming.adresses_secours;
-  }
-  if (incoming.nouveautes_serie !== undefined) {
-    toStore.nouveautes_serie = incoming.nouveautes_serie;
-  }
-  if (incoming.annonce_bandeau !== undefined) {
-    toStore.annonce_bandeau = incoming.annonce_bandeau ? "1" : "0";
-  }
+    if (Object.keys(changed).length > 0) {
+      await audit({
+        actorId: user.id,
+        actorPseudo: user.pseudo,
+        action: "settings.update",
+        cible: "settings:site",
+        avant: Object.fromEntries(Object.keys(changed).map((k) => [k, before[k] ?? null])),
+        apres: Object.fromEntries(Object.keys(changed).map((k) => [k, toStore[k]])),
+        ip,
+      });
+    }
 
-  for (const [cle, valeur] of Object.entries(toStore)) {
-    await setSetting(cle, valeur);
-  }
-
-  const changed = Object.fromEntries(
-    Object.entries(toStore)
-      .filter(([cle, valeur]) => (before[cle] ?? "") !== valeur)
-      .map(([cle]) => [cle, { avant: before[cle] ?? null, apres: toStore[cle] }]),
-  );
-
-  if (Object.keys(changed).length > 0) {
-    await audit({
-      actorId: user.id,
-      actorPseudo: user.pseudo,
-      action: "settings.update",
-      cible: "settings:site",
-      avant: Object.fromEntries(Object.keys(changed).map((k) => [k, before[k] ?? null])),
-      apres: Object.fromEntries(Object.keys(changed).map((k) => [k, toStore[k]])),
-      ip,
-    });
-  }
-
-  return Response.json({ ok: true, changed: Object.keys(changed) });
-}
+    return Response.json({ ok: true, changed: Object.keys(changed) });
+  },
+);

@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import {
   canEditComment,
   getComment,
@@ -10,14 +8,13 @@ import {
   validateComment,
 } from "@/lib/data/comments";
 import { can } from "@/lib/roles";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
 
 const PatchSchema = z.object({
   contenu: z.string().min(1),
 });
-
-type Params = { params: Promise<{ id: string }> };
 
 function rejectionMessage(reason: string): string {
   switch (reason) {
@@ -36,123 +33,81 @@ function rejectionMessage(reason: string): string {
   }
 }
 
-export async function PATCH(request: Request, { params }: Params) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Connexion requise.", code: "UNAUTHORIZED" },
-      { status: 401 },
-    );
-  }
+export const PATCH = route(
+  {
+    auth: "user",
+    rateLimit: {
+      key: "comment-edit",
+      by: "ip+user",
+      limit: 30,
+      windowMs: 60_000,
+      message: "trop de requêtes",
+    },
+    body: PatchSchema,
+    invalidBody: "corps invalide",
+  },
+  async ({ params, user, body }) => {
+    const { id } = params;
+    const comment = await getComment(id);
+    if (!comment || comment.statut === "supprime") {
+      fail(404, "commentaire introuvable", "NOT_FOUND");
+    }
 
-  const limit = rateLimit(`comment-edit:${clientIp(request)}:${user.id}`, {
-    limit: 30,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "trop de requêtes", code: "RATE_LIMIT" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
+    const moderate = can(user.role, "moderate");
+    if (comment.user_id !== user.id) {
+      fail(403, "Vous ne pouvez modifier que vos propres commentaires.", "FORBIDDEN");
+    }
+    if (!moderate && !canEditComment(comment, user.id)) {
+      fail(403, "Délai de modification dépassé (15 minutes).", "EDIT_WINDOW");
+    }
 
-  const { id } = await params;
-  const comment = await getComment(id);
-  if (!comment || comment.statut === "supprime") {
-    return NextResponse.json(
-      { error: "commentaire introuvable", code: "NOT_FOUND" },
-      { status: 404 },
-    );
-  }
+    const validation = await validateComment({
+      userId: user.id,
+      contenu: body.contenu,
+      parentId: comment.parent_id,
+    });
+    if (!validation.ok) {
+      return NextResponse.json(
+        { error: rejectionMessage(validation.reason), code: validation.reason.toUpperCase() },
+        { status: 400 },
+      );
+    }
 
-  const moderate = can(user.role, "moderate");
-  if (comment.user_id !== user.id) {
-    return NextResponse.json(
-      { error: "Vous ne pouvez modifier que vos propres commentaires.", code: "FORBIDDEN" },
-      { status: 403 },
-    );
-  }
-  if (!moderate && !canEditComment(comment, user.id)) {
-    return NextResponse.json(
-      { error: "Délai de modification dépassé (15 minutes).", code: "EDIT_WINDOW" },
-      { status: 403 },
-    );
-  }
+    const updated = await updateComment(comment.id, { contenu: validation.contenu });
+    if (!updated) {
+      fail(404, "modification impossible", "NOT_FOUND");
+    }
 
-  let json: unknown;
-  try {
-    json = await request.json();
-  } catch {
-    return NextResponse.json({ error: "corps invalide", code: "VALIDATION" }, { status: 400 });
-  }
+    return NextResponse.json({
+      comment: { ...updated, liked: false, canEdit: true, canDelete: true, children: [] },
+    });
+  },
+);
 
-  const parsed = PatchSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "corps invalide", code: "VALIDATION" }, { status: 400 });
-  }
+export const DELETE = route(
+  {
+    auth: "user",
+    rateLimit: {
+      key: "comment-del",
+      by: "ip+user",
+      limit: 30,
+      windowMs: 60_000,
+      message: "trop de requêtes",
+    },
+  },
+  async ({ params, user }) => {
+    const { id } = params;
+    const comment = await getComment(id);
+    if (!comment || comment.statut === "supprime") {
+      fail(404, "commentaire introuvable", "NOT_FOUND");
+    }
 
-  const validation = await validateComment({
-    userId: user.id,
-    contenu: parsed.data.contenu,
-    parentId: comment.parent_id,
-  });
-  if (!validation.ok) {
-    return NextResponse.json(
-      { error: rejectionMessage(validation.reason), code: validation.reason.toUpperCase() },
-      { status: 400 },
-    );
-  }
+    const moderate = can(user.role, "moderate");
+    if (comment.user_id !== user.id && !moderate) {
+      fail(403, "Suppression non autorisée.", "FORBIDDEN");
+    }
 
-  const updated = await updateComment(comment.id, { contenu: validation.contenu });
-  if (!updated) {
-    return NextResponse.json(
-      { error: "modification impossible", code: "NOT_FOUND" },
-      { status: 404 },
-    );
-  }
-
-  return NextResponse.json({
-    comment: { ...updated, liked: false, canEdit: true, canDelete: true, children: [] },
-  });
-}
-
-export async function DELETE(request: Request, { params }: Params) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Connexion requise.", code: "UNAUTHORIZED" },
-      { status: 401 },
-    );
-  }
-
-  const limit = rateLimit(`comment-del:${clientIp(request)}:${user.id}`, {
-    limit: 30,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "trop de requêtes", code: "RATE_LIMIT" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
-
-  const { id } = await params;
-  const comment = await getComment(id);
-  if (!comment || comment.statut === "supprime") {
-    return NextResponse.json(
-      { error: "commentaire introuvable", code: "NOT_FOUND" },
-      { status: 404 },
-    );
-  }
-
-  const moderate = can(user.role, "moderate");
-  if (comment.user_id !== user.id && !moderate) {
-    return NextResponse.json(
-      { error: "Suppression non autorisée.", code: "FORBIDDEN" },
-      { status: 403 },
-    );
-  }
-
-  await softDeleteComment(comment.id);
-  return NextResponse.json({ ok: true });
-}
+    await softDeleteComment(comment.id);
+    return NextResponse.json({ ok: true });
+  },
+);

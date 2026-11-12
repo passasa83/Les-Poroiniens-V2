@@ -1,17 +1,11 @@
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
 import { getSeriesById } from "@/lib/data/series";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
 import type { Recommendation } from "@/lib/types";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
-
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
-}
 
 const patchInput = z.object({
   placement: z.enum(["home", "series", "end_chapter"]).optional(),
@@ -36,100 +30,85 @@ function snapshot(reco: Recommendation): Record<string, unknown> {
 }
 
 async function find(id: string): Promise<Recommendation | null> {
-  return getDb().get<Recommendation>(TABLES.recommendations, id);
+  return getDb().get(TABLES.recommendations, id);
 }
 
 /** PATCH /api/admin/recommendations/[id] — édition (admin+). */
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "manage_recommendations")) {
-    return jsonError("Réservé aux administrateurs.", "forbidden", 403);
-  }
+export const PATCH = route(
+  {
+    auth: "manage_recommendations",
+    forbidden: "Réservé aux administrateurs.",
+    rateLimit: {
+      key: "admin:reco:patch",
+      limit: 60,
+      windowMs: 60_000,
+      message: "Trop de requêtes.",
+    },
+    body: patchInput,
+    invalidBody: "issue",
+  },
+  async ({ body, params, user, ip }) => {
+    const { id } = params;
+    const existing = await find(id);
+    if (!existing) fail(404, "Recommandation introuvable.", "not_found");
 
-  const ip = clientIp(request);
-  const limit = rateLimit(`admin:reco:patch:${ip}`, { limit: 60, windowMs: 60_000 });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
+    const patch = body;
+    if (patch.series_id) {
+      const series = await getSeriesById(patch.series_id);
+      if (!series) fail(404, "Série introuvable.", "not_found");
+    }
 
-  const existing = await find(id);
-  if (!existing) return jsonError("Recommandation introuvable.", "not_found", 404);
+    const debut = patch.debut !== undefined ? patch.debut : existing.debut;
+    const fin = patch.fin !== undefined ? patch.fin : existing.fin;
+    if (debut && fin && new Date(debut) > new Date(fin)) {
+      fail(400, "La date de fin précède la date de début.", "invalid_period");
+    }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
-  const parsed = patchInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? "Champs invalides.", "invalid_body", 400);
-  }
+    const updated = await getDb().update(TABLES.recommendations, id, patch);
 
-  const patch = parsed.data;
-  if (patch.series_id) {
-    const series = await getSeriesById(patch.series_id);
-    if (!series) return jsonError("Série introuvable.", "not_found", 404);
-  }
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "recommendation.update",
+      cible: `recommendation:${id}`,
+      avant: snapshot(existing),
+      apres: snapshot(updated),
+      ip,
+    });
 
-  const debut = patch.debut !== undefined ? patch.debut : existing.debut;
-  const fin = patch.fin !== undefined ? patch.fin : existing.fin;
-  if (debut && fin && new Date(debut) > new Date(fin)) {
-    return jsonError("La date de fin précède la date de début.", "invalid_period", 400);
-  }
-
-  const updated = await getDb().update<Recommendation>(
-    TABLES.recommendations,
-    id,
-    patch as Record<string, unknown>,
-  );
-
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "recommendation.update",
-    cible: `recommendation:${id}`,
-    avant: snapshot(existing),
-    apres: snapshot(updated),
-    ip,
-  });
-
-  return Response.json({ recommendation: updated });
-}
+    return Response.json({ recommendation: updated });
+  },
+);
 
 /** DELETE /api/admin/recommendations/[id] — suppression (admin+). */
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "manage_recommendations")) {
-    return jsonError("Réservé aux administrateurs.", "forbidden", 403);
-  }
+export const DELETE = route(
+  {
+    auth: "manage_recommendations",
+    forbidden: "Réservé aux administrateurs.",
+    rateLimit: {
+      key: "admin:reco:delete",
+      limit: 30,
+      windowMs: 60_000,
+      message: "Trop de requêtes.",
+    },
+  },
+  async ({ params, user, ip }) => {
+    const { id } = params;
+    const existing = await find(id);
+    if (!existing) fail(404, "Recommandation introuvable.", "not_found");
 
-  const ip = clientIp(request);
-  const limit = rateLimit(`admin:reco:delete:${ip}`, { limit: 30, windowMs: 60_000 });
-  if (!limit.ok) return jsonError("Trop de requêtes.", "rate_limited", 429);
+    await getDb().remove(TABLES.recommendations, id);
 
-  const existing = await find(id);
-  if (!existing) return jsonError("Recommandation introuvable.", "not_found", 404);
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "recommendation.delete",
+      cible: `recommendation:${id}`,
+      avant: snapshot(existing),
+      apres: null,
+      ip,
+    });
 
-  await getDb().remove(TABLES.recommendations, id);
-
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "recommendation.delete",
-    cible: `recommendation:${id}`,
-    avant: snapshot(existing),
-    apres: null,
-    ip,
-  });
-
-  return Response.json({ ok: true });
-}
+    return Response.json({ ok: true });
+  },
+);

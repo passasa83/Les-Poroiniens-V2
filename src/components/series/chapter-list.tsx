@@ -53,9 +53,7 @@ export function ChapterList({
     const needle = query.trim().toLowerCase();
     if (!needle) return chapters;
     return chapters.filter(
-      (c) =>
-        String(c.numero).includes(needle) ||
-        c.titre.toLowerCase().includes(needle),
+      (c) => String(c.numero).includes(needle) || c.titre.toLowerCase().includes(needle),
     );
   }, [chapters, query]);
 

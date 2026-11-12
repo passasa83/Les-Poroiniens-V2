@@ -1,8 +1,8 @@
-import { jsonError, guardNas } from "../guard";
+import { nasRoute } from "../guard";
+import { fail } from "@/server/http";
 import { isSafePath, nasErrorMessage, nasList, nasTree } from "@/lib/nas";
 import { detectNumero, stemCouverture, uniteDominante, type CandidateKind } from "@/lib/unite";
-import { getDb, TABLES } from "@/lib/db";
-import type { Chapter } from "@/lib/types";
+import { listAll, TABLES } from "@/server/db";
 
 export const runtime = "nodejs";
 
@@ -71,137 +71,143 @@ function decodePath(value: string): string {
  * par dossier **non encore importé** : les chapitres déjà en base sont
  * résolus sans toucher au stockage.
  */
-export async function GET(request: Request) {
-  const guard = await guardNas(request, { limit: 30, windowMs: 60_000 });
-  if (!guard.ok) return guard.response;
+export const GET = nasRoute(
+  async ({ searchParams }) => {
+    const path = (searchParams.get("path") ?? "").trim();
+    const seriesId = (searchParams.get("series_id") ?? "").trim();
 
-  const url = new URL(request.url);
-  const path = (url.searchParams.get("path") ?? "").trim();
-  const seriesId = (url.searchParams.get("series_id") ?? "").trim();
-
-  if (!path || !isSafePath(path)) {
-    return jsonError("Chemin refusé (validation anti traversal).", "invalid_path", 400);
-  }
-
-  // ── Chapitres déjà en base pour la série ciblée ────────────────────────
-  const existants = new Map<number, { id: string; nbPages: number }>();
-  if (seriesId) {
-    const { items } = await getDb().list<Chapter>(TABLES.chapters, {
-      filters: [{ field: "series_id", op: "eq", value: seriesId }],
-      limit: 5000,
-    });
-    for (const chapter of items) {
-      existants.set(Math.round(chapter.numero), { id: chapter.id, nbPages: chapter.nb_pages ?? 0 });
-    }
-  }
-
-  // ── Contenu du dossier (1 appel NAS) ──────────────────────────────────
-  let tree: Awaited<ReturnType<typeof nasTree>>;
-  try {
-    tree = await nasTree(path);
-  } catch (err) {
-    return jsonError(nasErrorMessage(err), "nas_error", 502);
-  }
-
-  const dirs = tree.entries.filter((e) => e.isDir).sort((a, b) => natural(a.name, b.name));
-  const fichiers = tree.entries.filter((e) => !e.isDir);
-  const imagesRacine = fichiers.filter((f) => IMAGE_EXT.test(f.name)).length;
-  const suspects = dirs.slice(MAX_DIRS);
-
-  /* Images posées à côté des dossiers : `Tome 1 LQ.jpg` couvre `Tome 1`,
-     ce sont des vignettes de couverture, jamais des planches. */
-  const nomsDossiers = new Set(dirs.map((d) => d.name.toLowerCase()));
-  const couvertures = fichiers.filter(
-    (f) => IMAGE_EXT.test(f.name) && nomsDossiers.has(stemCouverture(f.name)),
-  ).length;
-
-  /* Structure dominante : une série de tomes s'affiche en tomes. */
-  const unite = uniteDominante(dirs.map((d) => detectNumero(d.name).kind));
-
-  const candidates: Candidate[] = await mapLimit(dirs.slice(0, MAX_DIRS), CONCURRENCY, async (dir) => {
-    const chemin = decodePath(dir.path);
-    const { numero, kind } = detectNumero(dir.name);
-    const deja = numero !== null && existants.has(numero);
-    const existant = numero !== null ? existants.get(numero) : undefined;
-
-    if (deja && existant) {
-      return {
-        name: dir.name,
-        path: chemin,
-        numero,
-        kind,
-        pages: existant.nbPages,
-        dejaImporte: true,
-        chapterId: existant.id,
-        etat: "deja_importe",
-        selectionne: false,
-      } satisfies Candidate;
+    if (!path || !isSafePath(path)) {
+      fail(400, "Chemin refusé (validation anti traversal).", "invalid_path");
     }
 
-    // Dossier inconnu : une lecture NAS suffit à savoir s'il porte des planches.
-    let pages = 0;
+    // ── Chapitres déjà en base pour la série ciblée ────────────────────────
+    const existants = new Map<number, { id: string; nbPages: number }>();
+    if (seriesId) {
+      const items = await listAll(TABLES.chapters, {
+        filters: [{ field: "series_id", op: "eq", value: seriesId }],
+        select: ["numero", "nb_pages"],
+      });
+      for (const chapter of items) {
+        existants.set(Math.round(chapter.numero), {
+          id: chapter.id,
+          nbPages: chapter.nb_pages ?? 0,
+        });
+      }
+    }
+
+    // ── Contenu du dossier (1 appel NAS) ──────────────────────────────────
+    let tree: Awaited<ReturnType<typeof nasTree>>;
     try {
-      const listing = await nasList(chemin);
-      pages = listing.pages.length;
-    } catch {
-      pages = 0;
+      tree = await nasTree(path);
+    } catch (err) {
+      fail(502, nasErrorMessage(err), "nas_error");
     }
 
-    if (pages === 0) {
-      return {
-        name: dir.name,
-        path: chemin,
-        numero,
-        kind,
-        pages: 0,
-        dejaImporte: false,
-        etat: "pas_d_image",
-        selectionne: false,
-      } satisfies Candidate;
+    const dirs = tree.entries.filter((e) => e.isDir).sort((a, b) => natural(a.name, b.name));
+    const fichiers = tree.entries.filter((e) => !e.isDir);
+    const imagesRacine = fichiers.filter((f) => IMAGE_EXT.test(f.name)).length;
+    const suspects = dirs.slice(MAX_DIRS);
+
+    /* Images posées à côté des dossiers : `Tome 1 LQ.jpg` couvre `Tome 1`,
+     ce sont des vignettes de couverture, jamais des planches. */
+    const nomsDossiers = new Set(dirs.map((d) => d.name.toLowerCase()));
+    const couvertures = fichiers.filter(
+      (f) => IMAGE_EXT.test(f.name) && nomsDossiers.has(stemCouverture(f.name)),
+    ).length;
+
+    /* Structure dominante : une série de tomes s'affiche en tomes. */
+    const unite = uniteDominante(dirs.map((d) => detectNumero(d.name).kind));
+
+    const candidates: Candidate[] = await mapLimit(
+      dirs.slice(0, MAX_DIRS),
+      CONCURRENCY,
+      async (dir) => {
+        const chemin = decodePath(dir.path);
+        const { numero, kind } = detectNumero(dir.name);
+        const deja = numero !== null && existants.has(numero);
+        const existant = numero !== null ? existants.get(numero) : undefined;
+
+        if (deja && existant) {
+          return {
+            name: dir.name,
+            path: chemin,
+            numero,
+            kind,
+            pages: existant.nbPages,
+            dejaImporte: true,
+            chapterId: existant.id,
+            etat: "deja_importe",
+            selectionne: false,
+          } satisfies Candidate;
+        }
+
+        // Dossier inconnu : une lecture NAS suffit à savoir s'il porte des planches.
+        let pages = 0;
+        try {
+          const listing = await nasList(chemin);
+          pages = listing.pages.length;
+        } catch {
+          pages = 0;
+        }
+
+        if (pages === 0) {
+          return {
+            name: dir.name,
+            path: chemin,
+            numero,
+            kind,
+            pages: 0,
+            dejaImporte: false,
+            etat: "pas_d_image",
+            selectionne: false,
+          } satisfies Candidate;
+        }
+
+        const indetermine = numero === null;
+        return {
+          name: dir.name,
+          path: chemin,
+          numero,
+          kind,
+          pages,
+          dejaImporte: false,
+          etat: indetermine ? "numero_a_corriger" : "pret",
+          // Unité identifiée (tome ou chapitre) : cochée d'office dans l'interface.
+          selectionne: !indetermine,
+        } satisfies Candidate;
+      },
+    );
+
+    const avertissements: string[] = [];
+    if (suspects.length > 0) {
+      avertissements.push(
+        `${suspects.length} dossier(s) non analysés : la limite de ${MAX_DIRS} dossiers par scan est atteinte.`,
+      );
+    }
+    if (couvertures > 0) {
+      avertissements.push(
+        `${couvertures} couverture(s) à côté des dossiers (« Tome 1 LQ.jpg ») : ignorée(s), ce ne sont pas des planches.`,
+      );
+    } else if (imagesRacine > 0) {
+      avertissements.push(
+        `${imagesRacine} image(s) directement dans ce dossier : elles ne font pas partie d'un chapitre et sont ignorées.`,
+      );
+    }
+    if (dirs.length === 0 && imagesRacine === 0) {
+      avertissements.push("Aucun sous-dossier ni image détecté à cet emplacement.");
     }
 
-    const indetermine = numero === null;
-    return {
-      name: dir.name,
-      path: chemin,
-      numero,
-      kind,
-      pages,
-      dejaImporte: false,
-      etat: indetermine ? "numero_a_corriger" : "pret",
-      // Unité identifiée (tome ou chapitre) : cochée d'office dans l'interface.
-      selectionne: !indetermine,
-    } satisfies Candidate;
-  });
-
-  const avertissements: string[] = [];
-  if (suspects.length > 0) {
-    avertissements.push(
-      `${suspects.length} dossier(s) non analysés : la limite de ${MAX_DIRS} dossiers par scan est atteinte.`,
-    );
-  }
-  if (couvertures > 0) {
-    avertissements.push(
-      `${couvertures} couverture(s) à côté des dossiers (« Tome 1 LQ.jpg ») : ignorée(s), ce ne sont pas des planches.`,
-    );
-  } else if (imagesRacine > 0) {
-    avertissements.push(
-      `${imagesRacine} image(s) directement dans ce dossier : elles ne font pas partie d'un chapitre et sont ignorées.`,
-    );
-  }
-  if (dirs.length === 0 && imagesRacine === 0) {
-    avertissements.push("Aucun sous-dossier ni image détecté à cet emplacement.");
-  }
-
-  return Response.json({
-    path: tree.path,
-    dossier: path.split("/").filter(Boolean).pop() ?? path,
-    candidates,
-    imagesRacine,
-    couvertures,
-    unite,
-    avertissements,
-    total: dirs.length,
-    scannes: Math.min(dirs.length, MAX_DIRS),
-  });
-}
+    return Response.json({
+      path: tree.path,
+      dossier: path.split("/").filter(Boolean).pop() ?? path,
+      candidates,
+      imagesRacine,
+      couvertures,
+      unite,
+      avertissements,
+      total: dirs.length,
+      scannes: Math.min(dirs.length, MAX_DIRS),
+    });
+  },
+  { limit: 30, windowMs: 60_000 },
+);

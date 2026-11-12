@@ -22,8 +22,8 @@ export default function MaintenancePage() {
       </p>
       <h1 className="section-title">Le site est en maintenance</h1>
       <p className="max-w-md text-sm text-muted">
-        Nous intervenons actuellement sur Les Poroiniens. La lecture et les espaces membres
-        peuvent être momentanément indisponibles : réessayez dans quelques minutes.
+        Nous intervenons actuellement sur Les Poroiniens. La lecture et les espaces membres peuvent
+        être momentanément indisponibles : réessayez dans quelques minutes.
       </p>
 
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -40,9 +40,9 @@ export default function MaintenancePage() {
       </div>
 
       <p className="max-w-md text-xs text-muted">
-        Les annonces du site (avancement des travaux, incidents connus) sont publiées sur la
-        page dédiée : c&apos;est là que sont annoncés la fin de la maintenance et les
-        éventuelles limitations de service.
+        Les annonces du site (avancement des travaux, incidents connus) sont publiées sur la page
+        dédiée : c&apos;est là que sont annoncés la fin de la maintenance et les éventuelles
+        limitations de service.
       </p>
     </div>
   );

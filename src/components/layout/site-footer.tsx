@@ -78,15 +78,14 @@ export function SiteFooter() {
         <div>
           <p className="mb-2 text-sm font-semibold">Contact</p>
           <p className="text-sm text-muted">
-            Une question, un problème de scan ? Utilisez le bouton « Signaler un problème »
-            présent dans le lecteur.
+            Une question, un problème de scan ? Utilisez le bouton « Signaler un problème » présent
+            dans le lecteur.
           </p>
         </div>
       </div>
       <div className="border-t border-line py-4">
         <p className="container-site text-xs text-muted">
-          © {new Date().getFullYear()} Les Poroiniens — contenu +18 réservé aux personnes
-          majeures.
+          © {new Date().getFullYear()} Les Poroiniens — contenu +18 réservé aux personnes majeures.
         </p>
       </div>
     </footer>

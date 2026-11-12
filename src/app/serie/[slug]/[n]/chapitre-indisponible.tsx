@@ -2,7 +2,7 @@
 
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import { ReportDialog } from "@/components/reader/reader-report";
+import { ReportDialog } from "@/features/reader";
 import { libelleUnite, libelleUniteSingulier } from "@/lib/format";
 import type { Unite } from "@/lib/types";
 

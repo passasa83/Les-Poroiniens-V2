@@ -1,5 +1,5 @@
 import "server-only";
-import { cached } from "@/lib/db";
+import { cached } from "@/server/cache";
 
 /**
  * Client ImgChest (source d'images du site).
@@ -26,12 +26,7 @@ const LIST_TTL_MS = 60 * 60 * 1000;
 const PAGE_SIZE = 24;
 
 export type ImgChestErrorCode =
-  | "unconfigured"
-  | "invalid_id"
-  | "http_error"
-  | "unreachable"
-  | "timeout"
-  | "protocol";
+  "unconfigured" | "invalid_id" | "http_error" | "unreachable" | "timeout" | "protocol";
 
 export class ImgChestError extends Error {
   readonly code: ImgChestErrorCode;
@@ -92,15 +87,6 @@ export function imgchestEnv() {
   };
 }
 
-/** Variable d'état affichée dans l'espace Gérant. */
-export function imgchestEnvStatus(): Record<string, boolean> {
-  const env = imgchestEnv();
-  return {
-    IMG_CHEST_USERNAME: Boolean(env.username),
-    IMG_CHEST_API_KEY: Boolean(env.apiKey),
-  };
-}
-
 /** La lecture d'un album est publique : seule la liste demande un compte. */
 export function imgchestListAvailable(): boolean {
   return Boolean(imgchestEnv().username);
@@ -133,17 +119,11 @@ async function request(url: string, accept: string): Promise<Response> {
       err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
     throw new ImgChestError(
       timedOut ? "timeout" : "unreachable",
-      timedOut
-        ? "Délai dépassé auprès d'ImgChest."
-        : "Impossible de joindre ImgChest.",
+      timedOut ? "Délai dépassé auprès d'ImgChest." : "Impossible de joindre ImgChest.",
     );
   }
   if (!res.ok) {
-    throw new ImgChestError(
-      "http_error",
-      `ImgChest a répondu ${res.status}.`,
-      res.status,
-    );
+    throw new ImgChestError("http_error", `ImgChest a répondu ${res.status}.`, res.status);
   }
   return res;
 }
@@ -172,7 +152,10 @@ function num(value: unknown): number | undefined {
 function toFiles(raw: unknown): ImgChestFile[] {
   if (!Array.isArray(raw)) return [];
   const files = raw.flatMap((entry, order): ImgChestFile[] => {
-    const row = (typeof entry === "string" ? { link: entry } : entry) as Record<string, unknown> | null;
+    const row = (typeof entry === "string" ? { link: entry } : entry) as Record<
+      string,
+      unknown
+    > | null;
     if (!row || typeof row !== "object") return [];
     const url =
       typeof row.link === "string" && row.link.trim()
@@ -222,17 +205,25 @@ export async function imgchestPost(postId: string): Promise<ImgChestPost> {
       throw new ImgChestError("protocol", "Album illisible : données JSON invalides.");
     }
 
-    const props = (data as { props?: { post?: Record<string, unknown>; files?: unknown } } | null)?.props;
+    const props = (data as { props?: { post?: Record<string, unknown>; files?: unknown } } | null)
+      ?.props;
     const post = props?.post;
     // Repli observé sur l'ancien site (`proxy.routes.js`) : certains albums
     // exposent leurs fichiers en `props.files` plutôt qu'en `props.post.files`.
-    const files = toFiles(post && typeof post === "object" ? (post.files ?? props?.files) : props?.files);
+    const files = toFiles(
+      post && typeof post === "object" ? (post.files ?? props?.files) : props?.files,
+    );
     if (files.length === 0) {
       throw new ImgChestError("protocol", "Aucune image trouvée dans cet album.");
     }
 
     return {
-      id: typeof post?.slug === "string" && post.slug ? post.slug : typeof post?.id === "string" ? post.id : id,
+      id:
+        typeof post?.slug === "string" && post.slug
+          ? post.slug
+          : typeof post?.id === "string"
+            ? post.id
+            : id,
       title: typeof post?.title === "string" ? post.title : "",
       views: num(post?.views) ?? 0,
       nsfw: post?.nsfw === 1 || post?.nsfw === true,
@@ -287,8 +278,10 @@ export async function imgchestListPosts(
       const thumbUrl =
         typeof thumb === "string"
           ? thumb
-          : thumb && typeof thumb === "object" && typeof (thumb as { link?: unknown }).link === "string"
-            ? ((thumb as { link: string }).link)
+          : thumb &&
+              typeof thumb === "object" &&
+              typeof (thumb as { link?: unknown }).link === "string"
+            ? (thumb as { link: string }).link
             : null;
       return [
         {

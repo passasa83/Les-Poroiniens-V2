@@ -71,9 +71,7 @@ export default function ConfidentialitePage() {
   return (
     <div className="container-site py-10">
       <header className="max-w-3xl">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-          Vie privée
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Vie privée</p>
         <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
           Politique de confidentialité
         </h1>
@@ -121,8 +119,9 @@ export default function ConfidentialitePage() {
           <h2 className="section-title">2. Cookies et stockage local</h2>
           <div className="mt-3 space-y-3 text-sm text-muted">
             <p>
-              Le site utilise <strong className="text-fg">uniquement des cookies fonctionnels</strong>{" "}
-              strictement nécessaires à son fonctionnement :
+              Le site utilise{" "}
+              <strong className="text-fg">uniquement des cookies fonctionnels</strong> strictement
+              nécessaires à son fonctionnement :
             </p>
             <ul className="list-disc space-y-1.5 pl-5">
               <li>
@@ -208,9 +207,9 @@ export default function ConfidentialitePage() {
               fichiers. Chaque intervenant ne reçoit que l&apos;accès utile à sa fonction.
             </p>
             <p>
-              Aucune donnée n&apos;est vendue, louée ni cédée à des tiers à des fins
-              publicitaires. En cas d&apos;obligation légale, des données peuvent être communiquées
-              aux autorités compétentes.
+              Aucune donnée n&apos;est vendue, louée ni cédée à des tiers à des fins publicitaires.
+              En cas d&apos;obligation légale, des données peuvent être communiquées aux autorités
+              compétentes.
             </p>
           </div>
         </section>
@@ -233,8 +232,8 @@ export default function ConfidentialitePage() {
                 espace compte
               </a>{" "}
               (paramètres du compte). Pour une demande qui ne peut pas être faite depuis le site,
-              utilisez le contact indiqué en section 1 : les demandes sont traitées manuellement
-              par l&apos;équipe, sans réponse automatique.
+              utilisez le contact indiqué en section 1 : les demandes sont traitées manuellement par
+              l&apos;équipe, sans réponse automatique.
             </p>
             <p>
               Si vos données sont insuffisantes ou erronées, vous pouvez demander leur rectification
@@ -249,8 +248,7 @@ export default function ConfidentialitePage() {
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">
             <li>Connexion chiffrée (HTTPS) sur l&apos;ensemble du site.</li>
             <li>
-              Cookies de session exclusifs à votre compte, non lisibles par le script
-              de la page.
+              Cookies de session exclusifs à votre compte, non lisibles par le script de la page.
             </li>
             <li>Limitation de débit sur les formulaires et les connexions.</li>
             <li>Vérification des droits côté serveur à chaque requête.</li>
@@ -268,9 +266,9 @@ export default function ConfidentialitePage() {
         <section className="card p-6" id="evolution">
           <h2 className="section-title">8. Évolution de cette politique</h2>
           <p className="mt-3 text-sm text-muted">
-            Cette politique peut évoluer pour refléter des changements du site ou de la réglementation.
-            La date de mise à jour figure en tête de page. En cas de modification importante, une
-            information sera affichée sur le site.
+            Cette politique peut évoluer pour refléter des changements du site ou de la
+            réglementation. La date de mise à jour figure en tête de page. En cas de modification
+            importante, une information sera affichée sur le site.
           </p>
         </section>
       </div>

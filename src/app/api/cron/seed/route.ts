@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { appwriteEnabled, getDb, invalidate, TABLES } from "@/lib/db";
-import { getDemoStore } from "@/lib/db/seed";
+import { appwriteEnabled, getDb, TABLES, type TableName } from "@/server/db";
+import { invalidate } from "@/server/cache";
+import { getDemoStore } from "@/server/db/seed";
 import { demoMasque } from "@/lib/demo-gate";
 
 export const runtime = "nodejs";
@@ -47,7 +48,10 @@ export async function POST(request: Request) {
     );
   }
   if (!authorized) {
-    return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
+    return NextResponse.json(
+      { error: "unauthorized", code: "CRON_SECRET_INVALID" },
+      { status: 401 },
+    );
   }
   /* Production : la graine ne doit plus rien écrire. Le jeu de démonstration
      est masqué partout (cf. `@/lib/demo-gate`, équivalent de
@@ -73,7 +77,8 @@ export async function POST(request: Request) {
   // Écriture en parallèle borné : en séquentiel, une graine complète (pages
   // comprises) dépassait les 15 min d'attente de `post-cron.mjs`.
   const CONCURRENCE = 12;
-  for (const [table, rows] of Object.entries(demo)) {
+  for (const [nom, rows] of Object.entries(demo)) {
+    const table = nom as TableName;
     if (table === TABLES.users) continue;
     let count = 0;
     let skip = 0;

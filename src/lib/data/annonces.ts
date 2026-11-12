@@ -1,5 +1,5 @@
 import "server-only";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
 import { exclureDemo, idDeDemo } from "@/lib/demo-gate";
 import type { Annonce } from "@/lib/types";
 
@@ -19,13 +19,11 @@ const DATE_INVALIDE = (valeur: string) => Number.isNaN(Date.parse(valeur));
 
 /** Liste du plus récent au plus ancien ; les lignes sans date valide sont écartées. */
 export async function listAnnonces(limit = 50): Promise<Annonce[]> {
-  const { items } = await getDb().list<Annonce>(TABLES.annonces, {
+  const { items } = await getDb().list(TABLES.annonces, {
     order: { field: "date", dir: "desc" },
     limit: Math.min(Math.max(limit, 1), 100),
   });
-  return exclureDemo(
-    items.filter((a) => a.slug && a.titre && !DATE_INVALIDE(a.date)),
-  );
+  return exclureDemo(items.filter((a) => a.slug && a.titre && !DATE_INVALIDE(a.date)));
 }
 
 /** Dernière annonce publiée (bloc de l'accueil). */
@@ -39,7 +37,7 @@ export async function getAnnonceBySlug(slug: string): Promise<Annonce | null> {
   if (!slug || slug.length > 128) return null;
   /* Annonce de la graine masquée en production : `null` → vrai 404. */
   if (idDeDemo(slug)) return null;
-  const { items } = await getDb().list<Annonce>(TABLES.annonces, {
+  const { items } = await getDb().list(TABLES.annonces, {
     filters: [{ field: "slug", op: "eq", value: slug }],
     limit: 1,
   });

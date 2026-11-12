@@ -111,24 +111,17 @@ export function CaptchaField({
   const labelId = `${idPrefix}-captcha-label`;
 
   return (
-    <div
-      data-captcha="turnstile"
-      role="group"
-      aria-labelledby={labelId}
-      className="space-y-2"
-    >
+    <div data-captcha="turnstile" role="group" aria-labelledby={labelId} className="space-y-2">
       <p className="label mb-0" id={labelId}>
         Vérification anti-robot
       </p>
 
       <div ref={containerRef} />
-      {state === "loading" && (
-        <p className="text-xs text-muted">Chargement de la vérification…</p>
-      )}
+      {state === "loading" && <p className="text-xs text-muted">Chargement de la vérification…</p>}
       {state === "unavailable" && (
         <p className="text-xs text-adult">
-          La vérification anti-robot n&apos;a pas pu se charger (réseau ou bloqueur) :
-          réessayez ou désactivez votre bloqueur.
+          La vérification anti-robot n&apos;a pas pu se charger (réseau ou bloqueur) : réessayez ou
+          désactivez votre bloqueur.
         </p>
       )}
 

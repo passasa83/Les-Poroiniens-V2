@@ -19,24 +19,6 @@ export function Button({
   return <button className={clsx(`btn-${variant}`, className)} {...props} />;
 }
 
-export function ButtonLink({
-  variant = "secondary",
-  className,
-  children,
-  href,
-}: {
-  variant?: Variant;
-  className?: string;
-  children: ReactNode;
-  href: string;
-}) {
-  return (
-    <a href={href} className={clsx(`btn-${variant}`, className)}>
-      {children}
-    </a>
-  );
-}
-
 /* ── Formulaires ─────────────────────────────────────────────────────── */
 
 export function Field({
@@ -141,19 +123,6 @@ export function EmptyState({
   );
 }
 
-export function Spinner({ className }: { className?: string }) {
-  return (
-    <span
-      className={clsx(
-        "inline-block size-5 animate-spin rounded-full border-2 border-line border-t-primary",
-        className,
-      )}
-      role="status"
-      aria-label="Chargement"
-    />
-  );
-}
-
 export function Rating({ value, count }: { value: number; count?: number }) {
   return (
     <span className="flex items-center gap-1 text-xs text-muted">
@@ -221,7 +190,10 @@ export function Pagination({
   const cible = "chip min-w-11 justify-center";
 
   return (
-    <nav className={clsx("flex flex-wrap items-center justify-center gap-1.5", className)} aria-label="Pagination">
+    <nav
+      className={clsx("flex flex-wrap items-center justify-center gap-1.5", className)}
+      aria-label="Pagination"
+    >
       {courante > 1 ? (
         <a className={cible} href={href(courante - 1)} rel="prev" aria-label="Page précédente">
           <span aria-hidden>←</span>

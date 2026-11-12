@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Clock } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
-import { getChapterById } from "@/lib/data/chapters";
-import { listHistory } from "@/lib/data/library";
-import { getSeriesById } from "@/lib/data/series";
+import { getCurrentUser } from "@/server/auth";
+import { chaptersParIds } from "@/lib/data/chapters";
+import { recentHistory } from "@/lib/data/history";
+import { seriesParIds } from "@/lib/data/series";
 import { atLeast } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { EmptyState } from "@/components/ui/kit";
@@ -36,29 +36,30 @@ export default async function HistoriquePage() {
   if (!user) redirect("/connexion?next=/historique");
   if (!atLeast(user.role, "membre")) return <AccessDenied required="membre" />;
 
-  const history = await listHistory(user.id, 200);
+  /* 200 dernières lectures ; séries et chapitres lus en deux lots au lieu
+     de deux requêtes par ligne. */
+  const history = await recentHistory(user.id, 200);
+  const [seriesById, chaptersById] = await Promise.all([
+    seriesParIds(history.map((h) => h.series_id)),
+    chaptersParIds(history.map((h) => h.chapter_id)),
+  ]);
 
-  const rows = await Promise.all(
-    history.map(async (entry) => {
-      const [series, chapter] = await Promise.all([
-        getSeriesById(entry.series_id),
-        getChapterById(entry.chapter_id),
-      ]);
-      return {
-        key: entry.chapter_id,
-        chapterId: entry.chapter_id,
-        seriesId: entry.series_id,
-        page: entry.page,
-        completed: entry.completed,
-        readAt: entry.read_at,
-        titre: series?.titre ?? entry.series_id,
-        slug: series?.slug ?? null,
-        numero: chapter?.numero ?? null,
-        unite: series?.unite ?? "chapitre",
-        couverture: series?.couverture ?? null,
-      };
-    }),
-  );
+  const rows = history.map((entry) => {
+    const series = seriesById.get(entry.series_id);
+    return {
+      key: entry.chapter_id,
+      chapterId: entry.chapter_id,
+      seriesId: entry.series_id,
+      page: entry.page,
+      completed: entry.completed,
+      readAt: entry.read_at,
+      titre: series?.titre ?? entry.series_id,
+      slug: series?.slug ?? null,
+      numero: chaptersById.get(entry.chapter_id)?.numero ?? null,
+      unite: series?.unite ?? "chapitre",
+      couverture: series?.couverture ?? null,
+    };
+  });
 
   const groupes: HistoriqueGroupe[] = [];
   for (const row of rows) {

@@ -1,11 +1,5 @@
 /** Onglets de la page Mon compte (« Réglages »), partagés serveur/client. */
-export const SECTIONS = [
-  "profil",
-  "preferences",
-  "confidentialite",
-  "sessions",
-  "compte",
-] as const;
+export const SECTIONS = ["profil", "preferences", "confidentialite", "sessions", "compte"] as const;
 
 export type SectionKey = (typeof SECTIONS)[number];
 

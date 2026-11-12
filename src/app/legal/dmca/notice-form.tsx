@@ -57,21 +57,42 @@ export function NoticeForm() {
   }
 
   return (
-    <form
-      className="rounded-2xl border border-line bg-surface2 p-5 sm:p-6"
-      onSubmit={onSubmit}
-    >
+    <form className="rounded-2xl border border-line bg-surface2 p-5 sm:p-6" onSubmit={onSubmit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <Field label="Série ou œuvre concernée" htmlFor="serie" hint="Titre exact ou slug de la série.">
-            <Input id="serie" name="serie" required minLength={2} maxLength={200} autoComplete="off" />
+          <Field
+            label="Série ou œuvre concernée"
+            htmlFor="serie"
+            hint="Titre exact ou slug de la série."
+          >
+            <Input
+              id="serie"
+              name="serie"
+              required
+              minLength={2}
+              maxLength={200}
+              autoComplete="off"
+            />
           </Field>
         </div>
         <Field label="Chapitre, tome ou page concerné (facultatif)" htmlFor="chapitre">
-          <Input id="chapitre" name="chapitre" maxLength={100} autoComplete="off" placeholder="Ex. chapitre 12 ou tome 3, page 4" />
+          <Input
+            id="chapitre"
+            name="chapitre"
+            maxLength={100}
+            autoComplete="off"
+            placeholder="Ex. chapitre 12 ou tome 3, page 4"
+          />
         </Field>
         <Field label="Votre e-mail de contact" htmlFor="email" hint="Pour vous répondre si besoin.">
-          <Input id="email" name="email" type="email" required maxLength={200} autoComplete="email" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            maxLength={200}
+            autoComplete="email"
+          />
         </Field>
         <div className="sm:col-span-2">
           <Field
@@ -103,15 +124,16 @@ export function NoticeForm() {
           <Send className="size-4" aria-hidden />
           {status === "sending" ? "Envoi en cours…" : "Envoyer le signalement"}
         </Button>
-        <p className="text-xs text-muted">
-          Trois envois maximum par heure et par adresse IP.
-        </p>
+        <p className="text-xs text-muted">Trois envois maximum par heure et par adresse IP.</p>
       </div>
 
       {status !== "idle" && <div className="divider my-4" />}
       <div aria-live="polite" className="space-y-3">
         {status === "sent" && (
-          <div role="status" className="rounded-xl border border-line border-l-4 border-l-ok bg-surface px-4 py-3 text-sm text-fg">
+          <div
+            role="status"
+            className="rounded-xl border border-line border-l-4 border-l-ok bg-surface px-4 py-3 text-sm text-fg"
+          >
             <p className="font-semibold">Accusé de réception de votre signalement</p>
             <p className="mt-1 text-muted">
               {recu?.message ??
@@ -119,8 +141,7 @@ export function NoticeForm() {
             </p>
             {recu && (
               <p className="mt-2 text-xs text-muted">
-                Référence de dépôt :{" "}
-                <code className="text-fg">{recu.reference}</code>
+                Référence de dépôt : <code className="text-fg">{recu.reference}</code>
                 {" — "}
                 reçu le{" "}
                 {new Date(recu.recuLe).toLocaleString("fr-FR", {

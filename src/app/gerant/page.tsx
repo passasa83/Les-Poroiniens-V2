@@ -11,15 +11,15 @@ import {
   Settings,
   Server,
 } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card, EmptyState } from "@/components/ui/kit";
 import { listImportJobs } from "@/lib/data/moderation";
 import { listSeries } from "@/lib/data/series";
 import { nasConfigured, nasHealth } from "@/lib/nas";
-import { getDb, TABLES } from "@/lib/db";
-import type { Chapter, ImportJob } from "@/lib/types";
+import { getDb, TABLES } from "@/server/db";
+import type { ImportJob } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -95,19 +95,27 @@ export default async function GerantHomePage() {
     return <AccessDenied required="owner" hint="Cet espace est réservé au Gérant." />;
   }
 
-  const [jobs, catalog, chapters, health] = await Promise.all([
+  const [jobs, catalog, enAttente, publies, health] = await Promise.all([
     listImportJobs(30),
     listSeries({ perPage: 1, includeAdult: true, includeArchived: true }),
-    getDb().list<Chapter>(TABLES.chapters, { limit: 5000 }),
+    // Comptages seuls (une ligne lue) au lieu de 5000 chapitres complets.
+    getDb().list(TABLES.chapters, {
+      filters: [{ field: "statut", op: "neq", value: "published" }],
+      select: ["statut"],
+      limit: 1,
+    }),
+    getDb().list(TABLES.chapters, {
+      filters: [{ field: "statut", op: "eq", value: "published" }],
+      select: ["statut"],
+      limit: 1,
+    }),
     nasConfigured()
-      ? nasHealth().catch(() => ({ ok: false, reason: "injoignable" } as const))
+      ? nasHealth().catch(() => ({ ok: false, reason: "injoignable" }) as const)
       : Promise.resolve({ ok: false, reason: "non configuré" } as const),
   ]);
 
   const enErreur = jobs.filter((j) => j.statut === "erreur");
   const enCours = jobs.filter((j) => j.statut === "cours" || j.statut === "attente");
-  const enAttente = chapters.items.filter((c) => c.statut !== "published");
-  const publies = chapters.items.filter((c) => c.statut === "published");
 
   return (
     <div className="space-y-6">
@@ -125,18 +133,18 @@ export default async function GerantHomePage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi
-          label="Séries au catalogue"
-          value={catalog.total}
-          hint="Archivées incluses"
-        />
+        <Kpi label="Séries au catalogue" value={catalog.total} hint="Archivées incluses" />
         <Kpi
           label="Contenus en attente"
-          value={enAttente.length}
-          hint={`${publies.length} publié(s)`}
-          tone={enAttente.length > 0 ? "warn" : "fg"}
+          value={enAttente.total}
+          hint={`${publies.total} publié(s)`}
+          tone={enAttente.total > 0 ? "warn" : "fg"}
         />
-        <Kpi label="Imports en cours" value={enCours.length} tone={enCours.length ? "warn" : "fg"} />
+        <Kpi
+          label="Imports en cours"
+          value={enCours.length}
+          tone={enCours.length ? "warn" : "fg"}
+        />
         <Kpi
           label="Imports en erreur"
           value={enErreur.length}
@@ -146,9 +154,7 @@ export default async function GerantHomePage() {
       </div>
 
       <Card
-        className={`flex flex-wrap items-center gap-4 p-4 ${
-          health.ok ? "" : "border-warn/40"
-        }`}
+        className={`flex flex-wrap items-center gap-4 p-4 ${health.ok ? "" : "border-warn/40"}`}
       >
         <Server className={health.ok ? "size-5 text-ok" : "size-5 text-warn"} />
         <div className="min-w-0">
@@ -165,9 +171,7 @@ export default async function GerantHomePage() {
                 : (health.reason ?? "L'API du NAS ne répond pas.")}
           </p>
         </div>
-        <Badge tone={health.ok ? "ok" : "warn"}>
-          {health.ok ? "Opérationnel" : "À vérifier"}
-        </Badge>
+        <Badge tone={health.ok ? "ok" : "warn"}>{health.ok ? "Opérationnel" : "À vérifier"}</Badge>
         <Link href="/gerant/import" className="btn-secondary ml-auto">
           <ListChecks className="size-4" /> Importer
         </Link>
@@ -277,13 +281,25 @@ export default async function GerantHomePage() {
             <HardHat className="size-4 text-primary" /> Règles en vigueur
           </h2>
           <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li>• Cadence éditoriale : environ <span className="text-fg">10 publications / semaine</span>.</li>
+            <li>
+              • Cadence éditoriale : environ{" "}
+              <span className="text-fg">10 publications / semaine</span>.
+            </li>
             <li>• Brouillon → Programmé → Publié : seul le Gérant publie, dépublie ou supprime.</li>
-            <li>• Archiver retire une série du catalogue sans rien supprimer ; la suppression définitive exige la saisie du titre.</li>
-            <li>• Les planches vivent sur le NAS, servies par le CDN ; aucun octet ne passe par le site.</li>
+            <li>
+              • Archiver retire une série du catalogue sans rien supprimer ; la suppression
+              définitive exige la saisie du titre.
+            </li>
+            <li>
+              • Les planches vivent sur le NAS, servies par le CDN ; aucun octet ne passe par le
+              site.
+            </li>
             <li>• Chaque action sensible est tracée au journal d&apos;audit (non modifiable).</li>
           </ul>
-          <Link href="/gerant/audit" className="link-muted mt-4 inline-flex items-center gap-1.5 text-sm">
+          <Link
+            href="/gerant/audit"
+            className="link-muted mt-4 inline-flex items-center gap-1.5 text-sm"
+          >
             <ScrollText className="size-4" /> Ouvrir le journal d&apos;audit
           </Link>
         </Card>

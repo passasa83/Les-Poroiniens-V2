@@ -67,8 +67,8 @@ export default async function AdresseDeSecoursPage() {
           </ul>
         ) : (
           <p className="text-sm text-muted">
-            Aucune adresse de secours n&apos;est déclarée pour l&apos;instant : le site
-            n&apos;est joignable que sur son adresse principale.
+            Aucune adresse de secours n&apos;est déclarée pour l&apos;instant : le site n&apos;est
+            joignable que sur son adresse principale.
           </p>
         )}
         {canonical && <p className="meta">Adresse principale : {canonical}</p>}
@@ -81,9 +81,8 @@ export default async function AdresseDeSecoursPage() {
         </h2>
         <p className="text-sm text-muted">
           Seules les adresses listées ici sont officielles. En cas de doute, vérifiez
-          l&apos;orthographe de l&apos;adresse dans la barre d&apos;adresse et connectez-vous
-          avec vos identifiants habituels : nous ne demandons jamais vos mots de passe par
-          message.
+          l&apos;orthographe de l&apos;adresse dans la barre d&apos;adresse et connectez-vous avec
+          vos identifiants habituels : nous ne demandons jamais vos mots de passe par message.
         </p>
       </section>
 

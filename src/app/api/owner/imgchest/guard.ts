@@ -1,29 +1,22 @@
-import { jsonError } from "../nas/guard";
-import { getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { route, type RouteContext } from "@/server/http";
 
-export { jsonError };
+type ImgChestContext = RouteContext<Record<string, string>, "import_chapters", undefined>;
 
 /**
- * Garde commune des routes ImgChest côté Gérant : session, rôle
- * `import_chapters` et quota par IP. Aucune clé ne transite vers le
- * navigateur — la résolution des albums se fait toujours ici.
+ * Route ImgChest de l'espace Gérant : session, droit `import_chapters` et
+ * quota par IP. Aucune clé ne transite vers le navigateur — la résolution des
+ * albums se fait toujours ici.
  */
-export async function guardImgChest(
-  request: Request,
+export function imgchestRoute(
+  handler: (ctx: ImgChestContext) => Promise<Response>,
   budget: { limit: number; windowMs: number } = { limit: 30, windowMs: 60_000 },
-): Promise<{ ok: true } | { ok: false; response: Response }> {
-  const user = await getCurrentUser();
-  if (!user) {
-    return { ok: false, response: jsonError("Authentification requise.", "unauthorized", 401) };
-  }
-  if (!can(user.role, "import_chapters")) {
-    return { ok: false, response: jsonError("Accès réservé au Gérant.", "owner_only", 403) };
-  }
-  const limit = rateLimit(`owner:imgchest:${clientIp(request)}`, budget);
-  if (!limit.ok) {
-    return { ok: false, response: jsonError("Trop de requêtes.", "rate_limited", 429) };
-  }
-  return { ok: true };
+) {
+  return route(
+    {
+      auth: "import_chapters",
+      forbidden: "Accès réservé au Gérant.",
+      rateLimit: { key: "owner:imgchest", ...budget, message: "Trop de requêtes." },
+    },
+    handler,
+  );
 }

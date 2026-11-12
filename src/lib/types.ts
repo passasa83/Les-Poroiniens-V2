@@ -105,6 +105,8 @@ export interface Profile {
   avatar: string | null;
   bio: string;
   role: Role;
+  /** Compte banni : connexion et écriture refusées (colonne `banni`). */
+  banni?: boolean;
   date_inscription: string;
   adult_ok: boolean;
   adult_ok_at: string | null;
@@ -295,3 +297,33 @@ export const SERIES_TYPE_LABELS: Record<SeriesType, string> = {
   manhua: "Manhua",
   light_novel: "Light Novel",
 };
+
+/** Like d'un commentaire (`comment_likes`, clé `rowId(user_id, target_id)`). */
+export interface CommentLike {
+  user_id: string;
+  target_id: string;
+  created_at: string;
+}
+
+/** Like d'un chapitre (`chapter_likes`, clé `rowId(user_id, chapter_id)`). */
+export interface ChapterLike {
+  user_id: string;
+  chapter_id: string;
+  created_at: string;
+}
+
+/** Erreurs d'images agrégées par jour et par page (`image_errors`). */
+export interface ImageError {
+  day: string;
+  chapter_id: string;
+  page_index: number;
+  count: number;
+  updated_at: string;
+}
+
+/** Compte du mode démonstration (`users`) — Appwrite Auth gère les vrais comptes. */
+export interface DemoUser {
+  email: string;
+  password: string;
+  created_at: string;
+}

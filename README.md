@@ -4,7 +4,7 @@ Site de lecture de scans (MVP / Phase 1) conforme au cahier des charges
 [`cahier_des_charges_site_scans.md`](./cahier_des_charges_site_scans.md).
 
 - **Front** : Next.js 16 (App Router, TypeScript, Tailwind CSS v4) déployé sur Vercel.
-- **Back** : Appwrite auto-hébergé (authentification, TablesDB, storage) — voir `src/lib/db/`.
+- **Back** : Appwrite auto-hébergé (authentification, TablesDB, storage) — voir `src/server/db/`.
 - **Scans** : pages servies par le CDN `img.` depuis le NAS (voir « Système
   d'images » plus bas) ; repli sur le proxy `/api/image` si aucun CDN.
 - **Aucune publicité, aucun traceur publicitaire.** Interface entièrement en français.
@@ -311,17 +311,46 @@ explicitement exclus de `/gerant`.
 
 ```
 src/
-  app/          routes App Router (catalogue, lecteur, espace membre, back-office)
-  components/   UI (kit, layout, lecteur, commentaires, adult gate)
-  lib/          auth, rôles, données (data/*), db/ (drivers Appwrite + démo)
-  proxy.ts      redirections d'auth (Next 16 — remplace middleware)
-scripts/        provisioning Appwrite (appwrite-setup.mts)
+  app/                 routes App Router ; chaque page garde ses morceaux à côté
+                       (`_components/`, `_lib/`, `_actions.ts`)
+  features/reader/     lecteur de scans et de light novels (settings/, state/,
+                       input/, images/, progress/, modes/, layout/, ln/)
+  components/          UI partagée (kit, layout, séries, commentaires, auth…)
+  lib/
+    data/              accès aux données par domaine : séries, chapitres,
+                       classement, bibliothèque, historique, progression,
+                       statistiques, notifications, commentaires, modération,
+                       tableau de bord…
+    import/            sources d'import (ImgChest, NAS, démo)
+    …                  rôles, formats, médias, NAS, ImgChest, Cloudflare
+  server/
+    db/                base typée par table, drivers Appwrite et démo,
+                       `listAll` / `listParValeurs` / `parLots` / `upsert`
+    auth/              session, identifiants, Discord, porte +18
+    http/              `route()` : auth, quota, validation zod, erreurs
+    cache.ts           Data Cache Next + tags (`cached`, `invalidate`)
+  proxy.ts             redirections d'auth (Next 16 — remplace middleware)
+scripts/               provisioning et diagnostic Appwrite, migrations
+                       (toutes en dry-run par défaut), appel des crons
+docs/REECRITURE.md     analyse, plan et journal de la réécriture
 ```
+
+## Vérifications
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Les tests de bout en bout se font en **mode démo** (`APPWRITE_API_KEY` vide) :
+la base Appwrite est partagée entre développement et production, aucune
+écriture ne doit y être faite depuis un poste de dev.
 
 ## Notes d'implémentation
 
 - **Identifiants de lignes Appwrite** : 36 caractères maximum. Tous les ids
-  composites passent par `rowId()` (`src/lib/db/ids.ts`) : ils sont conservés
+  composites passent par `rowId()` (`src/server/db/ids.ts`) : ils sont conservés
   s'ils tiennent dans la limite, sinon remplacés par un hash déterministe de
   32 caractères. Sans cette règle, bibliothèque, historique, likes et imports
   échouaient en 500 pour tout vrai compte (id de 20 caractères).

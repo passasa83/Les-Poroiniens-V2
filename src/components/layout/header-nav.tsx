@@ -54,8 +54,7 @@ function useRoute(): { path: string; search: string | null } {
 function isActive(item: NavItem, path: string, search: string | null): boolean {
   if (search === null) return false;
   if (item.match) return path === "/catalogue" && search.includes(item.match);
-  if (item.bare)
-    return path === "/catalogue" && !/sort=(nouveautes|popularite)/.test(search);
+  if (item.bare) return path === "/catalogue" && !/sort=(nouveautes|popularite)/.test(search);
   return path === item.href.split("?")[0];
 }
 
@@ -117,12 +116,7 @@ export function HeaderSearch() {
   // au lieu d'en imposer 288 px à toutes les fenêtres moyennes. Résultats
   // instantanés + historique local : champ partagé avec la page
   // Recherche.
-  return (
-    <SearchBox
-      className="hidden min-w-0 max-w-72 flex-1 lg:block"
-      inputRef={inputRef}
-    />
-  );
+  return <SearchBox className="hidden min-w-0 max-w-72 flex-1 lg:block" inputRef={inputRef} />;
 }
 
 /* ── Fil d'Ariane sous la barre, sur les pages de liste (DA) ─────── */

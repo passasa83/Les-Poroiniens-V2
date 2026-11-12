@@ -109,6 +109,9 @@ export function duree(minutes: number): string {
 
 /** Synthèse d'un texte long pour les aperçus (synopsis du héros). */
 export function plainText(raw: string | null | undefined, max = 180): string {
-  const clean = (raw ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const clean = (raw ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }

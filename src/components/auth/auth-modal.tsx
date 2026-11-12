@@ -7,12 +7,7 @@ import { MailWarning } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ConnexionForm, type DemoAccount } from "./connexion-form";
 import { InscriptionForm } from "./inscription-form";
-import {
-  AUTH_MODAL_EVENT,
-  AUTH_VIEW_LABELS,
-  isAuthView,
-  type AuthView,
-} from "./auth-views";
+import { AUTH_MODAL_EVENT, AUTH_VIEW_LABELS, isAuthView, type AuthView } from "./auth-views";
 import { messageDiscord } from "./oauth-errors";
 
 /**
@@ -41,9 +36,7 @@ export function AuthModal({
   const searchParams = useSearchParams();
   const initial = searchParams.get("auth");
   const discordError = messageDiscord(searchParams.get("erreur"));
-  const [view, setView] = useState<AuthView | null>(() =>
-    isAuthView(initial) ? initial : null,
-  );
+  const [view, setView] = useState<AuthView | null>(() => (isAuthView(initial) ? initial : null));
 
   /* Ouverture par événement global (en-tête, liens internes). */
   useEffect(() => {
@@ -126,9 +119,8 @@ function MotDePasseOubliePanel({ onSwitch }: { onSwitch: (view: AuthView) => voi
     <div className="space-y-4 text-sm">
       <p className="rounded-xl border border-line bg-surface2 px-3 py-2 text-muted">
         <MailWarning className="mr-1 inline size-4 align-[-2px]" aria-hidden />
-        Aucun service d&apos;envoi de mails n&apos;est actif : la réinitialisation du mot de
-        passe est <strong className="text-fg">manuelle</strong> et traitée par le support du
-        site.
+        Aucun service d&apos;envoi de mails n&apos;est actif : la réinitialisation du mot de passe
+        est <strong className="text-fg">manuelle</strong> et traitée par le support du site.
       </p>
       <ul className="list-disc space-y-2 pl-5 text-muted">
         <li>Indiquez le pseudo ou l&apos;adresse e-mail de votre compte.</li>

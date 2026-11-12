@@ -1,9 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BookOpen, CalendarDays, ChartColumn, Clock3, FileText, Layers, Lock, Settings } from "lucide-react";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
-import { computeStats, libraryWithSeries } from "@/lib/data/library";
+import {
+  BookOpen,
+  CalendarDays,
+  ChartColumn,
+  Clock3,
+  FileText,
+  Layers,
+  Lock,
+  Settings,
+} from "lucide-react";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
+import { libraryWithSeries } from "@/lib/data/library";
+import { userStats } from "@/lib/data/stats";
 import { getProfileByPseudo } from "@/lib/data/users";
 import { duree } from "@/lib/format";
 import { atLeast, ROLE_LABELS } from "@/lib/roles";
@@ -42,12 +52,10 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
 
   const [library, stats] = await Promise.all([
     biblioPublique ? libraryWithSeries(profile.user_id) : Promise.resolve(null),
-    statsPubliques ? computeStats(profile.user_id) : Promise.resolve(null),
+    statsPubliques ? userStats(profile.user_id) : Promise.resolve(null),
   ]);
 
-  const series = (library ?? [])
-    .map((row) => row.series)
-    .filter((s): s is Series => s !== null);
+  const series = (library ?? []).map((row) => row.series).filter((s): s is Series => s !== null);
 
   return (
     <div className="container-site space-y-8 py-8">
@@ -70,7 +78,9 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-black tracking-tight text-fg">{profile.pseudo}</h1>
-            {atLeast(profile.role, "modo") && <Badge tone="primary">{ROLE_LABELS[profile.role]}</Badge>}
+            {atLeast(profile.role, "modo") && (
+              <Badge tone="primary">{ROLE_LABELS[profile.role]}</Badge>
+            )}
             {estMoi && <Badge tone="neutral">Vous</Badge>}
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
@@ -151,10 +161,26 @@ export default async function ProfilPage({ params }: { params: Promise<{ pseudo:
           </p>
         ) : stats ? (
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <StatCard icon={<BookOpen className="size-3.5" />} label="Chapitres lus" value={stats.chapitres_lus} />
-            <StatCard icon={<FileText className="size-3.5" />} label="Pages lues" value={stats.pages_lues} />
-            <StatCard icon={<Clock3 className="size-3.5" />} label="Temps de lecture estimé" value={duree(stats.minutes_estimes)} />
-            <StatCard icon={<Layers className="size-3.5" />} label="Séries terminées" value={stats.series_terminees} />
+            <StatCard
+              icon={<BookOpen className="size-3.5" />}
+              label="Chapitres lus"
+              value={stats.chapitres_lus}
+            />
+            <StatCard
+              icon={<FileText className="size-3.5" />}
+              label="Pages lues"
+              value={stats.pages_lues}
+            />
+            <StatCard
+              icon={<Clock3 className="size-3.5" />}
+              label="Temps de lecture estimé"
+              value={duree(stats.minutes_estimes)}
+            />
+            <StatCard
+              icon={<Layers className="size-3.5" />}
+              label="Séries terminées"
+              value={stats.series_terminees}
+            />
             <StatCard
               icon={<CalendarDays className="size-3.5" />}
               label="Jours consécutifs"

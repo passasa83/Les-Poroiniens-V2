@@ -1,11 +1,10 @@
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { atLeast, can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { listReports } from "@/lib/data/moderation";
-import { allSeries } from "@/lib/data/series";
-import { getDb, TABLES } from "@/lib/db";
+import { seriesParIds } from "@/lib/data/series";
+import { listParValeurs, TABLES } from "@/server/db";
 import { libelleCourt, libelleUnite } from "@/lib/format";
-import type { Chapter, Comment, Profile } from "@/lib/types";
 import { ReportsQueue, type EnrichedReport } from "./_components/reports-queue";
 
 export const dynamic = "force-dynamic";
@@ -23,22 +22,39 @@ export default async function ModerationPage({
 
   const sp = await searchParams;
   const statutFilter =
-    sp.statut === "ouvert" || sp.statut === "traite" || sp.statut === "rejete"
-      ? sp.statut
-      : null;
+    sp.statut === "ouvert" || sp.statut === "traite" || sp.statut === "rejete" ? sp.statut : null;
 
-  const [reports, profileRes, series, commentRes, chapterRes] = await Promise.all([
-    listReports(),
-    getDb().list<Profile>(TABLES.profiles, { limit: 500 }),
-    allSeries(),
-    getDb().list<Comment>(TABLES.comments, { limit: 5000 }),
-    getDb().list<Chapter & { series_id: string }>(TABLES.chapters, { limit: 5000 }),
+  /* Seules les lignes visées par les signalements sont lues (avant : 5000
+     commentaires, 5000 chapitres, 500 profils et tout le catalogue, faux
+     au-delà) : deux vagues de lectures groupées par identifiant. */
+  const reports = await listReports();
+  const cibles = (type: string) => reports.filter((r) => r.type === type).map((r) => r.target_id);
+  const [profils, comments, chapitresSignales] = await Promise.all([
+    listParValeurs(
+      TABLES.profiles,
+      reports.map((r) => r.reporter_id),
+      "user_id",
+      {
+        select: ["user_id", "pseudo"],
+      },
+    ),
+    listParValeurs(TABLES.comments, cibles("comment")),
+    listParValeurs(TABLES.chapters, cibles("chapter")),
+  ]);
+  const chapitresCommentes = await listParValeurs(
+    TABLES.chapters,
+    comments.filter((c) => c.target_type !== "series").map((c) => c.target_id),
+  );
+  const chapters = [...chapitresSignales, ...chapitresCommentes];
+  const seriesById = await seriesParIds([
+    ...cibles("series"),
+    ...comments.filter((c) => c.target_type === "series").map((c) => c.target_id),
+    ...chapters.map((c) => c.series_id),
   ]);
 
-  const pseudoById = new Map(profileRes.items.map((p) => [p.user_id, p.pseudo] as const));
-  const seriesById = new Map(series.map((s) => [s.id, s] as const));
-  const commentById = new Map(commentRes.items.map((c) => [c.id, c] as const));
-  const chapterById = new Map(chapterRes.items.map((c) => [c.id, c] as const));
+  const pseudoById = new Map(profils.map((p) => [p.user_id, p.pseudo] as const));
+  const commentById = new Map(comments.map((c) => [c.id, c] as const));
+  const chapterById = new Map(chapters.map((c) => [c.id, c] as const));
 
   const items: EnrichedReport[] = reports.map((report) => {
     const reporter = pseudoById.get(report.reporter_id) ?? report.reporter_id;
@@ -103,8 +119,8 @@ export default async function ModerationPage({
       <div>
         <h1 className="section-title">Modération</h1>
         <p className="mt-1 text-sm text-muted">
-          File de signalements et historique des décisions. Chaque action est tracée au
-          journal d&apos;audit.
+          File de signalements et historique des décisions. Chaque action est tracée au journal
+          d&apos;audit.
         </p>
       </div>
 

@@ -1,16 +1,11 @@
 import { z } from "zod";
-import { appwriteMode, getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { appwriteMode } from "@/server/auth";
 import { audit } from "@/lib/data/moderation";
-import { adminClient, users } from "@/lib/appwrite";
-import { getDb, TABLES } from "@/lib/db";
+import { adminClient, users } from "@/server/appwrite";
+import { getDb, TABLES } from "@/server/db";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
-
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
-}
 
 const resetInput = z.object({
   userId: z.string().trim().min(1).max(64),
@@ -23,62 +18,47 @@ const resetInput = z.object({
  * mot de passe et le communique hors ligne. Le mot de passe n'est jamais
  * journalisé.
  */
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "site_settings")) {
-    return jsonError("Réinitialisation réservée au Gérant.", "owner_only", 403);
-  }
+export const POST = route(
+  {
+    auth: "site_settings",
+    forbidden: "Réinitialisation réservée au Gérant.",
+    rateLimit: {
+      key: "owner:reset-password",
+      limit: 5,
+      windowMs: 60_000,
+      message: "Trop de réinitialisations en une minute.",
+    },
+    body: resetInput,
+    invalidBody: "issue",
+  },
+  async ({ user, body, ip }) => {
+    const { userId, password } = body;
+    const db = getDb();
 
-  const ip = clientIp(request);
-  const limit = rateLimit(`owner:reset-password:${ip}`, { limit: 5, windowMs: 60_000 });
-  if (!limit.ok) return jsonError("Trop de réinitialisations en une minute.", "rate_limited", 429);
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
-  const parsed = resetInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(
-      parsed.error.issues[0]?.message ?? "Champs invalides.",
-      "invalid_body",
-      400,
-    );
-  }
-
-  const { userId, password } = parsed.data;
-  const db = getDb();
-
-  if (appwriteMode()) {
-    try {
-      await users(adminClient()).updatePassword({ userId, password });
-    } catch (err) {
-      const status = (err as { code?: number; status?: number }).code;
-      if (status === 404) return jsonError("Utilisateur Appwrite introuvable.", "not_found", 404);
-      return jsonError(
-        "Impossible de réinitialiser le mot de passe sur Appwrite.",
-        "appwrite_error",
-        502,
-      );
+    if (appwriteMode()) {
+      try {
+        await users(adminClient()).updatePassword({ userId, password });
+      } catch (err) {
+        const status = (err as { code?: number; status?: number }).code;
+        if (status === 404) fail(404, "Utilisateur Appwrite introuvable.", "not_found");
+        fail(502, "Impossible de réinitialiser le mot de passe sur Appwrite.", "appwrite_error");
+      }
+    } else {
+      const account = await db.get(TABLES.users, userId);
+      if (!account) fail(404, "Compte introuvable.", "not_found");
+      await db.update(TABLES.users, userId, { password });
     }
-  } else {
-    const account = await db.get<Record<string, unknown>>(TABLES.users, userId);
-    if (!account) return jsonError("Compte introuvable.", "not_found", 404);
-    await db.update<Record<string, unknown>>(TABLES.users, userId, { password });
-  }
 
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "user.password_reset",
-    cible: `user:${userId}`,
-    avant: null,
-    apres: { mot_de_passe: "réinitialisé (valeur non journalisée)" },
-    ip,
-  });
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "user.password_reset",
+      cible: `user:${userId}`,
+      avant: null,
+      apres: { mot_de_passe: "réinitialisé (valeur non journalisée)" },
+      ip,
+    });
 
-  return Response.json({ ok: true });
-}
+    return Response.json({ ok: true });
+  },
+);

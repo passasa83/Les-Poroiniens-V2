@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { notify } from "@/lib/data/moderation";
+import { notify } from "@/lib/data/notifications";
 import { countRecentImageErrors } from "@/lib/data/image-errors";
 import { listProfiles } from "@/lib/data/users";
 import { imageEnv } from "@/lib/media";
@@ -61,7 +61,10 @@ export async function GET(request: Request) {
     );
   }
   if (!authorized) {
-    return NextResponse.json({ error: "unauthorized", code: "CRON_SECRET_INVALID" }, { status: 401 });
+    return NextResponse.json(
+      { error: "unauthorized", code: "CRON_SECRET_INVALID" },
+      { status: 401 },
+    );
   }
 
   const time = new Date().toISOString();

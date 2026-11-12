@@ -10,9 +10,10 @@ import { FollowButton } from "@/components/series/follow-button";
 import { SeriesGrid } from "@/components/series/series-card";
 import { Synopsis } from "@/components/series/synopsis";
 import { Badge, EmptyState, Rating } from "@/components/ui/kit";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
 import { listChapters } from "@/lib/data/chapters";
-import { getLibraryEntry, listHistory } from "@/lib/data/library";
+import { allHistory } from "@/lib/data/history";
+import { getLibraryEntry } from "@/lib/data/library";
 import { getSeriesBySlug, seriesStats, similarSeries } from "@/lib/data/series";
 import {
   dateOrRelative,
@@ -58,7 +59,9 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       title: series.titre,
       description,
       type: "website",
-      ...(isAdult ? {} : { images: [{ url: series.couverture, alt: `Couverture de ${series.titre}` }] }),
+      ...(isAdult
+        ? {}
+        : { images: [{ url: series.couverture, alt: `Couverture de ${series.titre}` }] }),
     },
   };
 }
@@ -96,7 +99,7 @@ export default async function SeriePage({
   const [chapters, similar, history, entry] = await Promise.all([
     listChapters(series.id, { publishedOnly: true }),
     similarSeries(series, 6),
-    user ? listHistory(user.id, 500) : (Promise.resolve([]) as Promise<HistoryEntry[]>),
+    user ? allHistory(user.id, series.id) : (Promise.resolve([]) as Promise<HistoryEntry[]>),
     user ? getLibraryEntry(user.id, series.id) : Promise.resolve(null),
   ]);
   const read = new Map(history.map((h) => [h.chapter_id, h]));
@@ -114,7 +117,7 @@ export default async function SeriePage({
     .filter((h) => h.series_id === series.id)
     .sort((a, b) => b.read_at.localeCompare(a.read_at))[0];
   const repriseChapitre = reprise
-    ? chapters.find((c) => c.id === reprise.chapter_id) ?? null
+    ? (chapters.find((c) => c.id === reprise.chapter_id) ?? null)
     : null;
   const cta = repriseChapitre
     ? {
@@ -129,7 +132,9 @@ export default async function SeriePage({
       : null;
 
   const rawOnglet = Array.isArray(sp.onglet) ? sp.onglet[0] : sp.onglet;
-  const onglet: Onglet = ONGLETS.includes(rawOnglet as Onglet) ? (rawOnglet as Onglet) : "chapitres";
+  const onglet: Onglet = ONGLETS.includes(rawOnglet as Onglet)
+    ? (rawOnglet as Onglet)
+    : "chapitres";
 
   const rows: ChapterRow[] = ordered.map((chapter) => {
     const state = read.get(chapter.id);
@@ -158,7 +163,9 @@ export default async function SeriePage({
     description: plain(series.synopsis, 300),
     inLanguage: series.langue,
     ...(series.annee ? { datePublished: String(series.annee) } : {}),
-    ...(series.auteurs.length ? { author: series.auteurs.map((a) => ({ "@type": "Person", name: a })) } : {}),
+    ...(series.auteurs.length
+      ? { author: series.auteurs.map((a) => ({ "@type": "Person", name: a })) }
+      : {}),
     ...(series.genres.length ? { genre: series.genres.join(", ") } : {}),
     ...(series.tags.length ? { keywords: series.tags.join(", ") } : {}),
     numberOfEpisodes: series.nb_chapitres,
@@ -277,7 +284,11 @@ export default async function SeriePage({
         {/* ── Statistiques publiques ──────────────────────────── */}
         {stats && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile icon={<Eye className="size-4" />} label="Vues" value={stats.vues.toLocaleString("fr-FR")} />
+            <StatTile
+              icon={<Eye className="size-4" />}
+              label="Vues"
+              value={stats.vues.toLocaleString("fr-FR")}
+            />
             <StatTile
               icon={<Star className="size-4" />}
               label="Note moyenne"
@@ -396,36 +407,32 @@ export default async function SeriePage({
                 <InfoRow label="Langue">{series.langue}</InfoRow>
                 <InfoRow label="Genres">
                   <span className="flex flex-wrap gap-2">
-                    {series.genres.length ? (
-                      series.genres.map((g) => (
-                        <Link
-                          key={g}
-                          href={`/catalogue?genre=${encodeURIComponent(g)}`}
-                          className="chip"
-                        >
-                          {g}
-                        </Link>
-                      ))
-                    ) : (
-                      "—"
-                    )}
+                    {series.genres.length
+                      ? series.genres.map((g) => (
+                          <Link
+                            key={g}
+                            href={`/catalogue?genre=${encodeURIComponent(g)}`}
+                            className="chip"
+                          >
+                            {g}
+                          </Link>
+                        ))
+                      : "—"}
                   </span>
                 </InfoRow>
                 <InfoRow label="Tags">
                   <span className="flex flex-wrap gap-2">
-                    {series.tags.length ? (
-                      series.tags.map((t) => (
-                        <Link
-                          key={t}
-                          href={`/catalogue?tag=${encodeURIComponent(t)}`}
-                          className="chip"
-                        >
-                          {t}
-                        </Link>
-                      ))
-                    ) : (
-                      "—"
-                    )}
+                    {series.tags.length
+                      ? series.tags.map((t) => (
+                          <Link
+                            key={t}
+                            href={`/catalogue?tag=${encodeURIComponent(t)}`}
+                            className="chip"
+                          >
+                            {t}
+                          </Link>
+                        ))
+                      : "—"}
                   </span>
                 </InfoRow>
                 <InfoRow label="Titres alternatifs">
@@ -448,15 +455,7 @@ export default async function SeriePage({
   );
 }
 
-function StatTile({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function StatTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="card flex flex-col gap-1 p-4">
       <span className="flex items-center gap-2 text-xs text-muted">

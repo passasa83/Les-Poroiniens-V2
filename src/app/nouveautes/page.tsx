@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { z } from "zod";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
 import { latestPublishedChapter, listUpdates, type ReleaseItem } from "@/lib/data/chapters";
-import { listHistory, listLibrary } from "@/lib/data/library";
+import { recentHistory } from "@/lib/data/history";
+import { listLibrary } from "@/lib/data/library";
 import { getSettings } from "@/lib/data/moderation";
 import { getSeriesBySlug, popularSeries } from "@/lib/data/series";
 import { EmptyState } from "@/components/ui/kit";
@@ -47,11 +48,7 @@ function tabHref(type: string, suivies: boolean): string {
  * les jours précédents jusqu'à sept jours, colonne latérale Communauté /
  * Les plus lus, et fond flouté emprunté au visuel du héros.
  */
-export default async function NouveautesPage({
-  searchParams,
-}: {
-  searchParams: Promise<Search>;
-}) {
+export default async function NouveautesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   const parsed = Schema.safeParse({ type: pick(sp, "type"), suivies: pick(sp, "suivies") });
   const type: SeriesType | "" = (parsed.success ? parsed.data.type : undefined) ?? "";
@@ -67,7 +64,7 @@ export default async function NouveautesPage({
   const [items, library, history, popular] = await Promise.all([
     listUpdates({ days: 7, type, includeAdult: adult }),
     user ? listLibrary(user.id) : Promise.resolve([]),
-    user ? listHistory(user.id, 200) : Promise.resolve([]),
+    user ? recentHistory(user.id, 200) : Promise.resolve([]),
     popularSeries(10, adult),
   ]);
 
@@ -98,8 +95,7 @@ export default async function NouveautesPage({
         slug: series.slug,
         titre: series.titre,
         auteur: series.auteurs.join(", "),
-        visuel:
-          series.banniere || series.couverture || `/api/img/cover/${series.slug}`,
+        visuel: series.banniere || series.couverture || `/api/img/cover/${series.slug}`,
         label: fresh ? "Dernières 24 h" : "À la une",
         numero: chapter.numero,
         unite: series.unite ?? "chapitre",
@@ -141,7 +137,10 @@ export default async function NouveautesPage({
     <div className="relative isolate container-site py-6">
       {/* Fond : couverture du héros floutée et assombrie en haut de page */}
       {hero && (
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-10 -z-10 h-80 overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-10 -z-10 h-80 overflow-hidden"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={hero.visuel}
@@ -158,8 +157,8 @@ export default async function NouveautesPage({
 
       <h1 className="text-2xl font-bold tracking-tight text-fg sm:text-3xl">Nouveautés</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
-        Ce qui vient de sortir : les dernières 24 heures en premier, puis les jours
-        précédents jusqu&apos;à sept jours.
+        Ce qui vient de sortir : les dernières 24 heures en premier, puis les jours précédents
+        jusqu&apos;à sept jours.
       </p>
 
       {!adult && (
@@ -220,11 +219,7 @@ export default async function NouveautesPage({
           )}
         </div>
 
-        <UpdatesSidebar
-          settings={sidebarSettings}
-          popular={popular}
-          adultAllowed={adult}
-        />
+        <UpdatesSidebar settings={sidebarSettings} popular={popular} adultAllowed={adult} />
       </div>
     </div>
   );

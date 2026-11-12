@@ -42,10 +42,7 @@ function wrap(text: string, perLine: number): string[] {
  * Celle d'une série de la graine est refusée en production : masquage du jeu
  * de démonstration (le titre de la série ne doit pas fuiter par cette route).
  */
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ slug: string }> },
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (serieDeDemo(slug)) {
     return new Response("Couverture introuvable", { status: 404 });

@@ -128,8 +128,7 @@ export function FilterDrawer({
   const statut = sp.get("statut") ?? "";
   const annee = sp.get("annee") ?? "";
   const langue = sp.get("langue") ?? "";
-  const activeCount =
-    selectedGenres.length + [type, statut, annee, langue].filter(Boolean).length;
+  const activeCount = selectedGenres.length + [type, statut, annee, langue].filter(Boolean).length;
 
   const toggleGenre = (genre: string) => {
     const next = selectedGenres.includes(genre)
@@ -140,11 +139,7 @@ export function FilterDrawer({
   const toggle = (key: "type" | "statut" | "annee", value: string) =>
     set({ [key]: value === "" ? undefined : value });
 
-  const group = (
-    legend: string,
-    children: React.ReactNode,
-    key: string,
-  ) => (
+  const group = (legend: string, children: React.ReactNode, key: string) => (
     <fieldset key={key}>
       <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
         {legend}
@@ -227,10 +222,8 @@ export function FilterDrawer({
               {group(
                 "Type",
                 TYPES.map((value) =>
-                  chip(
-                    SERIES_TYPE_LABELS[value],
-                    type === value,
-                    () => toggle("type", type === value ? "" : value),
+                  chip(SERIES_TYPE_LABELS[value], type === value, () =>
+                    toggle("type", type === value ? "" : value),
                   ),
                 ),
                 "types",
@@ -239,10 +232,8 @@ export function FilterDrawer({
               {group(
                 "Statut",
                 STATUTS.map((value) =>
-                  chip(
-                    SERIES_STATUT_LABELS[value],
-                    statut === value,
-                    () => toggle("statut", statut === value ? "" : value),
+                  chip(SERIES_STATUT_LABELS[value], statut === value, () =>
+                    toggle("statut", statut === value ? "" : value),
                   ),
                 ),
                 "statuts",
@@ -251,17 +242,18 @@ export function FilterDrawer({
               {group(
                 "Année",
                 years.map((year) =>
-                  chip(
-                    String(year),
-                    annee === String(year),
-                    () => toggle("annee", annee === String(year) ? "" : String(year)),
+                  chip(String(year), annee === String(year), () =>
+                    toggle("annee", annee === String(year) ? "" : String(year)),
                   ),
                 ),
                 "annees",
               )}
 
               <div>
-                <label htmlFor="catalogue-langue" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                <label
+                  htmlFor="catalogue-langue"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted"
+                >
                   Langue
                 </label>
                 <select

@@ -1,9 +1,10 @@
 import "server-only";
 import { purgeCloudflare } from "@/lib/cloudflare";
-import { getDb, invalidate, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
+import { cached, invalidate } from "@/server/cache";
 import { imageEnv, pageUrl } from "@/lib/media";
 import { nasConfigured, nasErrorMessage, nasMove } from "@/lib/nas";
-import { getPages, saveChapter } from "@/lib/data/chapters";
+import { getPages, saveChapter, invalidateChapters } from "@/lib/data/chapters";
 import { audit } from "@/lib/data/moderation";
 import type { Chapter, ScanPage } from "@/lib/types";
 
@@ -45,7 +46,7 @@ async function rewritePrefix(chapterId: string, from: string, to: string): Promi
     await db.update(TABLES.pages, page.id, { chemin: `${to}${page.chemin.slice(from.length)}` });
     rewritten++;
   }
-  invalidate("chapter-pages:");
+  invalidateChapters({ chapterId });
   return rewritten;
 }
 
@@ -122,7 +123,7 @@ export async function publishDueChapters(limit = 50): Promise<{
   published: string[];
   errors: { id: string; error: string }[];
 }> {
-  const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+  const { items } = await getDb().list(TABLES.chapters, {
     filters: [
       { field: "statut", op: "eq", value: "scheduled" },
       { field: "publish_at", op: "lte", value: new Date().toISOString() },
@@ -168,35 +169,50 @@ export async function publishDueChapters(limit = 50): Promise<{
 }
 
 /**
+ * Prochaine échéance de publication (chapitre `scheduled` le plus ancien),
+ * en cache 1 min : la vérification faite à chaque affichage ne coûte plus
+ * d'aller-retour Appwrite. Toute écriture de chapitre l'invalide
+ * (`invalidateChapters`).
+ */
+function nextDueAt(): Promise<string | null> {
+  return cached("chapters:due", 60_000, async () => {
+    const { items } = await getDb().list(TABLES.chapters, {
+      filters: [
+        { field: "statut", op: "eq", value: "scheduled" },
+        { field: "publish_at", op: "gte", value: "2000-01-01T00:00:00.000Z" },
+      ],
+      order: { field: "publish_at", dir: "asc" },
+      limit: 1,
+    });
+    return items[0]?.publish_at ?? null;
+  });
+}
+
+/**
  * Publication à la demande des chapitres programmés.
  *
  * Le plan Hobby de Vercel limite les crons à **une exécution par jour** : le
  * cron quotidien reste la source principale, mais dès qu'un lecteur ouvre une
- * fiche série ou un chapitre, on vérifie qu'aucun chapitre programmé n'est
- * arrivé à échéance, pour que la lecture ne dépende pas de l'horaire du cron.
+ * fiche série ou un chapitre, un chapitre arrivé à échéance est publié
+ * **avant** le rendu (sinon son lien direct renverrait un 404 et ses fichiers
+ * seraient encore en staging sur le NAS).
  *
- * Le coût est une requête indexée (`statut` + `publish_at`) ; la publication
- * elle-même n'est déclenchée que si un chapitre est effectivement dû, et au
- * plus une fois par minute et par instance pour éviter les doublons.
+ * Le contrôle lit l'échéance en cache ; la publication elle-même n'est lancée
+ * que si un chapitre est dû, au plus une fois par minute et par instance.
  */
 let lastPublishRun = 0;
 
 export async function publishDueChaptersOnDemand(): Promise<void> {
   try {
-    const { items } = await getDb().list<{ id: string }>(TABLES.chapters, {
-      filters: [
-        { field: "statut", op: "eq", value: "scheduled" },
-        { field: "publish_at", op: "lte", value: new Date().toISOString() },
-      ],
-      limit: 1,
-    });
-    if (items.length === 0) return;
+    const due = await nextDueAt();
+    if (!due || Date.parse(due) > Date.now()) return;
 
     const now = Date.now();
     if (now - lastPublishRun < 60_000) return;
     lastPublishRun = now;
 
     const { published, errors } = await publishDueChapters();
+    invalidate("chapters:due");
     if (published.length > 0) {
       console.info(`[publishing] chapitres programmés publiés : ${published.join(", ")}`);
     }

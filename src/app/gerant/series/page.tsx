@@ -1,5 +1,5 @@
 import { SeriesDirectory } from "@/components/series/series-directory";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 

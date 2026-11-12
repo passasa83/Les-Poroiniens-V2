@@ -71,9 +71,9 @@ export function discordCallbackUrl(): string | null {
 export function discordConfigured(): boolean {
   return Boolean(
     variable("DISCORD_CLIENT_ID") &&
-      variable("DISCORD_CLIENT_SECRET") &&
-      discordCallbackUrl() &&
-      process.env.APPWRITE_API_KEY,
+    variable("DISCORD_CLIENT_SECRET") &&
+    discordCallbackUrl() &&
+    process.env.APPWRITE_API_KEY,
   );
 }
 
@@ -187,20 +187,17 @@ export async function exchangeDiscordCode(code: string): Promise<DiscordIdentity
   }
   if (!profil.ok) return null;
 
-  const utilisateur = (await profil.json().catch(() => null)) as
-    | {
-        id?: unknown;
-        username?: unknown;
-        global_name?: unknown;
-        email?: unknown;
-        verified?: unknown;
-      }
-    | null;
+  const utilisateur = (await profil.json().catch(() => null)) as {
+    id?: unknown;
+    username?: unknown;
+    global_name?: unknown;
+    email?: unknown;
+    verified?: unknown;
+  } | null;
   if (!utilisateur || typeof utilisateur.id !== "string" || !utilisateur.id) return null;
 
   const username = typeof utilisateur.username === "string" ? utilisateur.username : null;
-  const globalName =
-    typeof utilisateur.global_name === "string" ? utilisateur.global_name : null;
+  const globalName = typeof utilisateur.global_name === "string" ? utilisateur.global_name : null;
   const email =
     typeof utilisateur.email === "string" && utilisateur.email.includes("@")
       ? utilisateur.email.trim().toLowerCase()

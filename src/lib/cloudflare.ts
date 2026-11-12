@@ -18,17 +18,17 @@ export type PurgeResult = {
 /** Cloudflare refuse plus de 30 URLs par appel sur le plan gratuit. */
 const MAX_FILES_PER_PURGE = 30;
 
-export function cloudflareConfigured(): boolean {
-  const env = imageEnv();
-  return Boolean(env.cfToken && env.cfZone);
-}
-
 export async function purgeCloudflare(urls: string[]): Promise<PurgeResult> {
   const env = imageEnv();
   const targets = [...new Set(urls.filter((url) => /^https?:\/\//i.test(url)))];
   if (targets.length === 0) return { attempted: 0, purged: 0, skipped: true };
   if (!env.cfToken || !env.cfZone) {
-    return { attempted: targets.length, purged: 0, skipped: true, error: "cloudflare_not_configured" };
+    return {
+      attempted: targets.length,
+      purged: 0,
+      skipped: true,
+      error: "cloudflare_not_configured",
+    };
   }
 
   const files = targets.slice(0, MAX_FILES_PER_PURGE);
@@ -46,7 +46,10 @@ export async function purgeCloudflare(urls: string[]): Promise<PurgeResult> {
         signal: AbortSignal.timeout(10_000),
       },
     );
-    const data = (await res.json().catch(() => null)) as { success?: boolean; errors?: unknown[] } | null;
+    const data = (await res.json().catch(() => null)) as {
+      success?: boolean;
+      errors?: unknown[];
+    } | null;
     if (!res.ok || !data?.success) {
       return {
         attempted: files.length,
