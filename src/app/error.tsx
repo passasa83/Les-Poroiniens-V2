@@ -41,8 +41,7 @@ export default function ErrorPage({
       </p>
       {error.digest && (
         <p className="text-xs text-muted">
-          Référence à communiquer à l&apos;équipe :{" "}
-          <code className="text-fg">{error.digest}</code>
+          Référence à communiquer à l&apos;équipe : <code className="text-fg">{error.digest}</code>
         </p>
       )}
       <div className="flex flex-wrap items-center justify-center gap-2">

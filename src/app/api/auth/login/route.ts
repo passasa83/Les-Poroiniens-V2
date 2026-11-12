@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { login } from "@/lib/auth";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { login } from "@/server/auth";
+import { route } from "@/server/http";
 
 /**
  * on accepte un identifiant **ou** une adresse e-mail. `email` reste
@@ -27,48 +27,28 @@ const CredentialsSchema = z
  * 10 tentatives / minute / IP, message d'erreur unique : aucune distinction
  * entre un identifiant inconnu et un mot de passe incorrect.
  */
-export async function POST(request: Request) {
-  const limit = rateLimit(`auth:login:${clientIp(request)}`, {
-    limit: 10,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      {
-        error: "Trop de tentatives. Réessayez dans quelques instants.",
-        code: "rate_limited",
-      },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
+export const POST = route(
+  {
+    rateLimit: {
+      key: "auth:login",
+      limit: 10,
+      windowMs: 60_000,
+      message: "Trop de tentatives. Réessayez dans quelques instants.",
+    },
+    body: CredentialsSchema,
+    invalidBody: "Identifiant ou mot de passe incorrect.",
+  },
+  async ({ body }) => {
+    const result = await login(body.identifier, body.password, {
+      remember: body.remember,
+    });
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, code: "invalid_credentials" },
+        { status: 401 },
+      );
+    }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Requête invalide.", code: "bad_request" },
-      { status: 400 },
-    );
-  }
-
-  const parsed = CredentialsSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Identifiant ou mot de passe incorrect.", code: "validation" },
-      { status: 400 },
-    );
-  }
-
-  const result = await login(parsed.data.identifier, parsed.data.password, {
-    remember: parsed.data.remember,
-  });
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error, code: "invalid_credentials" },
-      { status: 401 },
-    );
-  }
-
-  return NextResponse.json({ ok: true });
-}
+    return NextResponse.json({ ok: true });
+  },
+);

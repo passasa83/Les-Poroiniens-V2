@@ -10,40 +10,16 @@ import {
   ExternalLink,
   Server,
 } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { atLeast, can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card } from "@/components/ui/kit";
-import { appwriteEnabled, dataMode, getDb, TABLES } from "@/lib/db";
-import { listImportJobs, listReports } from "@/lib/data/moderation";
-import { exclureDemo, serieDeDemo } from "@/lib/demo-gate";
+import { appwriteEnabled, dataMode, getDb, TABLES } from "@/server/db";
+import { adminDashboard, type Triplet } from "@/lib/data/dashboard";
 import { libelleCourt } from "@/lib/format";
-import type { Comment, Profile, Series } from "@/lib/types";
+import { Header, HealthRow, QuickAction } from "./_components/dashboard-parts";
 
 export const dynamic = "force-dynamic";
-
-const DAY = 86_400_000;
-const WINDOWS: Array<{ label: string; ms: number }> = [
-  { label: "Jour", ms: DAY },
-  { label: "Semaine", ms: 7 * DAY },
-  { label: "Mois", ms: 30 * DAY },
-];
-
-type RawRow = Record<string, unknown>;
-
-function rowsSince(rows: unknown[], field: string, ms: number): number {
-  const from = Date.now() - ms;
-  return rows.filter((r) => {
-    const value = (r as RawRow)[field];
-    if (typeof value !== "string") return false;
-    const time = Date.parse(value);
-    return Number.isFinite(time) && time >= from;
-  }).length;
-}
-
-function total(rows: unknown[]): number {
-  return rows.length;
-}
 
 function n(value: number): string {
   return value.toLocaleString("fr-FR");
@@ -54,72 +30,19 @@ export default async function AdminDashboard() {
   const user = await getCurrentUser();
   if (!atLeast(user?.role, "admin")) return <AccessDenied required="admin" />;
 
-  const [seriesRes, chapterRows, commentRes, profileRes, reports, jobs] = await Promise.all([
-    getDb().list<Series>(TABLES.series, {
-      order: { field: "vues", dir: "desc" },
-      limit: 5000,
-    }),
-    getDb().list<RawRow>(TABLES.chapters, { order: { field: "created_at", dir: "desc" }, limit: 5000 }),
-    getDb().list<Comment>(TABLES.comments, { limit: 5000 }),
-    getDb().list<Profile>(TABLES.profiles, { limit: 5000 }),
-    listReports(),
-    listImportJobs(50),
-  ]);
+  const d = await adminDashboard();
+  const openReports = d.signalementsOuverts;
+  const failedJobs = d.jobsEnErreur;
+  const fixe = (v: number): Triplet => [v, v, v];
 
-  /* Masquage du jeu de démonstration en production : KPI et classements du
-     back-office ne comptent que le catalogue réellement visible. Les séries
-     archivées sont hors catalogue public : elles sortent des classements. */
-  const toutes = exclureDemo(seriesRes.items);
-  const archivees = toutes.filter((s) => s.statut === "archive");
-  const series = toutes.filter((s) => s.statut !== "archive");
-  const chapters = chapterRows.items.filter((c) => !serieDeDemo(String(c.series_id)));
-  const comments = exclureDemo(commentRes.items);
-  const publishedChapters = chapters.filter((c) => c.statut === "published");
-  const draftChapters = chapters.filter((c) => c.statut === "draft");
-  const openReports = reports.filter((r) => r.statut === "ouvert");
-  const failedJobs = jobs.filter((j) => j.statut === "erreur");
-  const totalViews = series.reduce((sum, s) => sum + (Number(s.vues) || 0), 0);
-
-  const kpis: Array<{
-    label: string;
-    values: [number, number, number];
-    global?: boolean;
-  }> = [
-    {
-      label: "Séries ajoutées",
-      values: WINDOWS.map((w) => rowsSince(series, "created_at", w.ms)) as [number, number, number],
-    },
-    {
-      label: "Contenus publiés",
-      values: WINDOWS.map((w) => rowsSince(publishedChapters, "publish_at", w.ms)) as [
-        number,
-        number,
-        number,
-      ],
-    },
-    { label: "Contenus en brouillon", values: [total(draftChapters), total(draftChapters), total(draftChapters)], global: true },
-    {
-      label: "Commentaires",
-      values: WINDOWS.map((w) => rowsSince(comments, "created_at", w.ms)) as [
-        number,
-        number,
-        number,
-      ],
-    },
-    {
-      label: "Inscriptions",
-      values: WINDOWS.map((w) => rowsSince(profileRes.items, "date_inscription", w.ms)) as [
-        number,
-        number,
-        number,
-      ],
-    },
-    {
-      label: "Signalements ouverts",
-      values: [openReports.length, openReports.length, openReports.length],
-      global: true,
-    },
-    { label: "Vues totales", values: [totalViews, totalViews, totalViews], global: true },
+  const kpis: Array<{ label: string; values: Triplet; global?: boolean }> = [
+    { label: "Séries ajoutées", values: d.seriesAjoutees },
+    { label: "Contenus publiés", values: d.chapitresPublies },
+    { label: "Contenus en brouillon", values: fixe(d.brouillons), global: true },
+    { label: "Commentaires", values: d.commentaires },
+    { label: "Inscriptions", values: d.inscriptions },
+    { label: "Signalements ouverts", values: fixe(openReports.length), global: true },
+    { label: "Vues totales", values: fixe(d.vuesTotales), global: true },
   ];
 
   const mode = dataMode();
@@ -134,9 +57,6 @@ export default async function AdminDashboard() {
   }
   const driveConfigured = Boolean(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT);
   const nasConfigured = Boolean(imageEnv().nasApiBase);
-
-  const recentChapters = chapters.slice(0, 8);
-  const seriesById = new Map(series.map((s) => [s.id, s] as const));
 
   return (
     <div className="space-y-8">
@@ -154,14 +74,14 @@ export default async function AdminDashboard() {
         <QuickAction
           href="/admin/users"
           label="Utilisateurs"
-          value={n(profileRes.items.length)}
+          value={n(d.utilisateurs)}
           hint="Comptes et rôles"
         />
         <QuickAction
           href="/admin/series"
           label="Catalogue"
-          value={n(series.length)}
-          hint={`${archivees.length} archivée(s)`}
+          value={n(d.seriesActives)}
+          hint={`${d.seriesArchivees} archivée(s)`}
         />
         <QuickAction
           href="/admin/recommandations"
@@ -173,8 +93,8 @@ export default async function AdminDashboard() {
 
       {mode === "demo" && (
         <div className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-xs text-warn">
-          Mode démonstration : Appwrite n&apos;est pas encore configuré (clé API absente).
-          Les compteurs proviennent du jeu de données local.
+          Mode démonstration : Appwrite n&apos;est pas encore configuré (clé API absente). Les
+          compteurs proviennent du jeu de données local.
         </div>
       )}
 
@@ -195,7 +115,10 @@ export default async function AdminDashboard() {
                 <td className="px-4 py-3 text-fg">
                   {kpi.label}
                   {kpi.global && (
-                    <span className="ml-2 text-xs text-muted" title="Valeur cumulée, indépendante de la période">
+                    <span
+                      className="ml-2 text-xs text-muted"
+                      title="Valeur cumulée, indépendante de la période"
+                    >
                       (cumul)
                     </span>
                   )}
@@ -218,7 +141,7 @@ export default async function AdminDashboard() {
             <Activity className="size-4 text-primary" /> Top séries (vues)
           </h2>
           <ol className="mt-4 space-y-3">
-            {series.slice(0, 5).map((s, i) => (
+            {d.topSeries.map((s, i) => (
               <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="text-xs tabular-nums text-muted">{i + 1}.</span>
@@ -230,7 +153,7 @@ export default async function AdminDashboard() {
                 <span className="shrink-0 font-semibold tabular-nums text-fg">{n(s.vues)}</span>
               </li>
             ))}
-            {series.length === 0 && <li className="text-sm text-muted">Aucune série.</li>}
+            {d.topSeries.length === 0 && <li className="text-sm text-muted">Aucune série.</li>}
           </ol>
           <Link href="/admin/series" className="mt-4 inline-block text-sm link-muted">
             Consulter le catalogue →
@@ -243,24 +166,31 @@ export default async function AdminDashboard() {
             <BookOpen className="size-4 text-primary" /> Dernières publications
           </h2>
           <ul className="mt-4 space-y-3">
-            {recentChapters.map((chapter) => {
-              const serie = seriesById.get(String(chapter.series_id));
-              const statut = String(chapter.statut);
+            {d.derniersChapitres.map(({ chapter, serie }) => {
+              const statut = chapter.statut;
               return (
-                <li key={String(chapter.id)} className="flex items-center justify-between gap-3 text-sm">
+                <li key={chapter.id} className="flex items-center justify-between gap-3 text-sm">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate link-muted">{serie?.titre ?? "Série supprimée"}</span>
                     <span className="shrink-0 text-muted">
-                      {libelleCourt(Number(chapter.numero), serie?.unite)}
+                      {libelleCourt(chapter.numero, serie?.unite)}
                     </span>
                   </span>
-                  <Badge tone={statut === "published" ? "ok" : statut === "scheduled" ? "warn" : "neutral"}>
-                    {statut === "published" ? "Publié" : statut === "scheduled" ? "Planifié" : "Brouillon"}
+                  <Badge
+                    tone={
+                      statut === "published" ? "ok" : statut === "scheduled" ? "warn" : "neutral"
+                    }
+                  >
+                    {statut === "published"
+                      ? "Publié"
+                      : statut === "scheduled"
+                        ? "Planifié"
+                        : "Brouillon"}
                   </Badge>
                 </li>
               );
             })}
-            {recentChapters.length === 0 && (
+            {d.derniersChapitres.length === 0 && (
               <li className="text-sm text-muted">Aucune publication.</li>
             )}
           </ul>
@@ -269,9 +199,7 @@ export default async function AdminDashboard() {
         {/* Qualité des images */}
         <Card className="p-5">
           <h2 className="section-title">Taux d&apos;erreur des images</h2>
-          <p className="mt-4 text-4xl font-bold text-fg">
-            {mode === "demo" ? "N/A" : "0 %"}
-          </p>
+          <p className="mt-4 text-4xl font-bold text-fg">{mode === "demo" ? "N/A" : "0 %"}</p>
           <p className="mt-3 text-xs text-muted">
             {mode === "demo"
               ? "Mesure indisponible en mode démonstration (aucun trafic réel, aucun CDN)."
@@ -294,7 +222,9 @@ export default async function AdminDashboard() {
             />
             <HealthRow
               label="Appwrite"
-              value={appwriteState === "ok" ? "OK" : appwriteState === "ko" ? "KO" : "Non configuré"}
+              value={
+                appwriteState === "ok" ? "OK" : appwriteState === "ko" ? "KO" : "Non configuré"
+              }
               tone={appwriteState === "ok" ? "ok" : appwriteState === "ko" ? "adult" : "neutral"}
             />
             <HealthRow
@@ -313,7 +243,12 @@ export default async function AdminDashboard() {
               value={nasConfigured ? "Configuré" : "Non connecté"}
               tone={nasConfigured ? "ok" : "neutral"}
             />
-            <HealthRow label="Dernier backup" value="Non planifié" tone="warn" hint="Sauvegarde quotidienne à mettre en place." />
+            <HealthRow
+              label="Dernier backup"
+              value="Non planifié"
+              tone="warn"
+              hint="Sauvegarde quotidienne à mettre en place."
+            />
           </ul>
         </Card>
 
@@ -362,73 +297,11 @@ export default async function AdminDashboard() {
                 <Clock3 className="size-4 text-muted" />
                 Contenus planifiés
               </span>
-              <Badge tone="neutral">
-                {chapters.filter((c) => c.statut === "scheduled").length}
-              </Badge>
+              <Badge tone="neutral">{d.planifies}</Badge>
             </li>
           </ul>
         </Card>
       </div>
     </div>
-  );
-}
-
-function Header({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div>
-      <h1 className="section-title">{title}</h1>
-      {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
-    </div>
-  );
-}
-
-/** Carte-raccourci : une rubrique du back-office, cliquable en entier. */
-function QuickAction({
-  href,
-  label,
-  hint,
-  value,
-  tone = "fg",
-}: {
-  href: string;
-  label: string;
-  hint: string;
-  value: string | number;
-  tone?: "fg" | "warn" | "ok";
-}) {
-  const color =
-    tone === "warn" ? "text-warn" : tone === "ok" ? "text-ok" : "text-fg";
-  return (
-    <Link
-      href={href}
-      className="card block p-4 transition-colors hover:bg-surface2/70"
-      aria-label={`${label} — ${hint}`}
-    >
-      <span className="block text-xs uppercase tracking-wide text-muted">{label}</span>
-      <span className={`mt-1 block text-3xl font-bold tabular-nums ${color}`}>{value}</span>
-      <span className="mt-1 block text-xs text-muted">{hint}</span>
-    </Link>
-  );
-}
-
-function HealthRow({
-  label,
-  value,
-  tone,
-  hint,
-}: {
-  label: string;
-  value: string;
-  tone: "ok" | "warn" | "adult" | "neutral";
-  hint?: string;
-}) {
-  return (
-    <li className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3 last:border-0 last:pb-0">
-      <span className="text-muted">
-        {label}
-        {hint && <span className="mt-0.5 block text-xs text-muted/80">{hint}</span>}
-      </span>
-      <Badge tone={tone}>{value}</Badge>
-    </li>
   );
 }

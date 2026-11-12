@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
 import { filtresSansDemo } from "@/lib/demo-gate";
 import { getLibraryEntry, upsertLibraryEntry } from "@/lib/data/library";
 import { getSeriesById, getSeriesBySlug } from "@/lib/data/series";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { atLeast } from "@/lib/roles";
 import type { LibraryStatus, Series } from "@/lib/types";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -143,7 +141,9 @@ function lireJson(contenu: string): LigneImport[] | null {
   }
   const entrees = Array.isArray(parsed)
     ? parsed
-    : parsed && typeof parsed === "object" && Array.isArray((parsed as { entrees?: unknown }).entrees)
+    : parsed &&
+        typeof parsed === "object" &&
+        Array.isArray((parsed as { entrees?: unknown }).entrees)
       ? (parsed as { entrees: unknown[] }).entrees
       : null;
   if (!entrees) return null;
@@ -163,7 +163,7 @@ async function resolverSerie(line: LigneImport): Promise<Series | null> {
     if (bySlug) return bySlug;
   }
   if (line.titre) {
-    const { items } = await getDb().list<Series>(TABLES.series, {
+    const { items } = await getDb().list(TABLES.series, {
       filters: [
         { field: "titre", op: "eq", value: line.titre },
         /* Série de la graine : jamais résolue en production (la fiche est
@@ -184,97 +184,70 @@ async function resolverSerie(line: LigneImport): Promise<Series | null> {
  * ajoutées, les entrées déjà suivies sont conservées telles quelles. Identité
  * lue dans la session serveur, jamais dans le corps de la requête.
  */
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
-  if (!atLeast(user.role, "membre")) {
-    return NextResponse.json({ error: "Accès réservé aux membres.", code: "forbidden" }, { status: 403 });
-  }
-
-  const limit = rateLimit(`library-import:${user.id}:${clientIp(request)}`, {
-    limit: 10,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Trop d'imports récents. Réessayez dans un instant.", code: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
-
-  let json: unknown;
-  try {
-    json = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Corps de requête invalide.", code: "bad_request" }, { status: 400 });
-  }
-
-  const parsed = Body.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Données invalides.", code: "validation_error" }, { status: 400 });
-  }
-
-  const { format, contenu } = parsed.data;
-  const lines = format === "json" ? lireJson(contenu) : parseCsv(contenu).map(normalize);
-  if (lines === null) {
-    return NextResponse.json(
-      { error: "Fichier JSON illisible (clés « entrees » ou tableau attendu).", code: "invalid_file" },
-      { status: 400 },
-    );
-  }
-  if (lines.length === 0) {
-    return NextResponse.json(
-      { error: "Aucune série à importer dans ce fichier.", code: "empty_file" },
-      { status: 400 },
-    );
-  }
-  if (lines.length > 500) {
-    return NextResponse.json(
-      { error: "Fichier trop volumineux : 500 séries maximum par import.", code: "too_large" },
-      { status: 413 },
-    );
-  }
-
-  let importees = 0;
-  let conservees = 0;
-  let inconnues = 0;
-
-  for (const line of lines) {
-    const series = await resolverSerie(line);
-    if (!series) {
-      inconnues += 1;
-      continue;
+export const POST = route(
+  {
+    auth: "library",
+    forbidden: "Accès réservé aux membres.",
+    rateLimit: {
+      key: "library-import",
+      by: "ip+user",
+      limit: 10,
+      windowMs: 60_000,
+      message: "Trop d'imports récents. Réessayez dans un instant.",
+    },
+    body: Body,
+  },
+  async ({ user, body }) => {
+    const { format, contenu } = body;
+    const lines = format === "json" ? lireJson(contenu) : parseCsv(contenu).map(normalize);
+    if (lines === null) {
+      fail(400, "Fichier JSON illisible (clés « entrees » ou tableau attendu).", "invalid_file");
     }
-    const existing = await getLibraryEntry(user.id, series.id);
-    if (existing) {
-      conservees += 1;
-      continue;
+    if (lines.length === 0) {
+      fail(400, "Aucune série à importer dans ce fichier.", "empty_file");
     }
-    await upsertLibraryEntry(user.id, series.id, {
-      statut: line.statut ?? "a_lire",
-      favori: line.favori ?? false,
-      note: line.note ?? null,
+    if (lines.length > 500) {
+      fail(413, "Fichier trop volumineux : 500 séries maximum par import.", "too_large");
+    }
+
+    let importees = 0;
+    let conservees = 0;
+    let inconnues = 0;
+
+    for (const line of lines) {
+      const series = await resolverSerie(line);
+      if (!series) {
+        inconnues += 1;
+        continue;
+      }
+      const existing = await getLibraryEntry(user.id, series.id);
+      if (existing) {
+        conservees += 1;
+        continue;
+      }
+      await upsertLibraryEntry(user.id, series.id, {
+        statut: line.statut ?? "a_lire",
+        favori: line.favori ?? false,
+        note: line.note ?? null,
+      });
+      importees += 1;
+    }
+
+    return NextResponse.json({
+      ok: true,
+      importees,
+      conservees,
+      inconnues,
+      message: [
+        importees > 0
+          ? `${importees} série${importees > 1 ? "s" : ""} importée${importees > 1 ? "s" : ""}`
+          : null,
+        conservees > 0 ? `${conservees} déjà suivie${conservees > 1 ? "s" : ""}` : null,
+        inconnues > 0 ? `${inconnues} introuvable${inconnues > 1 ? "s" : ""}` : null,
+        importees === 0 && conservees === 0 ? "rien à importer" : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
     });
-    importees += 1;
-  }
-
-  return NextResponse.json({
-    ok: true,
-    importees,
-    conservees,
-    inconnues,
-    message: [
-      importees > 0 ? `${importees} série${importees > 1 ? "s" : ""} importée${importees > 1 ? "s" : ""}` : null,
-      conservees > 0 ? `${conservees} déjà suivie${conservees > 1 ? "s" : ""}` : null,
-      inconnues > 0 ? `${inconnues} introuvable${inconnues > 1 ? "s" : ""}` : null,
-      importees === 0 && conservees === 0 ? "rien à importer" : null,
-    ]
-      .filter(Boolean)
-      .join(" · "),
-  });
-}
+  },
+);

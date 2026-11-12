@@ -5,13 +5,12 @@ import { after } from "next/server";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { AdultGate } from "@/components/adult/adult-gate";
 import { CommentsSection } from "@/components/comments/comments-section";
-import { LnReader } from "@/components/reader/ln-reader";
-import { Reader } from "@/components/reader/reader";
+import { LnReader, Reader } from "@/features/reader";
 import { SeriesGrid } from "@/components/series/series-card";
 import { ChapitreIndisponible } from "./chapitre-indisponible";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
 import { getChapter, getReaderContext, recordView } from "@/lib/data/chapters";
-import { listHistory } from "@/lib/data/library";
+import { getHistoryEntry } from "@/lib/data/history";
 import {
   activeRecommendations,
   getSeriesBySlug,
@@ -27,7 +26,7 @@ import {
   titreUnite,
 } from "@/lib/format";
 import { can } from "@/lib/roles";
-import type { HistoryEntry, Series } from "@/lib/types";
+import type { Series } from "@/lib/types";
 
 type Params = Promise<{ slug: string; n: string }>;
 /** Query string du lecteur : `?page=N` (lien partagé vers une page précise). */
@@ -118,12 +117,7 @@ export default async function ChapitrePage({
   // alors servies avec des URLs signées à 10 minutes.
   const allowDraft = Boolean(user && can(user.role, "publish_chapter"));
 
-  /* Contexte du lecteur et historique (page de départ) sont indépendants :
-     deux lectures en parallèle au lieu de deux en série. */
-  const [context, history] = await Promise.all([
-    getReaderContext(series, numero, { allowDraft }),
-    user ? listHistory(user.id, 500) : (Promise.resolve([]) as Promise<HistoryEntry[]>),
-  ]);
+  const context = await getReaderContext(series, numero, { allowDraft });
   if (!context) notFound();
 
   const isAdult = series.classification === "adult" || context.chapter.classification === "adult";
@@ -139,33 +133,30 @@ export default async function ChapitrePage({
   }
 
   /* Page de départ : un lien `?page=N` partagé l'emporte sur la
-     progression en base (`page=1` = début, donc valeur par défaut). */
-  let initialPage = 1;
+     progression en base (`page=1` = début, donc valeur par défaut). La
+     progression est lue par identifiant (une ligne), en parallèle des
+     recommandations de fin de chapitre (jamais bloquantes). */
   const urlPage = typeof query.page === "string" ? Number(query.page) : NaN;
-  if (Number.isFinite(urlPage) && urlPage >= 2) {
-    initialPage = Math.floor(urlPage);
-  } else if (user) {
-    const entry = history.find((h) => h.chapter_id === context.chapter.id);
-    if (entry && entry.page > 0) initialPage = entry.page;
-  }
+  const pageDansUrl = Number.isFinite(urlPage) && urlPage >= 2;
+  const adultOk = !isAdult || gateOk;
+  const [lecture, recommandees] = await Promise.all([
+    user && !pageDansUrl ? getHistoryEntry(user.id, context.chapter.id) : null,
+    needsGate ? [] : endOfChapterRecommendations(series, adultOk),
+  ]);
+  const initialPage = pageDansUrl
+    ? Math.floor(urlPage)
+    : lecture && lecture.page > 0
+      ? lecture.page
+      : 1;
 
   const prevHref = context.prev ? chapterHref(series.slug, context.prev.numero) : null;
   const nextHref = context.next ? chapterHref(series.slug, context.next.numero) : null;
-
-  /* Fin de chapitre : recommandations éditoriales « end_chapter »,
-     repli sur les séries similaires (jamais bloquant). */
-  const adultOk = !isAdult || gateOk;
-  const recommandees = needsGate
-    ? []
-    : await endOfChapterRecommendations(series, adultOk);
 
   const chapitres = context.chapters.map((c) => ({
     numero: c.numero,
     href: chapterHref(series.slug, c.numero),
   }));
 
-  /* « chapitre indisponible » : le chapitre existe mais aucune page ne
-     se charge → message précis + Réessayer / Signaler, sans le lecteur. */
   /* « chapitre indisponible » : le chapitre existe mais aucune page (image)
      ou aucun paragraphe (light novel) ne se charge → message précis +
      Réessayer / Signaler, sans le lecteur. */
@@ -244,8 +235,8 @@ export default async function ChapitrePage({
             <strong>
               Aperçu d&apos;un {libelleUniteSingulier(series.unite).toLowerCase()} non publié.
             </strong>{" "}
-            Ce lien n&apos;est visible que
-            pour vous (Gérant) et les URLs des pages expirent au bout de 10 minutes.
+            Ce lien n&apos;est visible que pour vous (Gérant) et les URLs des pages expirent au bout
+            de 10 minutes.
           </div>
         </div>
       )}
@@ -336,7 +327,11 @@ export default async function ChapitrePage({
                 Séries recommandées
               </h2>
               <div className="mt-4">
-                <SeriesGrid series={recommandees} adultAllowed={adultOk} authenticated={Boolean(user)} />
+                <SeriesGrid
+                  series={recommandees}
+                  adultAllowed={adultOk}
+                  authenticated={Boolean(user)}
+                />
               </div>
             </section>
           )}
@@ -360,10 +355,7 @@ export default async function ChapitrePage({
  * placées en « end_chapter », sinon repli sur les séries similaires de la
  * série en cours. Quatre suggestions au maximum, jamais la série elle-même.
  */
-async function endOfChapterRecommendations(
-  series: Series,
-  adultOk: boolean,
-): Promise<Series[]> {
+async function endOfChapterRecommendations(series: Series, adultOk: boolean): Promise<Series[]> {
   const out: Series[] = [];
   const seen = new Set<string>([series.id]);
 

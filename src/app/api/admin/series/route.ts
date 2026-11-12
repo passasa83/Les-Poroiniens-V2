@@ -1,16 +1,10 @@
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { audit } from "@/lib/data/moderation";
 import { getSeriesBySlug, saveSeries } from "@/lib/data/series";
 import type { Series } from "@/lib/types";
+import { route } from "@/server/http";
 
 export const runtime = "nodejs";
-
-function jsonError(error: string, code: string, status: number) {
-  return Response.json({ error, code }, { status });
-}
 
 /** Une liste peut arriver soit en tableau, soit en chaîne séparée par des virgules. */
 function listField(maxItems: number, maxLen: number) {
@@ -68,59 +62,43 @@ async function uniqueSlug(base: string): Promise<string> {
 }
 
 /** POST /api/admin/series — création d'une fiche série (admin+). */
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "edit_series")) {
-    return jsonError("Réservé aux administrateurs.", "forbidden", 403);
-  }
+export const POST = route(
+  {
+    auth: "edit_series",
+    forbidden: "Réservé aux administrateurs.",
+    rateLimit: {
+      key: "admin:series:create",
+      limit: 30,
+      windowMs: 60_000,
+      message: "Trop de requêtes, réessayez plus tard.",
+    },
+    body: serieInput,
+    invalidBody: "issue",
+  },
+  async ({ user, body, ip }) => {
+    const data = body;
+    const id = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const slug = await uniqueSlug(slugify(data.titre));
 
-  const limit = rateLimit(`admin:series:create:${clientIp(request)}`, {
-    limit: 30,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return jsonError("Trop de requêtes, réessayez plus tard.", "rate_limited", 429);
-  }
+    const series = await saveSeries({
+      id,
+      slug,
+      ...data,
+      noteMoy: 0,
+      nbVotes: 0,
+      vues: 0,
+      populaire: 0,
+    } as Partial<Series> & { id: string });
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
+    await audit({
+      actorId: user.id,
+      actorPseudo: user.pseudo,
+      action: "series.create",
+      cible: `series:${series.id}`,
+      apres: { titre: series.titre, slug: series.slug, classification: series.classification },
+      ip,
+    });
 
-  const parsed = serieInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(
-      parsed.error.issues[0]?.message ?? "Champs invalides.",
-      "invalid_body",
-      400,
-    );
-  }
-
-  const data = parsed.data;
-  const id = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  const slug = await uniqueSlug(slugify(data.titre));
-
-  const series = await saveSeries({
-    id,
-    slug,
-    ...data,
-    noteMoy: 0,
-    nbVotes: 0,
-    vues: 0,
-    populaire: 0,
-  } as Partial<Series> & { id: string });
-
-  await audit({
-    actorId: user.id,
-    actorPseudo: user.pseudo,
-    action: "series.create",
-    cible: `series:${series.id}`,
-    apres: { titre: series.titre, slug: series.slug, classification: series.classification },
-    ip: clientIp(request),
-  });
-
-  return Response.json({ series }, { status: 201 });
-}
+    return Response.json({ series }, { status: 201 });
+  },
+);

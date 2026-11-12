@@ -1,27 +1,30 @@
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { can } from "@/lib/roles";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { audit, createImportJob, listImportJobs, updateImportJob } from "@/lib/data/moderation";
-import { refreshSeriesChapterCount } from "@/lib/data/chapters";
+import { rateLimit } from "@/server/http/rate-limit";
+import { audit, createImportJob, updateImportJob } from "@/lib/data/moderation";
+import {
+  deleteChapterCascade,
+  invalidateChapters,
+  refreshSeriesChapterCount,
+} from "@/lib/data/chapters";
 import { getSeriesById, saveSeries } from "@/lib/data/series";
-import { getDb, rowId, TABLES } from "@/lib/db";
-import { demoPagePath } from "@/lib/db/seed";
+import { getDb, parLots, rowId, TABLES } from "@/server/db";
 import { libelleUnite } from "@/lib/format";
-import { nasErrorMessage, nasList, type NasPage } from "@/lib/nas";
-import { imgchestErrorMessage, imgchestPost as fetchImgChestPost } from "@/lib/imgchest";
+import {
+  indexDemo,
+  indexFromImgchest,
+  indexFromNas,
+  messageResultat,
+  SourceError,
+  type SourceIndex,
+} from "@/lib/import/sources";
 import { transitionChapterFiles, type FileTransition } from "@/lib/publishing";
 import { detectNumero, uniteDeKind } from "@/lib/unite";
 import type { Chapter, ImportJob, Unite } from "@/lib/types";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
 
-function jsonError(
-  error: string,
-  code: string,
-  status: number,
-  extra?: Record<string, unknown>,
-) {
+function jsonError(error: string, code: string, status: number, extra?: Record<string, unknown>) {
   return Response.json({ error, code, ...(extra ?? {}) }, { status });
 }
 
@@ -56,347 +59,278 @@ const importInput = z.object({
     .default(null),
 });
 
-/** Tri naturel : `page 2` avant `page 10`. */
-function naturalSort(names: string[]): string[] {
-  return [...names].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
-}
-
-type IndexedPage = {
-  chemin: string;
-  largeur: number;
-  hauteur: number;
-  bytes?: number;
-  hash?: string;
-};
-
 /**
  * POST /api/owner/import — import d'un chapitre (Gérant exclusif).
  *
- * Trois sources d'indexation :
- * - `imgchest` : album déjà publié par le Gérant — les URLs CDN du fichier
- *   sont résolues ici puis stockées en base (la lecture n'appelle pas ImgChest) ;
- * - `chemin` renseigné : listing serveur via `GET /list` — largeurs, hauteurs,
- *   poids et hash sont lus sur le NAS puis stockés en base ;
- * - sinon : indexation des seuls noms, avec pages de démonstration si le NAS
- *   n'est pas configuré (dégradé assumé pour remplir et tester le site).
+ * Trois sources d'indexation (`@/lib/import/sources`) : album ImgChest,
+ * dossier du NAS (`chemin`), ou noms seuls → planches de démonstration.
+ * La route valide, crée le chapitre et son index de pages, puis publie.
  */
-export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return jsonError("Authentification requise.", "unauthorized", 401);
-  if (!can(user.role, "import_chapters")) {
-    return jsonError(
-      "L'import de contenu est réservé au Gérant.",
-      "owner_only",
-      403,
-    );
-  }
-
-  const ip = clientIp(request);
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Corps JSON invalide.", "invalid_body", 400);
-  }
-
-  const parsed = importInput.safeParse(body);
-  if (!parsed.success) {
-    return jsonError(parsed.error.issues[0]?.message ?? "Champs invalides.", "invalid_body", 400);
-  }
-
-  /* Un lot enchaîne les chapitres : le quota est relevé pour la durée de
+export const POST = route(
+  {
+    auth: "import_chapters",
+    forbidden: "L'import de contenu est réservé au Gérant.",
+    body: importInput,
+    invalidBody: "issue",
+  },
+  async ({ user, body, ip }) => {
+    /* Un lot enchaîne les chapitres : le quota est relevé pour la durée de
      l'opération, au prorata du nombre de chapitres annoncé (60/min par défaut
      + le déclaratif du lot, borné) — un import manuel reste bloqué à 10/min. */
-  const batchTotal = parsed.success ? (parsed.data.batch?.total ?? 0) : 0;
-  const limit = rateLimit(`owner:import:${ip}`, {
-    limit: parsed.data.batch ? Math.min(600, 60 + batchTotal) : 10,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return jsonError("Trop d'imports en une minute.", "rate_limited", 429, {
-      retryAfter: limit.retryAfter,
+    const batchTotal = body.batch?.total ?? 0;
+    const limit = rateLimit(`owner:import:${ip}`, {
+      limit: body.batch ? Math.min(600, 60 + batchTotal) : 10,
+      windowMs: 60_000,
     });
-  }
+    if (!limit.ok) {
+      fail(429, "Trop d'imports en une minute.", "rate_limited", { retryAfter: limit.retryAfter });
+    }
 
-  const data = parsed.data;
+    const data = body;
 
-  /* Job de lot : vérifié du côté serveur — un jobId étranger est refusé. */
-  let batchJob: ImportJob | null = null;
-  if (data.batch) {
-    const jobs = await listImportJobs(500);
-    batchJob = jobs.find((j) => j.id === data.batch!.jobId && j.created_by === user.id) ?? null;
-    if (!batchJob) return jsonError("Lot d'import introuvable.", "batch_not_found", 404);
-  }
+    /* Job de lot : vérifié du côté serveur — un jobId étranger est refusé. */
+    let batchJob: ImportJob | null = null;
+    if (data.batch) {
+      /* Lecture par identifiant (avant : recherche parmi les 500 derniers
+         jobs, un lot plus ancien était refusé). */
+      const job = await getDb().get(TABLES.importJobs, data.batch.jobId);
+      batchJob = job && job.created_by === user.id ? job : null;
+      if (!batchJob) fail(404, "Lot d'import introuvable.", "batch_not_found");
+    }
 
-  const nasPath = data.chemin?.trim().replace(/^\/+/, "").replace(/\/+$/, "") || "";
-  /* Nature du dossier importé : `Tome 3` → tome, `Chapitre 12` → chapitre ;
+    const nasPath = data.chemin?.trim().replace(/^\/+/, "").replace(/\/+$/, "") || "";
+    /* Nature du dossier importé : `Tome 3` → tome, `Chapitre 12` → chapitre ;
      un dossier au nom neutre (« 12 », album ImgChest, pages de démonstration)
      laisse décider l'organisation déjà enregistrée sur la série. */
-  const folderKind = detectNumero(nasPath.split("/").pop() ?? "").kind;
-  const imgchestId = data.source === "imgchest" ? (data.imgchest_post ?? "").trim() : "";
-  if (data.source === "imgchest" && !imgchestId) {
-    return jsonError("Sélectionnez un album ImgChest.", "invalid_body", 400);
-  }
-  if (imgchestId && !/^[a-z0-9]{4,32}$/i.test(imgchestId)) {
-    return jsonError("Identifiant d'album ImgChest invalide.", "invalid_body", 400);
-  }
-  if (data.source !== "imgchest" && !nasPath && data.pages.length === 0) {
-    return jsonError(
-      "Sélectionnez un dossier NAS ou des pages.",
-      "invalid_body",
-      400,
-    );
-  }
-  if (data.statut === "scheduled" && !data.publish_at) {
-    return jsonError("Une date de publication est requise.", "publish_at_required", 400);
-  }
+    const folderKind = detectNumero(nasPath.split("/").pop() ?? "").kind;
+    const imgchestId = data.source === "imgchest" ? (data.imgchest_post ?? "").trim() : "";
+    if (data.source === "imgchest" && !imgchestId) {
+      fail(400, "Sélectionnez un album ImgChest.", "invalid_body");
+    }
+    if (data.source !== "imgchest" && !nasPath && data.pages.length === 0) {
+      fail(400, "Sélectionnez un dossier NAS ou des pages.", "invalid_body");
+    }
+    if (data.statut === "scheduled" && !data.publish_at) {
+      fail(400, "Une date de publication est requise.", "publish_at_required");
+    }
 
-  const series = await getSeriesById(data.series_id);
-  if (!series) return jsonError("Série introuvable.", "not_found", 404);
+    const series = await getSeriesById(data.series_id);
+    if (!series) fail(404, "Série introuvable.", "not_found");
 
-  /* Unité importée : explicitement fournie par l'analyse, sinon déduite du
+    /* Unité importée : explicitement fournie par l'analyse, sinon déduite du
      nom du dossier, sinon organisation de la série — titre et libellés en
      découlent (`Tome 3` créé dans une série en tomes). */
-  const unite: Unite =
-    data.unite ??
-    (folderKind !== "dossier" ? uniteDeKind(folderKind) : undefined) ??
-    (series.unite ?? "chapitre");
+    const unite: Unite =
+      data.unite ??
+      (folderKind !== "dossier" ? uniteDeKind(folderKind) : undefined) ??
+      series.unite ??
+      "chapitre";
 
-  const db = getDb();
-  const { total: duplicates } = await db.list(TABLES.chapters, {
-    filters: [
-      { field: "series_id", op: "eq", value: data.series_id },
-      { field: "numero", op: "eq", value: data.numero },
-    ],
-    limit: 1,
-  });
-  if (duplicates > 0) {
-    return jsonError(
-      `Le numéro ${data.numero} existe déjà pour cette série.`,
-      "chapter_exists",
-      409,
-    );
-  }
-
-  // ── Indexation des pages (étape 3) ─────────────────────────────
-  let indexed: IndexedPage[];
-  let storage: "nas" | "demo" | "imgchest";
-
-  if (imgchestId) {
-    // Album ImgChest : la liste des pages est résolue ici, puis les URLs CDN
-    // sont stockées en base — la lecture n'appelle plus ImgChest.
-    let album;
-    try {
-      album = await fetchImgChestPost(imgchestId);
-    } catch (err) {
-      return jsonError(imgchestErrorMessage(err), "imgchest_error", 502);
-    }
-    indexed = album.files.map((file) => ({
-      chemin: file.url,
-      largeur: file.width ?? 1200,
-      hauteur: file.height ?? 1800,
-      ...(file.bytes ? { bytes: file.bytes } : {}),
-      ...(file.hash ? { hash: file.hash } : {}),
-    }));
-    storage = "imgchest";
-  } else if (nasPath) {
-    let listing: { pages: NasPage[] };
-    try {
-      listing = await nasList(nasPath);
-    } catch (err) {
-      return jsonError(nasErrorMessage(err), "nas_error", 502);
-    }
-    if (listing.pages.length === 0) {
+    const db = getDb();
+    const { total: duplicates } = await db.list(TABLES.chapters, {
+      filters: [
+        { field: "series_id", op: "eq", value: data.series_id },
+        { field: "numero", op: "eq", value: data.numero },
+      ],
+      limit: 1,
+    });
+    if (duplicates > 0) {
       return jsonError(
-        "Aucune image détectée dans ce dossier (format attendu : 001.webp, 002.webp…).",
-        "empty_folder",
-        422,
+        `Le numéro ${data.numero} existe déjà pour cette série.`,
+        "chapter_exists",
+        409,
       );
     }
-    indexed = listing.pages.map((page) => ({
-      chemin: page.path || `${nasPath}/${page.name}`,
-      largeur: page.width ?? 1200,
-      hauteur: page.height ?? 1800,
-      ...(page.bytes ? { bytes: page.bytes } : {}),
-      ...(page.hash ? { hash: page.hash } : {}),
-    }));
-    storage = "nas";
-  } else {
-    const names = naturalSort(data.pages);
-    indexed = names.map((name, index) => ({
-      chemin: demoPagePath(series.slug, data.numero, index),
-      largeur: 1200,
-      hauteur: 1800,
-      bytes: 0,
-      hash: `demo-${index}`,
-    }));
-    storage = "demo";
-  }
 
-  const chapterId = rowId(`${series.id}-c${data.numero}`);
-  const now = new Date().toISOString();
-  const publishAt =
-    data.statut === "scheduled"
-      ? new Date(data.publish_at!).toISOString()
-      : data.statut === "published"
-        ? now
-        : null;
+    // ── Indexation des pages : une source par cas ─────────────────────
+    let index: SourceIndex;
+    try {
+      index = imgchestId
+        ? await indexFromImgchest(imgchestId)
+        : nasPath
+          ? await indexFromNas(nasPath)
+          : indexDemo(series.slug, data.numero, data.pages);
+    } catch (err) {
+      if (err instanceof SourceError) return jsonError(err.message, err.code, err.status);
+      throw err;
+    }
+    const { pages: indexed, storage } = index;
 
-  const job: ImportJob =
-    batchJob ??
-    (await createImportJob({
-      type: imgchestId ? "imgchest" : data.source === "nas" || nasPath ? "nas" : "upload",
-      statut: "cours",
-      progression: 10,
-      message: `Indexation de ${indexed.length} pages…`,
-      erreurs: [],
-      created_by: user.id,
-    }));
+    const chapterId = rowId(`${series.id}-c${data.numero}`);
+    const now = new Date().toISOString();
+    const publishAt =
+      data.statut === "scheduled"
+        ? new Date(data.publish_at!).toISOString()
+        : data.statut === "published"
+          ? now
+          : null;
 
-  /** Progression lissée du lot : `3/12` → 25 %. */
-  const batchProgression = data.batch
-    ? Math.round((data.batch.index / data.batch.total) * 100)
-    : 100;
+    const job: ImportJob =
+      batchJob ??
+      (await createImportJob({
+        type: imgchestId ? "imgchest" : data.source === "nas" || nasPath ? "nas" : "upload",
+        statut: "cours",
+        progression: 10,
+        message: `Indexation de ${indexed.length} pages…`,
+        erreurs: [],
+        created_by: user.id,
+      }));
 
-  try {
-    const chapter: Chapter = {
-      id: chapterId,
-      series_id: data.series_id,
-      numero: data.numero,
-      volume: data.volume,
-      titre: data.titre || libelleUnite(data.numero, unite),
-      statut: data.statut,
-      publish_at: publishAt,
-      source: (imgchestId ? "imgchest" : "nas") as Chapter["source"],
-      // dénormalisé pour les filtres de « Dernières sorties »
-      series_type: series.type,
-      nb_pages: indexed.length,
-      classification: data.classification || series.classification,
-      // Import manuel du Gérant : aucun groupe de scan connu (pas de pastille).
-      teams: [],
-      vues: 0,
-      created_by: user.id,
-      created_at: now,
-    } as unknown as Chapter;
+    /** Progression lissée du lot : `3/12` → 25 %. */
+    const batchProgression = data.batch
+      ? Math.round((data.batch.index / data.batch.total) * 100)
+      : 100;
 
-    await db.create<Chapter>(TABLES.chapters, chapterId, {
-      ...(chapter as unknown as Record<string, unknown>),
-    });
-    await refreshSeriesChapterCount(data.series_id);
-    /* Un dépôt découpé en tomes impose ses libellés à la fiche : le premier
+    let chapitreCree = false;
+    try {
+      const chapter: Chapter = {
+        id: chapterId,
+        series_id: data.series_id,
+        numero: data.numero,
+        volume: data.volume,
+        titre: data.titre || libelleUnite(data.numero, unite),
+        statut: data.statut,
+        publish_at: publishAt,
+        source: (imgchestId ? "imgchest" : "nas") as Chapter["source"],
+        // dénormalisé pour les filtres de « Dernières sorties »
+        series_type: series.type,
+        nb_pages: indexed.length,
+        classification: data.classification || series.classification,
+        // Import manuel du Gérant : aucun groupe de scan connu (pas de pastille).
+        teams: [],
+        vues: 0,
+        created_by: user.id,
+        created_at: now,
+      } satisfies Chapter;
+
+      await db.create(TABLES.chapters, chapterId, chapter);
+      chapitreCree = true;
+      await refreshSeriesChapterCount(data.series_id);
+      /* Un dépôt découpé en tomes impose ses libellés à la fiche : le premier
        import d'un tome bascule la série en « tomes ». Jamais l'inverse — une
        série déjà en tomes n'est pas renversée par un dossier isolé. */
-    if (unite === "tome" && series.unite !== "tome") {
-      await saveSeries({ id: series.id, unite: "tome" });
-    }
+      if (unite === "tome" && series.unite !== "tome") {
+        await saveSeries({ id: series.id, unite: "tome" });
+      }
 
-    for (let index = 0; index < indexed.length; index++) {
-      const page = indexed[index];
-      const pageId = rowId(chapterId, `p${index}`);
-      await db.create(TABLES.pages, pageId, {
-        id: pageId,
-        chapter_id: chapterId,
+      // Index des pages : 10 créations à la fois (avant : une par une).
+      await parLots(
+        indexed.map((page, ordre) => ({ page, ordre })),
+        ({ page, ordre }) =>
+          db.create(TABLES.pages, rowId(chapterId, `p${ordre}`), {
+            chapter_id: chapterId,
+            index: ordre,
+            chemin: page.chemin,
+            largeur: page.largeur,
+            hauteur: page.hauteur,
+            bytes: page.bytes ?? 0,
+            hash: page.hash ?? "",
+          }),
+      );
+      invalidateChapters({ seriesId: data.series_id, chapterId });
+
+      // ── Publication immédiate : staging → public + purge (étape 5) ──
+      let nas: FileTransition | undefined;
+      if (data.statut === "published") {
+        nas = await transitionChapterFiles(chapter, "publish");
+      }
+
+      const warning = nas?.action === "error" ? nas.error : undefined;
+      const libelle = libelleUnite(data.numero, unite);
+      const resultat = messageResultat(
+        libelle,
         index,
-        chemin: page.chemin,
-        largeur: page.largeur,
-        hauteur: page.hauteur,
-        bytes: page.bytes ?? 0,
-        hash: page.hash ?? "",
-      });
-    }
+        storage === "imgchest" ? imgchestId : nasPath,
+        warning,
+      );
 
-    // ── Publication immédiate : staging → public + purge (étape 5) ──
-    let nas: FileTransition | undefined;
-    if (data.statut === "published") {
-      nas = await transitionChapterFiles(chapter, "publish");
-    }
-
-    const warning = nas?.action === "error" ? nas.error : undefined;
-    const libelle = libelleUnite(data.numero, unite);
-    const resultat = warning
-      ? `${libelle} indexé (${indexed.length} pages) mais le déplacement NAS a échoué : ${warning}`
-      : storage === "nas"
-        ? `${libelle} indexé : ${indexed.length} pages depuis ${nasPath}.`
-        : storage === "imgchest"
-          ? `${libelle} indexé : ${indexed.length} pages depuis l'album ImgChest ${imgchestId}.`
-          : `${libelle} créé avec ${indexed.length} pages de démonstration — utilisez l'onglet « Depuis le NAS » pour indexer les scans réels.`;
-
-    await updateImportJob(job.id, batchJob
-      ? {
-          /* Le job de lot reste « en cours » jusqu'à la clôture envoyée par
+      await updateImportJob(
+        job.id,
+        batchJob
+          ? {
+              /* Le job de lot reste « en cours » jusqu'à la clôture envoyée par
              l'interface : il porte la progression de l'ensemble. */
-          progression: batchProgression,
-          message: `${resultat} (${data.batch!.index}/${data.batch!.total})`,
-          ...(warning
-            ? { erreurs: [...(batchJob.erreurs ?? []), warning].slice(-20) }
-            : {}),
-        }
-      : {
-          statut: warning ? "erreur" : "termine",
-          progression: 100,
-          message: resultat,
-          ...(warning ? { erreurs: [warning] } : {}),
-        });
+              progression: batchProgression,
+              message: `${resultat} (${data.batch!.index}/${data.batch!.total})`,
+              ...(warning ? { erreurs: [...(batchJob.erreurs ?? []), warning].slice(-20) } : {}),
+            }
+          : {
+              statut: warning ? "erreur" : "termine",
+              progression: 100,
+              message: resultat,
+              ...(warning ? { erreurs: [warning] } : {}),
+            },
+      );
 
-    await audit({
-      actorId: user.id,
-      actorPseudo: user.pseudo,
-      action: "import.upload",
-      cible: `chapter:${chapterId}`,
-      apres: {
-        series: series.titre,
-        numero: data.numero,
-        unite,
-        pages: indexed.length,
-        classification: chapter.classification,
-        source: data.source,
-        statut: data.statut,
-        storage,
-        ...(nasPath ? { nasPath } : {}),
-        ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
-      },
-      ip,
-    });
+      await audit({
+        actorId: user.id,
+        actorPseudo: user.pseudo,
+        action: "import.upload",
+        cible: `chapter:${chapterId}`,
+        apres: {
+          series: series.titre,
+          numero: data.numero,
+          unite,
+          pages: indexed.length,
+          classification: chapter.classification,
+          source: data.source,
+          statut: data.statut,
+          storage,
+          ...(nasPath ? { nasPath } : {}),
+          ...(nas ? { nasMove: nas.action, nasError: nas.error ?? null } : {}),
+        },
+        ip,
+      });
 
-    return Response.json(
-      {
-        chapter,
-        /* Unité retenue (chapitre / tome) : l'interface s'en sert pour son
+      return Response.json(
+        {
+          chapter,
+          /* Unité retenue (chapitre / tome) : l'interface s'en sert pour son
            rapport, la série bascule elle aussi côté serveur. */
-        unite,
-        jobId: job.id,
-        nbPages: indexed.length,
-        storage,
-        ...(nas ? { nas } : {}),
-        ...(warning ? { warning } : {}),
-      },
-      { status: 201 },
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Erreur inconnue.";
-    await updateImportJob(job.id, batchJob
-      ? {
-          /* Un chapitre en erreur n'arrête pas le lot : l'interface enchaîne
+          unite,
+          jobId: job.id,
+          nbPages: indexed.length,
+          storage,
+          ...(nas ? { nas } : {}),
+          ...(warning ? { warning } : {}),
+        },
+        { status: 201 },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erreur inconnue.";
+      /* Chapitre à moitié indexé : retiré, sinon le nouvel essai butait sur
+         « numéro déjà existant » avec des pages manquantes. */
+      if (chapitreCree) {
+        await deleteChapterCascade(chapterId).catch(() => undefined);
+        await refreshSeriesChapterCount(data.series_id).catch(() => undefined);
+        invalidateChapters({ seriesId: data.series_id, chapterId });
+      }
+      await updateImportJob(
+        job.id,
+        batchJob
+          ? {
+              /* Un chapitre en erreur n'arrête pas le lot : l'interface enchaîne
              et clôt le job avec le rapport complet. */
-          progression: batchProgression,
-          message: `Échec du chapitre ${data.batch!.index}/${data.batch!.total}.`,
-          erreurs: [...(batchJob.erreurs ?? []), message].slice(-20),
-        }
-      : {
-          statut: "erreur",
-          progression: 100,
-          message: "Échec de l'import.",
-          erreurs: [message],
-        });
-    await audit({
-      actorId: user.id,
-      actorPseudo: user.pseudo,
-      action: "import.upload",
-      cible: `chapter:${chapterId}`,
-      apres: { erreur: message },
-      ip,
-    });
-    return jsonError("Échec de l'import du chapitre.", "import_failed", 500);
-  }
-}
+              progression: batchProgression,
+              message: `Échec du chapitre ${data.batch!.index}/${data.batch!.total}.`,
+              erreurs: [...(batchJob.erreurs ?? []), message].slice(-20),
+            }
+          : {
+              statut: "erreur",
+              progression: 100,
+              message: "Échec de l'import.",
+              erreurs: [message],
+            },
+      );
+      await audit({
+        actorId: user.id,
+        actorPseudo: user.pseudo,
+        action: "import.upload",
+        cible: `chapter:${chapterId}`,
+        apres: { erreur: message },
+        ip,
+      });
+      fail(500, "Échec de l'import du chapitre.", "import_failed");
+    }
+  },
+);

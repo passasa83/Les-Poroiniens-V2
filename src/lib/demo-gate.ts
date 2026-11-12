@@ -1,6 +1,6 @@
 import "server-only";
-import { TABLES, type Filter } from "@/lib/db";
-import { getDemoStore } from "@/lib/db/seed";
+import { TABLES, type TableFilter } from "@/server/db";
+import { getDemoStore } from "@/server/db/seed";
 
 /**
  * Masquage du jeu de démonstration en production.
@@ -19,8 +19,6 @@ import { getDemoStore } from "@/lib/db/seed";
  * actif — en local ce module ne construit jamais le store (le driver démo, s'il
  * sert, le bâtit de son côté).
  */
-
-const VIDE: ReadonlySet<string> = new Set<string>();
 
 /** Vrai uniquement sur le déploiement de production Vercel. */
 export function demoMasque(): boolean {
@@ -69,11 +67,6 @@ function jeuDemo(): JeuDemo | null {
   return jeu;
 }
 
-/** Ids des lignes de la graine pour une table (ensemble vide hors production). */
-export function demoIds(table: string): ReadonlySet<string> {
-  return jeuDemo()?.idsParTable.get(table) ?? VIDE;
-}
-
 /** Vrai si `idOuSlug` désigne une série de la graine (id **ou** slug). */
 export function serieDeDemo(idOuSlug: string): boolean {
   const j = jeuDemo();
@@ -117,10 +110,18 @@ export function exclureSeriesDemo<T extends { series_id: string }>(rows: T[]): T
  * `slug neq <démo>` par série de la graine écarte le jeu de démonstration,
  * `total` compris (vérifié en base, 345 → 335 séries, 456 → 296 chapitres).
  */
-export function filtresSansDemo(table: "series" | "chapters"): Filter[] {
+export function filtresSansDemo(table: "series"): TableFilter<"series">[];
+export function filtresSansDemo(table: "chapters"): TableFilter<"chapters">[];
+export function filtresSansDemo(
+  table: "series" | "chapters",
+): TableFilter<"series">[] | TableFilter<"chapters">[] {
   const j = jeuDemo();
   if (!j) return [];
   return table === "series"
-    ? [...j.slugs].map((slug): Filter => ({ field: "slug", op: "neq", value: slug }))
-    : [...j.series].map((id): Filter => ({ field: "series_id", op: "neq", value: id }));
+    ? [...j.slugs].map((slug): TableFilter<"series"> => ({ field: "slug", op: "neq", value: slug }))
+    : [...j.series].map((id): TableFilter<"chapters"> => ({
+        field: "series_id",
+        op: "neq",
+        value: id,
+      }));
 }

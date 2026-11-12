@@ -71,11 +71,11 @@ export default function MentionsLegalesPage() {
               <Todo>adresse postale complète</Todo>
             </Row>
             <Row label="Immatriculation">
-              SIRET / RCS / numéro de TVA intracommunautaire le cas échéant{" "}
-              <Todo>numéros</Todo>
+              SIRET / RCS / numéro de TVA intracommunautaire le cas échéant <Todo>numéros</Todo>
             </Row>
             <Row label="Responsable de la publication">
-              Le Gérant du site (compte « owner » du back-office) — <Todo>identité du responsable de la publication</Todo>
+              Le Gérant du site (compte « owner » du back-office) —{" "}
+              <Todo>identité du responsable de la publication</Todo>
             </Row>
             <Row label="Contact">
               {contactEmail ? (
@@ -117,7 +117,10 @@ export default function MentionsLegalesPage() {
               auto-hébergé) ; fichiers de scans servis par un CDN devant le NAS.
             </Row>
             <Row label="Infrastructure complémentaire">
-              <Todo>identité / coordonnées de l&apos;hébergeur du serveur applicatif et du NAS, le cas échéant</Todo>
+              <Todo>
+                identité / coordonnées de l&apos;hébergeur du serveur applicatif et du NAS, le cas
+                échéant
+              </Todo>
             </Row>
           </dl>
         </section>
@@ -150,9 +153,9 @@ export default function MentionsLegalesPage() {
             <p>
               Les informations publiées (synopses, dates, statuts, numéros de chapitres) sont
               fournies à titre indicatif et peuvent évoluer ou contenir des erreurs. Le site
-              s&apos;efforce de maintenir un accès disponible, sans garantir une continuité
-              absolue du service (maintenance, incidents techniques, indisponibilité de
-              l&apos;hébergeur ou de la source de fichiers).
+              s&apos;efforce de maintenir un accès disponible, sans garantir une continuité absolue
+              du service (maintenance, incidents techniques, indisponibilité de l&apos;hébergeur ou
+              de la source de fichiers).
             </p>
             <p>
               Les liens vers des ressources extérieures sont fournis à titre pratique ; le site ne
@@ -181,10 +184,9 @@ export default function MentionsLegalesPage() {
       <aside className="mt-8 max-w-3xl rounded-2xl border border-line bg-surface2 p-4">
         <p className="text-sm font-semibold text-fg">À titre d&apos;information</p>
         <p className="mt-1 text-xs text-muted">
-          Cette page est rédigée par l&apos;équipe du site à titre informatif : elle ne constitue
-          ni un conseil juridique, ni une consultation juridique, ni une garantie de conformité.
-          Seul un professionnel qualifié peut vous indiquer ce qui s&apos;applique à votre
-          situation.
+          Cette page est rédigée par l&apos;équipe du site à titre informatif : elle ne constitue ni
+          un conseil juridique, ni une consultation juridique, ni une garantie de conformité. Seul
+          un professionnel qualifié peut vous indiquer ce qui s&apos;applique à votre situation.
         </p>
       </aside>
     </div>

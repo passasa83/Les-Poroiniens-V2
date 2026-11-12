@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
-import { cached, getDb, invalidate, TABLES, type Filter } from "@/lib/db";
+import { getDb, listAll, TABLES, type Field, type TableFilter } from "@/server/db";
+import { cached, invalidate } from "@/server/cache";
 import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
 import { resolveCover, storeCover } from "@/lib/media";
 import type { Recommendation, Series, SeriesStatus, SeriesType } from "@/lib/types";
@@ -20,12 +21,7 @@ export function mapSeries<T extends Series>(row: T): T {
   };
 }
 
-export type SeriesSort =
-  | "popularite"
-  | "nouveautes"
-  | "alpha"
-  | "note"
-  | "maj";
+export type SeriesSort = "popularite" | "nouveautes" | "alpha" | "note" | "maj";
 
 export interface SeriesFilters {
   q?: string;
@@ -54,12 +50,12 @@ export interface SeriesFilters {
  * Séries archivées exclues du catalogue public : le filtre `neq` porte
  * sur le statut déjà stocké, il n'y a donc rien à backfiller.
  */
-function filtreArchives(include?: boolean, statut?: SeriesStatus | ""): Filter[] {
+function filtreArchives(include?: boolean, statut?: SeriesStatus | ""): TableFilter<"series">[] {
   if (include || statut === "archive") return [];
   return [{ field: "statut", op: "neq" as const, value: "archive" }];
 }
 
-const SORT_MAP: Record<SeriesSort, { field: string; dir: "asc" | "desc" }> = {
+const SORT_MAP: Record<SeriesSort, { field: Field<"series">; dir: "asc" | "desc" }> = {
   popularite: { field: "populaire", dir: "desc" },
   nouveautes: { field: "created_at", dir: "desc" },
   alpha: { field: "titre", dir: "asc" },
@@ -79,36 +75,8 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
 
   const key = `series:${JSON.stringify({ ...f, page, perPage })}`;
   return cached(key, 30_000, async () => {
-    const filters: Filter[] = [];
-    /* Genre multiple : « a,b » = série possédant a **et** b. */
-    for (const g of (f.genre ?? "").split(",").map((v) => v.trim()).filter(Boolean)) {
-      filters.push({ field: "genres", op: "contains" as const, value: g });
-    }
-    if (f.tag) filters.push({ field: "tags", op: "contains" as const, value: f.tag });
-    if (f.statut) filters.push({ field: "statut", op: "eq" as const, value: f.statut });
-    if (f.type) filters.push({ field: "type", op: "eq" as const, value: f.type });
-    if (f.annee) filters.push({ field: "annee", op: "eq" as const, value: f.annee });
-    if (f.langue) filters.push({ field: "langue", op: "eq" as const, value: f.langue });
-    /* Onglets de statut exclusifs : une publication unique appartient
-       à l'onglet « One-shot », pas aux listes « En cours »/« Terminés ». */
-    if (f.oneShot) {
-      filters.push({ field: "nb_chapitres", op: "eq" as const, value: 1 });
-    } else if (f.excludeOneShot) {
-      filters.push({ field: "nb_chapitres", op: "neq" as const, value: 1 });
-    }
-    if (!f.includeAdult) {
-      filters.push({ field: "classification", op: "eq" as const, value: "all" });
-    } else if (f.classification === "adult") {
-      filters.push({ field: "classification", op: "eq" as const, value: "adult" });
-    }
-    filters.push(...filtreArchives(f.includeArchived, f.statut));
-
-    /* Jeu de démo masqué en production : l'exclusion est portée **par la
-       requête** pour que `total`, la pagination et le repli tolérant aux
-       fautes (qui réutilise `filters`) restent exacts. */
-    filters.push(...filtresSansDemo("series"));
-
-    const { items, total } = await getDb().list<Series>(TABLES.series, {
+    const filters = catalogueFilters(f);
+    const { items, total } = await getDb().list(TABLES.series, {
       filters,
       search: f.q?.trim() || undefined,
       order: sort,
@@ -120,23 +88,22 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
       (f.includeAdult ? rows : rows.filter((s) => s.classification !== "adult")).map(mapSeries);
 
     /* Tolérance aux fautes : le plein texte Appwrite est strict (mots
-       entiers, accents normalisés). S'il ne renvoie rien, on note en mémoire
-       le jeu filtré complet (≤ 1000 lignes) sur les titre/alternatifs/auteurs. */
+       entiers, accents normalisés). S'il ne renvoie rien, on note l'index
+       léger des séries (en cache, colonnes utiles seulement), puis on ne
+       charge en entier que les séries de la page. */
     if (f.q && total === 0) {
-      const pool = await getDb().list<Series>(TABLES.series, {
-        filters,
-        order: sort,
-        limit: 1000,
-      });
-      const scored = pool.items
-        .map((s) => ({ s, score: fuzzyScore(f.q!, s) }))
+      const index = await seriesIndex({ includeArchived: f.includeArchived });
+      const scored = index
+        .filter((entry) => matchesFilters(entry, f))
+        .map((entry) => ({ entry, score: fuzzyScore(f.q!, entry) }))
         .filter((x) => x.score > 0)
-        .sort((a, b) => b.score - a.score || b.s.populaire - a.s.populaire);
-      const slice = scored
+        .sort((a, b) => b.score - a.score || b.entry.populaire - a.entry.populaire);
+      const ids = scored
         .slice((page - 1) * perPage, (page - 1) * perPage + perPage)
-        .map((x) => x.s);
+        .map((x) => x.entry.id);
+      const rows = await seriesParIds(ids);
       return {
-        items: visible(slice),
+        items: visible(ids.flatMap((id) => rows.get(id) ?? [])),
         total: scored.length,
         page,
         pageCount: Math.max(1, Math.ceil(scored.length / perPage)),
@@ -152,11 +119,136 @@ export async function listSeries(f: SeriesFilters = {}): Promise<{
   });
 }
 
+/** Critères du catalogue, traduits en filtres de requête. */
+function catalogueFilters(f: SeriesFilters): TableFilter<"series">[] {
+  const filters: TableFilter<"series">[] = [];
+  /* Genre multiple : « a,b » = série possédant a **et** b. */
+  for (const g of splitGenres(f.genre)) {
+    filters.push({ field: "genres", op: "contains", value: g });
+  }
+  if (f.tag) filters.push({ field: "tags", op: "contains", value: f.tag });
+  if (f.statut) filters.push({ field: "statut", op: "eq", value: f.statut });
+  if (f.type) filters.push({ field: "type", op: "eq", value: f.type });
+  if (f.annee) filters.push({ field: "annee", op: "eq", value: f.annee });
+  if (f.langue) filters.push({ field: "langue", op: "eq", value: f.langue });
+  /* Onglets de statut exclusifs : une publication unique appartient
+     à l'onglet « One-shot », pas aux listes « En cours »/« Terminés ». */
+  if (f.oneShot) {
+    filters.push({ field: "nb_chapitres", op: "eq", value: 1 });
+  } else if (f.excludeOneShot) {
+    filters.push({ field: "nb_chapitres", op: "neq", value: 1 });
+  }
+  if (!f.includeAdult) {
+    filters.push({ field: "classification", op: "eq", value: "all" });
+  } else if (f.classification === "adult") {
+    filters.push({ field: "classification", op: "eq", value: "adult" });
+  }
+  filters.push(...filtreArchives(f.includeArchived, f.statut));
+  /* Jeu de démo masqué en production : l'exclusion est portée **par la
+     requête** pour que `total` et la pagination restent exacts. */
+  filters.push(...filtresSansDemo("series"));
+  return filters;
+}
+
+const splitGenres = (genre?: string) =>
+  (genre ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+/** Mêmes critères que `catalogueFilters`, appliqués à l'index en mémoire. */
+function matchesFilters(s: SeriesIndexEntry, f: SeriesFilters): boolean {
+  if (!splitGenres(f.genre).every((g) => s.genres.includes(g))) return false;
+  if (f.tag && !s.tags.includes(f.tag)) return false;
+  if (f.statut && s.statut !== f.statut) return false;
+  if (f.type && s.type !== f.type) return false;
+  if (f.annee && s.annee !== f.annee) return false;
+  if (f.langue && s.langue !== f.langue) return false;
+  if (f.oneShot && s.nb_chapitres !== 1) return false;
+  if (!f.oneShot && f.excludeOneShot && s.nb_chapitres === 1) return false;
+  if (!f.includeAdult && s.classification !== "all") return false;
+  if (f.includeAdult && f.classification === "adult" && s.classification !== "adult") {
+    return false;
+  }
+  return true;
+}
+
+/* ── Index léger des séries ───────────────────────────────────── */
+
+/** Colonnes suffisantes pour filtrer, noter, suggérer et lister (sitemap). */
+const INDEX_FIELDS = [
+  "slug",
+  "titre",
+  "titresAlt",
+  "auteurs",
+  "genres",
+  "tags",
+  "type",
+  "statut",
+  "classification",
+  "annee",
+  "langue",
+  "nb_chapitres",
+  "populaire",
+  "vues",
+  "updated_at",
+] as const satisfies readonly Field<"series">[];
+
+export type SeriesIndexEntry = Pick<Series, "id" | (typeof INDEX_FIELDS)[number]>;
+
+/**
+ * Toutes les séries publiques, colonnes d'index seulement (pas de synopsis
+ * ni de champs de recherche), lues par lots : remplace les `limit: 1000`
+ * qui tronquaient le catalogue au-delà de 1000 séries. 5 min de cache,
+ * vidé par toute écriture `series:`.
+ */
+export async function seriesIndex(
+  opts: { includeArchived?: boolean } = {},
+): Promise<SeriesIndexEntry[]> {
+  return cached(`series:index:${opts.includeArchived ? 1 : 0}`, 5 * 60_000, async () => {
+    const rows = await listAll(TABLES.series, {
+      filters: [...filtresSansDemo("series"), ...filtreArchives(opts.includeArchived)],
+      order: { field: "titre", dir: "asc" },
+      select: INDEX_FIELDS,
+    });
+    return rows.map((row) => {
+      const entry = { id: row.id } as Record<string, unknown>;
+      for (const field of INDEX_FIELDS) entry[field] = row[field];
+      const e = entry as SeriesIndexEntry;
+      e.titresAlt ??= [];
+      e.auteurs ??= [];
+      e.genres ??= [];
+      e.tags ??= [];
+      return e;
+    });
+  });
+}
+
+/** Valeurs proposées par les filtres du catalogue et de la recherche. */
+export async function catalogueFacets(): Promise<{
+  genres: string[];
+  years: number[];
+  langues: string[];
+}> {
+  const index = await seriesIndex();
+  const byName = (a: string, b: string) => a.localeCompare(b, "fr");
+  return {
+    genres: [...new Set(index.flatMap((s) => s.genres))].sort(byName),
+    years: [
+      ...new Set(index.map((s) => s.annee).filter((y): y is number => typeof y === "number")),
+    ].sort((a, b) => b - a),
+    langues: [...new Set(index.map((s) => s.langue).filter(Boolean))].sort(byName),
+  };
+}
+
 /* ── Tolérance aux fautes ─────────────────────────────────────── */
 
 /** Déaccentue et minuscule : « Élite » ≈ « elite ». */
 const stripAccents = (value: string) =>
-  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 
 function bigrams(value: string): string[] {
   const out: string[] = [];
@@ -180,7 +272,10 @@ function dice(a: string, b: string): number {
  * Score d'une série pour une requête : 0 = écarte, 1 = correspondance exacte
  * (contiguë). Le score moyen des mots de la requête doit atteindre 0,6.
  */
-export function fuzzyScore(query: string, serie: Series): number {
+export function fuzzyScore(
+  query: string,
+  serie: Pick<Series, "titre" | "slug" | "titresAlt" | "auteurs">,
+): number {
   const needle = stripAccents(query).trim();
   if (needle.length < 2) return 0;
   const fields = [
@@ -215,16 +310,27 @@ const serieParSlug = cache(
     /* Série de la graine masquée en production : `null` → vrai 404 (page fiche,
        lecteur, proxy) sans requête inutile. */
     if (serieDeDemo(slug)) return null;
-    const res = await getDb().list<Series>(TABLES.series, {
-      filters: [
-        { field: "slug", op: "eq", value: slug },
-        ...filtreArchives(includeArchived),
-      ],
-      limit: 1,
-    });
-    return res.items[0] ? mapSeries(res.items[0]) : null;
+    return cached(`series:slug:${slug}:${includeArchived ? 1 : 0}`, SERIES_TTL, () =>
+      findSeriesBySlug(slug, { includeArchived }),
+    );
   },
 );
+
+/** Fiche d'une série : 1 min en cache (invalidée par toute écriture `series:`). */
+const SERIES_TTL = 60_000;
+
+/** Lecture directe, sans cache : contrôle d'existence du proxy. */
+export async function findSeriesBySlug(
+  slug: string,
+  opts: { includeArchived?: boolean } = {},
+): Promise<Series | null> {
+  if (serieDeDemo(slug)) return null;
+  const res = await getDb().list(TABLES.series, {
+    filters: [{ field: "slug", op: "eq", value: slug }, ...filtreArchives(opts.includeArchived)],
+    limit: 1,
+  });
+  return res.items[0] ? mapSeries(res.items[0]) : null;
+}
 
 export async function getSeriesBySlug(
   slug: string,
@@ -235,8 +341,10 @@ export async function getSeriesBySlug(
 
 export const getSeriesById = cache(async (id: string): Promise<Series | null> => {
   if (serieDeDemo(id)) return null;
-  const row = await getDb().get<Series>(TABLES.series, id);
-  return row ? mapSeries(row) : null;
+  return cached(`series:id:${id}`, SERIES_TTL, async () => {
+    const row = await getDb().get(TABLES.series, id);
+    return row ? mapSeries(row) : null;
+  });
 });
 
 /**
@@ -256,7 +364,7 @@ export async function seriesParIds(ids: readonly string[]): Promise<Map<string, 
   for (let i = 0; i < uniques.length; i += 50) lots.push(uniques.slice(i, i + 50));
   const resultats = await Promise.all(
     lots.map((lot) =>
-      getDb().list<Series>(TABLES.series, {
+      getDb().list(TABLES.series, {
         filters: [{ field: "id", op: "in", value: lot }],
         limit: lot.length,
       }),
@@ -269,27 +377,24 @@ export async function seriesParIds(ids: readonly string[]): Promise<Map<string, 
 }
 
 export async function allSeries(opts: { includeArchived?: boolean } = {}): Promise<Series[]> {
-  /* Jusqu'à 1000 lignes téléchargées par `/catalogue`, `/recherche`,
-     « séries similaires » et le sitemap : 60 s de cache font disparaître un
-     aller-retour lourd de toutes ces pages. Les écritures (saveSeries,
-     saveChapter…) appellent déjà `invalidate("series:")`. */
+  /* Lignes complètes : réservé au back-office (sélecteurs de série). Les
+     pages publiques passent par `seriesIndex` (colonnes utiles seulement). */
   return cached(`series:tout:${opts.includeArchived ? 1 : 0}`, 60_000, async () => {
-    const { items } = await getDb().list<Series>(TABLES.series, {
+    const rows = await listAll(TABLES.series, {
       filters: [...filtresSansDemo("series"), ...filtreArchives(opts.includeArchived)],
       order: { field: "titre", dir: "asc" },
-      limit: 1000,
     });
-    return items.map(mapSeries);
+    return rows.map(mapSeries);
   });
 }
 
 /** « Séries similaires » : genres puis tags en commun. */
 export async function similarSeries(series: Series, limit = 6): Promise<Series[]> {
-  const all = await allSeries();
-  return all
+  const index = await seriesIndex();
+  const ids = index
     .filter((s) => s.id !== series.id && s.classification === series.classification)
     .map((s) => ({
-      s,
+      id: s.id,
       score:
         s.genres.filter((g) => series.genres.includes(g)).length * 3 +
         s.tags.filter((t) => series.tags.includes(t)).length * 2 +
@@ -298,7 +403,9 @@ export async function similarSeries(series: Series, limit = 6): Promise<Series[]
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map((x) => x.s);
+    .map((x) => x.id);
+  const rows = await seriesParIds(ids);
+  return ids.flatMap((id) => rows.get(id) ?? []);
 }
 
 export async function activeRecommendations(
@@ -307,7 +414,7 @@ export async function activeRecommendations(
   // Cache court (30 s) : deux lectures réseau par affichage, et un repli sur la
   // dernière valeur connue si le VPN vers Appwrite tombe (voir `cached`).
   return cached(`series:recos:${placement}`, 30_000, async () => {
-    const { items } = await getDb().list<Recommendation>(TABLES.recommendations, {
+    const { items } = await getDb().list(TABLES.recommendations, {
       filters: [
         { field: "placement", op: "eq", value: placement },
         { field: "actif", op: "eq", value: true },
@@ -317,19 +424,23 @@ export async function activeRecommendations(
     });
     if (items.length === 0) return [];
 
-    /* Une série archivée ne doit plus être mise en avant : une seule requête
-       pour les ids concernés, puis filtrage en mémoire (≤ 50 recommandations). */
-    const archived = await getDb().list<{ id: string }>(TABLES.series, {
-      filters: [{ field: "statut", op: "eq", value: "archive" }],
-      limit: 1000,
+    /* Une série archivée (ou supprimée) ne doit plus être mise en avant :
+       une requête sur les seules séries ciblées (≤ 50). */
+    const targets = await getDb().list(TABLES.series, {
+      filters: [{ field: "id", op: "in", value: [...new Set(items.map((r) => r.series_id))] }],
+      select: ["statut"],
+      limit: items.length,
     });
-    const archivedIds = new Set(archived.items.map((s) => s.id));
+    const archivedIds = new Set(
+      targets.items.filter((s) => s.statut === "archive").map((s) => s.id),
+    );
+    const existing = new Set(targets.items.map((s) => s.id));
 
     const now = Date.now();
     return items.filter((r) => {
       /* Recommandation éditoriale sur une série de la graine : masquée en prod. */
       if (serieDeDemo(r.series_id)) return false;
-      if (archivedIds.has(r.series_id)) return false;
+      if (archivedIds.has(r.series_id) || !existing.has(r.series_id)) return false;
       if (r.debut && new Date(r.debut).getTime() > now) return false;
       if (r.fin && new Date(r.fin).getTime() < now) return false;
       return true;
@@ -340,13 +451,18 @@ export async function activeRecommendations(
 /** Top séries par vues (utilisé pour la home et le dashboard). */
 export async function popularSeries(limit = 10, includeAdult = false): Promise<Series[]> {
   return cached(`series:popular:${limit}:${includeAdult ? 1 : 0}`, 30_000, async () => {
-    const { items } = await getDb().list<Series>(TABLES.series, {
-      filters: [...filtresSansDemo("series"), ...filtreArchives()],
+    // Filtre +18 dans la requête : filtré après coup, un visiteur recevait
+    // moins de `limit` séries quand le top comptait des séries adultes.
+    const { items } = await getDb().list(TABLES.series, {
+      filters: [
+        ...filtresSansDemo("series"),
+        ...filtreArchives(),
+        ...(includeAdult ? [] : [{ field: "classification", op: "eq", value: "all" } as const]),
+      ],
       order: { field: "vues", dir: "desc" },
       limit,
     });
-    const rows = includeAdult ? items : items.filter((s) => s.classification !== "adult");
-    return rows.map(mapSeries);
+    return items.map(mapSeries);
   });
 }
 
@@ -385,7 +501,7 @@ export async function saveSeries(series: Partial<Series> & { id: string }): Prom
   if (typeof data.banniere === "string" && data.banniere) {
     data.banniere = storeCover(data.banniere);
   }
-  const existing = await db.get<Series>(TABLES.series, id);
+  const existing = await db.get(TABLES.series, id);
   /* Recherche plein texte : les colonnes array ne sont pas indexables,
      on alimente la copie concaténée à chaque écriture. */
   const altText = data.titresAlt ?? existing?.titresAlt ?? [];
@@ -393,11 +509,11 @@ export async function saveSeries(series: Partial<Series> & { id: string }): Prom
   data.recherche_alt = altText.join(" ");
   data.recherche_auteurs = authorText.join(" ");
   const updated = existing
-    ? await db.update<Series>(TABLES.series, id, {
+    ? await db.update(TABLES.series, id, {
         ...(data as Record<string, unknown>),
         updated_at: new Date().toISOString(),
       })
-    : await db.create<Series>(TABLES.series, id, {
+    : await db.create(TABLES.series, id, {
         ...(data as Record<string, unknown>),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

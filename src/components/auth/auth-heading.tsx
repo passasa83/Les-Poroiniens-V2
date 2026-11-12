@@ -7,13 +7,7 @@ import type { ReactNode } from "react";
  */
 export type AuthHeadingLevel = "h1" | "h2" | "none";
 
-export function AuthHeading({
-  level,
-  children,
-}: {
-  level: AuthHeadingLevel;
-  children: ReactNode;
-}) {
+export function AuthHeading({ level, children }: { level: AuthHeadingLevel; children: ReactNode }) {
   if (level === "none") return null;
   const Tag = level;
   return <Tag className="text-2xl font-black tracking-tight text-fg">{children}</Tag>;

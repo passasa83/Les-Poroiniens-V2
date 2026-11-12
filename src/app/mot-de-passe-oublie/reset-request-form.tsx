@@ -99,8 +99,8 @@ export function ResetRequestForm() {
 
           <p className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs text-muted">
             <KeyRound className="mr-1 inline size-3.5" />
-            Étant donné qu&apos;aucun e-mail ne peut être envoyé pour l&apos;instant, un mot de passe
-            temporaire vous sera communiqué manuellement par un administrateur.
+            Étant donné qu&apos;aucun e-mail ne peut être envoyé pour l&apos;instant, un mot de
+            passe temporaire vous sera communiqué manuellement par un administrateur.
           </p>
 
           <Button type="submit" variant="primary" disabled={busy} className="w-full">

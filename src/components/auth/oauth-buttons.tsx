@@ -20,7 +20,11 @@ type OAuthButtonsProps = {
  * à configurer » : cliquables, avec un message sobre. Aucune clé n'est
  * inventée, aucun fournisseur n'est déclaré actif à tort.
  */
-export function OAuthButtons({ className, discordEnabled = false, next = "/compte" }: OAuthButtonsProps) {
+export function OAuthButtons({
+  className,
+  discordEnabled = false,
+  next = "/compte",
+}: OAuthButtonsProps) {
   const [message, setMessage] = useState<string | null>(null);
 
   const lien = `/api/auth/discord/start?next=${encodeURIComponent(next)}`;

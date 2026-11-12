@@ -1,12 +1,12 @@
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
-import { getDb, TABLES } from "@/lib/db";
+import { listAll, TABLES } from "@/server/db";
 import { getSettings } from "@/lib/data/moderation";
 import { imageEnv } from "@/lib/media";
 import { discordConfigured } from "@/lib/discord";
 import { turnstileEnabled } from "@/lib/turnstile";
-import type { Profile, Role } from "@/lib/types";
+import type { Role } from "@/lib/types";
 import { SettingsForm, type SecretStatus } from "./_components/settings-form";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,9 @@ export default async function GerantParametresPage() {
 
   const [settings, profileRes] = await Promise.all([
     getSettings(),
-    getDb().list<Profile>(TABLES.profiles, {
+    listAll(TABLES.profiles, {
       order: { field: "pseudo", dir: "asc" },
-      limit: 500,
+      select: ["user_id", "pseudo", "role"],
     }),
   ]);
 
@@ -86,7 +86,7 @@ export default async function GerantParametresPage() {
     annonce_bandeau: settings.annonce_bandeau === "1",
   };
 
-  const users = profileRes.items.map((p) => ({
+  const users = profileRes.map((p) => ({
     userId: p.user_id,
     pseudo: p.pseudo,
     role: (p.role ?? "membre") as Role,

@@ -1,5 +1,5 @@
 import { Lock, Search, ScrollText } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card, EmptyState, Input, Select } from "@/components/ui/kit";
@@ -74,10 +74,7 @@ export default async function GerantAuditPage({
   const user = await getCurrentUser();
   if (!can(user?.role, "full_audit")) {
     return (
-      <AccessDenied
-        required="owner"
-        hint="Le journal d'audit complet est réservé au Gérant."
-      />
+      <AccessDenied required="owner" hint="Le journal d'audit complet est réservé au Gérant." />
     );
   }
 
@@ -106,17 +103,17 @@ export default async function GerantAuditPage({
         </span>
       </div>
 
-      <form method="get" action="/gerant/audit" className="flex flex-wrap items-end gap-2" role="search">
+      <form
+        method="get"
+        action="/gerant/audit"
+        className="flex flex-wrap items-end gap-2"
+        role="search"
+      >
         <div className="min-w-0 flex-1 sm:max-w-md">
           <label className="label" htmlFor="audit-q">
             Rechercher
           </label>
-          <Input
-            id="audit-q"
-            name="q"
-            defaultValue={q}
-            placeholder="Acteur, action, cible…"
-          />
+          <Input id="audit-q" name="q" defaultValue={q} placeholder="Acteur, action, cible…" />
         </div>
         <div className="w-64">
           <label className="label" htmlFor="audit-action">
@@ -176,12 +173,18 @@ export default async function GerantAuditPage({
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted">{entry.cible}</td>
                   <td className="max-w-40 px-4 py-3">
-                    <span className="block truncate font-mono text-xs text-muted" title={pretty(entry.avant)}>
+                    <span
+                      className="block truncate font-mono text-xs text-muted"
+                      title={pretty(entry.avant)}
+                    >
                       {pretty(entry.avant)}
                     </span>
                   </td>
                   <td className="max-w-40 px-4 py-3">
-                    <span className="block truncate font-mono text-xs text-muted" title={pretty(entry.apres)}>
+                    <span
+                      className="block truncate font-mono text-xs text-muted"
+                      title={pretty(entry.apres)}
+                    >
                       {pretty(entry.apres)}
                     </span>
                   </td>
@@ -194,8 +197,8 @@ export default async function GerantAuditPage({
       )}
 
       <p className="text-xs text-muted">
-        Le journal est en écriture exclusive côté serveur : aucune route ne permet de modifier ou
-        de supprimer une entrée. Les administrateurs n&apos;en voient qu&apos;une version tronquée
+        Le journal est en écriture exclusive côté serveur : aucune route ne permet de modifier ou de
+        supprimer une entrée. Les administrateurs n&apos;en voient qu&apos;une version tronquée
         (valeurs avant / après masquées, IP masquée).
       </p>
     </div>

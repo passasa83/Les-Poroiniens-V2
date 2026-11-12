@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Play, Sparkles, TrendingUp } from "lucide-react";
-import { adultGateAccepted, getCurrentUser } from "@/lib/auth";
-import { getDb, TABLES } from "@/lib/db";
+import { adultGateAccepted, getCurrentUser } from "@/server/auth";
+import { getDb, TABLES } from "@/server/db";
 import { firstChapterNumbers, listRecentReleasesGrouped } from "@/lib/data/chapters";
 import {
   activeRecommendations,
@@ -12,9 +12,10 @@ import {
   similarSeries,
 } from "@/lib/data/series";
 import { dateAnnonce, dateIsoAnnonce, derniereAnnonce } from "@/lib/data/annonces";
-import { listHistory, listLibrary } from "@/lib/data/library";
+import { recentHistory } from "@/lib/data/history";
+import { listLibrary } from "@/lib/data/library";
 import { getSettings } from "@/lib/data/moderation";
-import { dataMode } from "@/lib/db";
+import { dataMode } from "@/server/db";
 import { SeriesGrid } from "@/components/series/series-card";
 import { Badge, EmptyState } from "@/components/ui/kit";
 import { Hero, type HeroSlide } from "@/components/home/hero";
@@ -23,7 +24,7 @@ import { RankList } from "@/components/home/rank-list";
 import { libelleUnite, plainText } from "@/lib/format";
 import type { ReleaseItem } from "@/lib/data/chapters";
 import type { ReleaseDto } from "@/lib/dto";
-import { SERIES_TYPE_LABELS, type Annonce, type Chapter, type HistoryEntry, type Series } from "@/lib/types";
+import { SERIES_TYPE_LABELS, type Annonce, type HistoryEntry, type Series } from "@/lib/types";
 
 /** Sections facultatives : masquées quand elles n'ont rien à montrer. */
 export default async function HomePage() {
@@ -48,7 +49,7 @@ export default async function HomePage() {
     // faisait 12 `get` en série), et l'historique en même temps : tout est
     // indépendant, autant d'aller-retours partagés.
     seriesParIds(recos.slice(0, 12).map((rec) => rec.series_id)),
-    user ? listHistory(user.id, 1) : Promise.resolve([]),
+    user ? recentHistory(user.id, 1) : Promise.resolve([]),
   ]);
 
   /* ── Héros « À la une » : sélection de la rédaction, sinon les plus lues ── */
@@ -178,7 +179,11 @@ export default async function HomePage() {
             icon={<Sparkles className="size-4" />}
           />
           <div className="mt-4">
-            <SeriesGrid series={nouveautes.items} adultAllowed={adult} authenticated={Boolean(user)} />
+            <SeriesGrid
+              series={nouveautes.items}
+              adultAllowed={adult}
+              authenticated={Boolean(user)}
+            />
           </div>
         </section>
       )}
@@ -314,7 +319,7 @@ async function continueBlock(history: HistoryEntry[]) {
      de deux requêtes en série (l'historique est déjà chargé par l'appelant). */
   const [series, chapters] = await Promise.all([
     getSeriesById(entry.series_id),
-    getDb().list<Chapter>(TABLES.chapters, {
+    getDb().list(TABLES.chapters, {
       filters: [{ field: "id", op: "eq", value: entry.chapter_id }],
       limit: 1,
     }),
@@ -343,10 +348,7 @@ async function continueBlock(history: HistoryEntry[]) {
           />
         </Link>
         <div className="min-w-0 flex-1 space-y-1">
-          <Link
-            href={`/serie/${series.slug}`}
-            className="font-semibold text-fg hover:text-primary"
-          >
+          <Link href={`/serie/${series.slug}`} className="font-semibold text-fg hover:text-primary">
             {series.titre}
           </Link>
           <p className="text-sm text-muted">

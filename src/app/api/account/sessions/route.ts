@@ -1,7 +1,5 @@
-import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
 import { listSessions, revokeAllSessions } from "@/lib/data/sessions";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { route } from "@/server/http";
 
 /**
  * Sessions du compte (« Réglages : … sessions »).
@@ -10,38 +8,23 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
  * DELETE — révoque toutes les sessions, la session locale comprise : la
  *          réponse referme le cookie et l'appareil est déconnecté.
  */
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
-  const sessions = await listSessions();
-  return NextResponse.json({ ok: true, sessions });
-}
+export const GET = route({ auth: "user" }, async () =>
+  Response.json({ ok: true, sessions: await listSessions() }),
+);
 
-export async function DELETE(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
-
-  const limit = rateLimit(`account:sessions:${user.id}:${clientIp(request)}`, {
-    limit: 10,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Trop de tentatives. Réessayez plus tard.", code: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
-
-  await revokeAllSessions();
-  return NextResponse.json({ ok: true, deconnecte: true });
-}
+export const DELETE = route(
+  {
+    auth: "user",
+    rateLimit: {
+      key: "account:sessions",
+      by: "ip+user",
+      limit: 10,
+      windowMs: 60_000,
+      message: "Trop de tentatives. Réessayez plus tard.",
+    },
+  },
+  async () => {
+    await revokeAllSessions();
+    return Response.json({ ok: true, deconnecte: true });
+  },
+);

@@ -60,7 +60,8 @@ export async function GET(
       const accent = `hsl(${(seed + panelIndex * 37) % 360} 30% ${40 + ((seed >> (panelIndex % 9)) % 3) * 8}%)`;
       const figures = Array.from({ length: 3 }, (_, i) => {
         const fx = x + 30 + ((seed >> ((panelIndex + i) % 18)) % Math.max(1, Math.floor(w - 90)));
-        const fy = y + 40 + ((seed >> ((panelIndex + i * 3) % 19)) % Math.max(1, Math.floor(cellH - 110)));
+        const fy =
+          y + 40 + ((seed >> ((panelIndex + i * 3) % 19)) % Math.max(1, Math.floor(cellH - 110)));
         return `<ellipse cx="${fx}" cy="${fy}" rx="${26 + i * 12}" ry="${34 + i * 8}" fill="${accent}" opacity="0.55"/>`;
       }).join("");
       panels.push(`

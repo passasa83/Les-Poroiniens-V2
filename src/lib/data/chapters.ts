@@ -1,31 +1,53 @@
 import "server-only";
-import { cached, getDb, invalidate, TABLES } from "@/lib/db";
+import { getDb, listAll, parLots, TABLES, type TableFilter } from "@/server/db";
+import { purgeImageErrors } from "@/lib/data/image-errors";
+import { cached, invalidate } from "@/server/cache";
 import { filtresSansDemo, serieDeDemo } from "@/lib/demo-gate";
-import { demoLnContent } from "@/lib/db/demo-content";
+import { demoLnContent } from "@/server/db/demo-content";
 import { imageEnv, pageUrl } from "@/lib/media";
 import { isSafePath } from "@/lib/nas";
 import { seriesParIds } from "@/lib/data/series";
 import type { Chapter, ScanPage, Series, SeriesType } from "@/lib/types";
 
+/** Liste des chapitres d'une série : 1 min en cache. */
+const CHAPTERS_TTL = 60_000;
+/** Index des pages (URLs publiques versionnées) : 5 min en cache. */
+const PAGES_TTL = 5 * 60_000;
+
+/**
+ * Invalide les listes de chapitres (d'une série, ou de toutes) et l'index des
+ * pages d'un chapitre. À appeler après toute écriture de `chapters` / `pages`.
+ */
+export function invalidateChapters(opts: { seriesId?: string; chapterId?: string } = {}): void {
+  invalidate(opts.seriesId ? `chapters:${opts.seriesId}:` : "chapters:");
+  invalidate(opts.chapterId ? `pages:${opts.chapterId}:` : "pages:");
+  invalidate("chapter-pages:");
+}
+
 export async function listChapters(
   seriesId: string,
   opts: { publishedOnly?: boolean; limit?: number } = {},
 ): Promise<Chapter[]> {
-  const { items } = await getDb().list<Chapter>(TABLES.chapters, {
-    filters: [
-      { field: "series_id", op: "eq", value: seriesId },
-      ...(opts.publishedOnly
-        ? [{ field: "statut", op: "eq" as const, value: "published" }]
-        : []),
-    ],
-    order: { field: "numero", dir: "desc" },
-    limit: opts.limit ?? 500,
+  const limit = opts.limit ?? 500;
+  const portee = opts.publishedOnly ? "pub" : "all";
+  return cached(`chapters:${seriesId}:${portee}:${limit}`, CHAPTERS_TTL, async () => {
+    const { items } = await getDb().list(TABLES.chapters, {
+      filters: [
+        { field: "series_id", op: "eq", value: seriesId },
+        ...(opts.publishedOnly
+          ? [{ field: "statut", op: "eq", value: "published" } satisfies TableFilter<"chapters">]
+          : []),
+      ],
+      order: { field: "numero", dir: "desc" },
+      limit,
+    });
+    return items;
   });
-  return items;
 }
 
+/** Lecture directe, sans cache (contrôle d'existence du proxy, écritures). */
 export async function getChapter(seriesId: string, numero: number): Promise<Chapter | null> {
-  const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+  const { items } = await getDb().list(TABLES.chapters, {
     filters: [
       { field: "series_id", op: "eq", value: seriesId },
       { field: "numero", op: "eq", value: numero },
@@ -36,12 +58,85 @@ export async function getChapter(seriesId: string, numero: number): Promise<Chap
 }
 
 export async function getChapterById(id: string): Promise<Chapter | null> {
-  return getDb().get<Chapter>(TABLES.chapters, id);
+  return getDb().get(TABLES.chapters, id);
+}
+
+/** Découpe en lots de 50 identifiants (filtre `in` gardé loin des limites d'URL). */
+function lots(ids: readonly string[]): string[][] {
+  const uniques = [...new Set(ids)].filter(Boolean);
+  const sortie: string[][] = [];
+  for (let i = 0; i < uniques.length; i += 50) sortie.push(uniques.slice(i, i + 50));
+  return sortie;
+}
+
+/** Plusieurs chapitres par identifiant, lots en parallèle (remède aux N+1). */
+export async function chaptersParIds(ids: readonly string[]): Promise<Map<string, Chapter>> {
+  const resultats = await Promise.all(
+    lots(ids).map((lot) =>
+      getDb().list(TABLES.chapters, {
+        filters: [{ field: "id", op: "in", value: lot }],
+        limit: lot.length,
+      }),
+    ),
+  );
+  return new Map(resultats.flatMap((r) => r.items).map((c) => [c.id, c]));
+}
+
+export type ChapitrePublie = Pick<
+  Chapter,
+  "id" | "series_id" | "numero" | "publish_at" | "created_at"
+>;
+
+/**
+ * Chapitres publiés de plusieurs séries, colonnes utiles seulement, groupés
+ * par série : une requête par lot de 50 séries au lieu d'une par série.
+ */
+export async function publishedChaptersOf(
+  seriesIds: readonly string[],
+): Promise<Map<string, ChapitrePublie[]>> {
+  const resultats = await Promise.all(
+    lots(seriesIds).map((lot) =>
+      listAll(TABLES.chapters, {
+        filters: [
+          { field: "series_id", op: "in", value: lot },
+          { field: "statut", op: "eq", value: "published" },
+        ],
+        select: ["series_id", "numero", "publish_at", "created_at"],
+      }),
+    ),
+  );
+  const parSerie = new Map<string, ChapitrePublie[]>();
+  for (const c of resultats.flat()) {
+    const liste = parSerie.get(c.series_id) ?? [];
+    liste.push(c);
+    parSerie.set(c.series_id, liste);
+  }
+  return parSerie;
+}
+
+/**
+ * Supprime un chapitre et ce qui en dépend (index des pages, erreurs
+ * d'images). Toutes les pages sont lues, sans plafond, et supprimées 10 par
+ * 10 : avant, une boucle séquentielle plafonnée à 5000 lignes laissait des
+ * pages orphelines et dépassait le délai d'une fonction pour un gros tome.
+ * Renvoie le nombre de pages supprimées. Le compteur de la série et le
+ * cache restent à la charge de l'appelant.
+ */
+export async function deleteChapterCascade(chapterId: string): Promise<number> {
+  const db = getDb();
+  const pages = await listAll(TABLES.pages, {
+    filters: [{ field: "chapter_id", op: "eq", value: chapterId }],
+    select: ["chapter_id"],
+  });
+  await parLots(pages, (page) => db.remove(TABLES.pages, page.id));
+  await db.remove(TABLES.chapters, chapterId);
+  await purgeImageErrors(chapterId);
+  return pages.length;
 }
 
 /** Index des pages : lu en base, jamais sur le NAS. */
 export async function getPages(chapterId: string): Promise<ScanPage[]> {
-  const { items } = await getDb().list<ScanPage>(TABLES.pages, {
+  const { items } = await getDb().list(TABLES.pages, {
     filters: [{ field: "chapter_id", op: "eq", value: chapterId }],
     order: { field: "index", dir: "asc" },
     limit: 5000,
@@ -58,7 +153,10 @@ export async function getChapterPageUrls(
   pages: { index: number; url: string; largeur: number; hauteur: number }[];
   total: number;
 }> {
-  const pages = await getPages(chapterId);
+  // Les URLs signées (aperçu d'un brouillon) expirent : jamais mises en cache.
+  const pages = opts.signed
+    ? await getPages(chapterId)
+    : await cached(`pages:${chapterId}:`, PAGES_TTL, () => getPages(chapterId));
   return {
     total: pages.length,
     pages: pages.map((p) => ({
@@ -85,7 +183,10 @@ export interface ReaderContext {
 
 /** Encodage par segment : les chemins NAS portent espaces et accents. */
 function encodeRel(rel: string): string {
-  return rel.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+  return rel
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
 }
 
 /** Découpe d'un fichier texte brut en paragraphes (sauts de lignes doubles). */
@@ -163,19 +264,21 @@ export async function getReaderContext(
   /* Série de la graine masquée en production : jamais de contexte de lecture
      (la page appelante déclenche `notFound()` → vrai 404). */
   if (serieDeDemo(series.id)) return null;
-  const chapter = await getChapter(series.id, numero);
-  if (!chapter) return null;
-  const preview = chapter.statut !== "published";
-  if (preview && !opts.allowDraft) return null;
-
+  /* Une seule liste (en cache) donne le chapitre et ses voisins : sans
+     brouillon autorisé, un chapitre non publié en est absent → null. */
   const chapters = await listChapters(series.id, opts.allowDraft ? {} : { publishedOnly: true });
   const ordered = [...chapters].sort((a, b) => a.numero - b.numero);
-  const idx = ordered.findIndex((c) => c.id === chapter.id);
-  const { pages } = await getChapterPageUrls(chapter.id, { signed: preview });
-  const contenu =
+  const idx = ordered.findIndex((c) => c.numero === numero);
+  const chapter = ordered[idx];
+  if (!chapter) return null;
+  const preview = chapter.statut !== "published";
+
+  const [{ pages }, contenu] = await Promise.all([
+    getChapterPageUrls(chapter.id, { signed: preview }),
     series.type === "light_novel" || chapter.contenu_chemin
-      ? await getChapterContent(chapter)
-      : null;
+      ? getChapterContent(chapter)
+      : Promise.resolve(null),
+  ]);
   return {
     series,
     chapter,
@@ -188,32 +291,6 @@ export async function getReaderContext(
   };
 }
 
-export async function recentChapters(limit = 12): Promise<Array<Chapter & { series: Series }>> {
-  return cached(`recent-chapters:${limit}`, 60_000, async () => {
-    const { items } = await getDb().list<Chapter>(TABLES.chapters, {
-      filters: [
-        { field: "statut", op: "eq", value: "published" },
-        /* Chapitres de la graine écartés dans la requête : le bandeau garde
-           ses `limit` entrées en production. */
-        ...filtresSansDemo("chapters"),
-      ],
-      order: { field: "publish_at", dir: "desc" },
-      limit,
-    });
-    /* Les séries sont récupérées en **un** lot (au lieu d'un `get` par
-       chapitre : 12 aller-retours séquentiels avant). */
-    if (items.length === 0) return [];
-    const seriesMap = await seriesParIds(items.map((c) => c.series_id));
-    const out: Array<Chapter & { series: Series }> = [];
-    for (const chapter of items) {
-      const series = seriesMap.get(chapter.series_id);
-      // Une série archivée ne génère plus aucune sortie publique.
-      if (series && series.statut !== "archive") out.push({ ...chapter, series });
-    }
-    return out;
-  });
-}
-
 /** Numéro du premier chapitre publié de chaque série (héros de l'accueil). */
 export async function firstChapterNumbers(seriesIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
@@ -221,7 +298,7 @@ export async function firstChapterNumbers(seriesIds: string[]): Promise<Map<stri
 
   await Promise.all(
     seriesIds.map(async (id) => {
-      const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+      const { items } = await getDb().list(TABLES.chapters, {
         filters: [
           { field: "series_id", op: "eq", value: id },
           { field: "statut", op: "eq", value: "published" },
@@ -258,19 +335,21 @@ export async function listUpdates(
 
   return cached(key, 60_000, async () => {
     const since = new Date(Date.now() - days * 86_400_000).toISOString();
-    const filters = [
-      { field: "statut", op: "eq" as const, value: "published" },
+    const filters: TableFilter<"chapters">[] = [
+      { field: "statut", op: "eq", value: "published" },
       { field: "publish_at", op: "gte" as const, value: since },
       ...(!opts.includeAdult
-        ? [{ field: "classification", op: "eq" as const, value: "all" }]
+        ? [{ field: "classification" as const, op: "eq" as const, value: "all" }]
         : []),
-      ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+      ...(opts.type
+        ? [{ field: "series_type" as const, op: "eq" as const, value: opts.type }]
+        : []),
       /* Chapitres de la graine écartés dans la requête : les tranches
          « Dernières 24 h / Hier » ne montrent plus le jeu de démonstration. */
       ...filtresSansDemo("chapters"),
     ];
 
-    const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+    const { items } = await getDb().list(TABLES.chapters, {
       filters,
       order: { field: "publish_at", dir: "desc" },
       limit,
@@ -300,7 +379,7 @@ export async function listUpdates(
 
 /** Dernier chapitre publié d'une série (carte héros des nouveautés). */
 export async function latestPublishedChapter(seriesId: string): Promise<Chapter | null> {
-  const { items } = await getDb().list<Chapter>(TABLES.chapters, {
+  const { items } = await getDb().list(TABLES.chapters, {
     filters: [
       { field: "series_id", op: "eq", value: seriesId },
       { field: "statut", op: "eq", value: "published" },
@@ -321,18 +400,18 @@ async function queryReleases(
   limit: number,
   offset: number,
 ): Promise<{ items: ReleaseItem[]; total: number }> {
-  const filters = [
-    { field: "statut", op: "eq" as const, value: "published" },
+  const filters: TableFilter<"chapters">[] = [
+    { field: "statut", op: "eq", value: "published" },
     ...(!opts.includeAdult
-      ? [{ field: "classification", op: "eq" as const, value: "all" }]
+      ? [{ field: "classification" as const, op: "eq" as const, value: "all" }]
       : []),
-    ...(opts.type ? [{ field: "series_type", op: "eq" as const, value: opts.type }] : []),
+    ...(opts.type ? [{ field: "series_type" as const, op: "eq" as const, value: opts.type }] : []),
     /* Exclusion dans la requête : `total` (« Charger plus ») doit
        correspondre aux lignes réellement servies. */
     ...filtresSansDemo("chapters"),
   ];
 
-  const { items, total } = await getDb().list<Chapter>(TABLES.chapters, {
+  const { items, total } = await getDb().list(TABLES.chapters, {
     filters,
     order: { field: "publish_at", dir: "desc" },
     limit,
@@ -418,7 +497,7 @@ export async function listRecentReleasesGrouped(
 export async function saveChapter(chapter: Partial<Chapter> & { id: string }): Promise<Chapter> {
   const db = getDb();
   const { id, ...data } = chapter;
-  const existing = await db.get<Chapter>(TABLES.chapters, id);
+  const existing = await db.get(TABLES.chapters, id);
 
   /* Format d'origine dénormalisé (Appwrite n'opère pas de jointure) : renseigné
      à l'écriture, et complété à la volée sur une ligne héritée qui en manque. */
@@ -431,17 +510,15 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
       data.series_type = existing.series_type;
     } else {
       const seriesId = data.series_id ?? existing?.series_id;
-      const series = seriesId ? await db.get<Series>(TABLES.series, seriesId) : null;
+      const series = seriesId ? await db.get(TABLES.series, seriesId) : null;
       if (series) data.series_type = series.type;
     }
   }
 
   const updated = existing
-    ? await db.update<Chapter>(TABLES.chapters, id, data as Record<string, unknown>)
-    : await db.create<Chapter>(TABLES.chapters, id, {
-        created_at: new Date().toISOString(),
-        ...(data as Record<string, unknown>),
-      });
+    ? await db.update(TABLES.chapters, id, data)
+    : await db.create(TABLES.chapters, id, { created_at: new Date().toISOString(), ...data });
+  invalidateChapters({ chapterId: id });
   invalidate("recent-chapters:");
   invalidate("releases:");
   invalidate("updates:");
@@ -449,8 +526,7 @@ export async function saveChapter(chapter: Partial<Chapter> & { id: string }): P
 
   /* Compteur dénormalisé de la série (« One-shot ») : recalculé au vol —
      et non incrémenté — pour ne jamais dériver d'une écriture ratée. */
-  const movedSeries =
-    data.series_id !== undefined && data.series_id !== existing?.series_id;
+  const movedSeries = data.series_id !== undefined && data.series_id !== existing?.series_id;
   if (!existing || movedSeries) {
     await refreshSeriesChapterCount(updated.series_id);
     if (movedSeries && existing?.series_id) await refreshSeriesChapterCount(existing.series_id);
@@ -473,11 +549,18 @@ export async function refreshSeriesChapterCount(seriesId?: string | null): Promi
     });
     await db.update(TABLES.series, seriesId, { nb_chapitres: total });
     invalidate("series:");
+    invalidateChapters({ seriesId });
   } catch {
     /* un souci de compteur ne doit pas faire échouer une écriture de chapitre. */
   }
 }
 
+/**
+ * +1 vue. Le compteur est relu en base (le chapitre affiché peut venir du
+ * cache) : à appeler hors du rendu, via `after()`.
+ */
 export async function recordView(chapter: Chapter): Promise<void> {
-  await getDb().update(TABLES.chapters, chapter.id, { vues: chapter.vues + 1 });
+  const db = getDb();
+  const fresh = await db.get(TABLES.chapters, chapter.id);
+  if (fresh) await db.update(TABLES.chapters, chapter.id, { vues: (fresh.vues ?? 0) + 1 });
 }

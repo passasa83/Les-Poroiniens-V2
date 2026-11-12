@@ -148,9 +148,7 @@ export function InscriptionForm({
           <AuthHeading level={heading}>Compte créé</AuthHeading>
         </div>
         <div
-          className={
-            embedded ? "space-y-4 text-center" : "card space-y-4 p-6 text-center"
-          }
+          className={embedded ? "space-y-4 text-center" : "card space-y-4 p-6 text-center"}
           role="status"
           aria-live="polite"
         >
@@ -191,11 +189,7 @@ export function InscriptionForm({
         </p>
       </div>
 
-      <form
-        onSubmit={submit}
-        className={embedded ? "space-y-4" : "card space-y-4 p-6"}
-        noValidate
-      >
+      <form onSubmit={submit} className={embedded ? "space-y-4" : "card space-y-4 p-6"} noValidate>
         <Field
           label="Pseudo"
           htmlFor={ids.pseudo}
@@ -309,9 +303,11 @@ export function InscriptionForm({
         </div>
 
         <p className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs text-muted">
-          <strong className="text-fg">Votre adresse e-mail n&apos;est jamais montrée
-          publiquement</strong> : elle ne figure ni sur votre profil, ni sous vos commentaires. Et
-          comme aucun e-mail n&apos;est envoyé au lancement, rien ne vous parviendra par ce canal.
+          <strong className="text-fg">
+            Votre adresse e-mail n&apos;est jamais montrée publiquement
+          </strong>{" "}
+          : elle ne figure ni sur votre profil, ni sous vos commentaires. Et comme aucun e-mail
+          n&apos;est envoyé au lancement, rien ne vous parviendra par ce canal.
         </p>
 
         <Button type="submit" variant="primary" disabled={busy} className="w-full">

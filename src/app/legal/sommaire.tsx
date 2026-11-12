@@ -5,13 +5,7 @@ export type SommaireEntree = { id: string; titre: string };
  * titres de sections. Chaque `id` doit exister dans la page (libellé explicite
  * pour les lecteurs d'écran, cible focusable au clavier).
  */
-export function Sommaire({
-  entrees,
-  id = "sommaire",
-}: {
-  entrees: SommaireEntree[];
-  id?: string;
-}) {
+export function Sommaire({ entrees, id = "sommaire" }: { entrees: SommaireEntree[]; id?: string }) {
   return (
     <nav aria-labelledby={`${id}-titre`} className="card mt-6 max-w-3xl p-5" id={id}>
       <p className="text-sm font-semibold text-fg" id={`${id}-titre`}>

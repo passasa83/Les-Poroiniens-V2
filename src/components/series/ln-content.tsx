@@ -175,8 +175,8 @@ export function LnChapterEditor({
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted">
-            {texte.length.toLocaleString("fr-FR")} caractères ·{" "}
-            {compterParagraphes(texte)} paragraphes
+            {texte.length.toLocaleString("fr-FR")} caractères · {compterParagraphes(texte)}{" "}
+            paragraphes
           </span>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>

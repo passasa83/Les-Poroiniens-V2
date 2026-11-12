@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
 import { seriesStats } from "@/lib/data/series";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
 
-type Params = { params: Promise<{ slug: string }> };
-
 /** Statistiques publiques d'une série, léger cache CDN. */
-export async function GET(_request: Request, { params }: Params) {
-  const { slug } = await params;
+export const GET = route({}, async ({ params }) => {
+  const { slug } = params;
   const stats = await seriesStats(slug);
 
   if (!stats) {
-    return NextResponse.json(
-      { error: "série introuvable", code: "NOT_FOUND" },
-      { status: 404 },
-    );
+    fail(404, "série introuvable", "NOT_FOUND");
   }
 
   return NextResponse.json(stats, {
@@ -22,4 +18,4 @@ export async function GET(_request: Request, { params }: Params) {
       "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
     },
   });
-}
+});

@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { ADULT_COOKIE, getCurrentUser } from "@/lib/auth";
+import { ADULT_COOKIE } from "@/server/auth";
 import { getProfile, updatePreferences } from "@/lib/data/users";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DEFAULT_PREFERENCES, type UserPreferences } from "@/lib/types";
+import { route } from "@/server/http";
 
 /**
  * PATCH /api/account/preferences.
@@ -28,59 +28,35 @@ const PreferencesSchema = z.object({
  * défaut (un compte créé avant l'ajout d'un champ n'a pas de trou dans la
  * réponse). Lecture seule : 401 sans session.
  */
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
+export const GET = route({ auth: "user" }, async ({ user }) => {
   const profile = await getProfile(user.id);
   const preferences: UserPreferences = {
     ...DEFAULT_PREFERENCES,
     ...(profile?.preferences ?? {}),
   };
   return NextResponse.json({ ok: true, preferences });
-}
+});
 
-export async function PATCH(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
-
-  const limit = rateLimit(`account:prefs:${user.id}:${clientIp(request)}`, {
-    limit: 60,
-    windowMs: 60_000,
-  });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Trop de modifications. Réessayez dans un instant.", code: "rate_limited" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Requête invalide.", code: "bad_request" }, { status: 400 });
-  }
-
-  const parsed = PreferencesSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Préférences invalides.", code: "validation" }, { status: 400 });
-  }
-
-  const preferences: UserPreferences = await updatePreferences(user.id, parsed.data);
-  // Opt-out : le cookie visiteur ne doit pas rouvrir la porte coupée
-  // côté compte (voir `updatePreferences`, révocation effective).
-  if (parsed.data.adult_ok === false) {
-    (await cookies()).set(ADULT_COOKIE, "", { path: "/", maxAge: 0 });
-  }
-  return NextResponse.json({ ok: true, preferences });
-}
+export const PATCH = route(
+  {
+    auth: "user",
+    rateLimit: {
+      key: "account:prefs",
+      by: "ip+user",
+      limit: 60,
+      windowMs: 60_000,
+      message: "Trop de modifications. Réessayez dans un instant.",
+    },
+    body: PreferencesSchema,
+    invalidBody: "Préférences invalides.",
+  },
+  async ({ user, body }) => {
+    const preferences: UserPreferences = await updatePreferences(user.id, body);
+    // Opt-out : le cookie visiteur ne doit pas rouvrir la porte coupée
+    // côté compte (voir `updatePreferences`, révocation effective).
+    if (body.adult_ok === false) {
+      (await cookies()).set(ADULT_COOKIE, "", { path: "/", maxAge: 0 });
+    }
+    return NextResponse.json({ ok: true, preferences });
+  },
+);

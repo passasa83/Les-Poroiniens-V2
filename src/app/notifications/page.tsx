@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AtSign, BookOpen, Info } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
-import { listNotifications } from "@/lib/data/moderation";
+import { getCurrentUser } from "@/server/auth";
+import { listNotifications } from "@/lib/data/notifications";
 import { atLeast } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, EmptyState } from "@/components/ui/kit";
@@ -83,8 +83,8 @@ export default async function NotificationsPage() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-fg">Notifications</h1>
           <p className="text-sm text-muted">
-            {notifications.length} notification{notifications.length > 1 ? "s" : ""} ·{" "}
-            {unread} non lue{unread > 1 ? "s" : ""}
+            {notifications.length} notification{notifications.length > 1 ? "s" : ""} · {unread} non
+            lue{unread > 1 ? "s" : ""}
           </p>
         </div>
         <NotificationsActions unread={unread} />

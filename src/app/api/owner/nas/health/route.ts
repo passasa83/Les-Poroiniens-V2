@@ -1,4 +1,4 @@
-import { guardNas } from "../guard";
+import { nasRoute } from "../guard";
 import { nasHealth } from "@/lib/nas";
 
 export const runtime = "nodejs";
@@ -7,10 +7,7 @@ export const runtime = "nodejs";
  * GET /api/owner/nas/health — état du NAS pour l'espace Gérant :
  * disponibilité, temps de réponse et espace disque libre.
  */
-export async function GET(request: Request) {
-  const guard = await guardNas(request);
-  if (!guard.ok) return guard.response;
-
+export const GET = nasRoute(async () => {
   const health = await nasHealth();
   return Response.json({ ...health, time: new Date().toISOString() });
-}
+});

@@ -1,13 +1,13 @@
 import "server-only";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
 import { DEFAULT_PREFERENCES, type Profile, type Role, type UserPreferences } from "@/lib/types";
 
 export async function getProfile(userId: string): Promise<Profile | null> {
-  return getDb().get<Profile>(TABLES.profiles, userId);
+  return getDb().get(TABLES.profiles, userId);
 }
 
 export async function getProfileByPseudo(pseudo: string): Promise<Profile | null> {
-  const { items } = await getDb().list<Profile>(TABLES.profiles, {
+  const { items } = await getDb().list(TABLES.profiles, {
     filters: [{ field: "pseudo", op: "eq", value: pseudo }],
     limit: 1,
   });
@@ -15,7 +15,7 @@ export async function getProfileByPseudo(pseudo: string): Promise<Profile | null
 }
 
 export async function listProfiles(limit = 200): Promise<Profile[]> {
-  const { items } = await getDb().list<Profile>(TABLES.profiles, {
+  const { items } = await getDb().list(TABLES.profiles, {
     order: { field: "date_inscription", dir: "desc" },
     limit,
   });
@@ -30,15 +30,12 @@ const PATCHABLE: Array<keyof Profile> = [
   "preferences",
 ];
 
-export async function updateProfile(
-  userId: string,
-  patch: Partial<Profile>,
-): Promise<Profile> {
+export async function updateProfile(userId: string, patch: Partial<Profile>): Promise<Profile> {
   const clean: Record<string, unknown> = {};
   for (const key of PATCHABLE) {
     if (patch[key] !== undefined) clean[key] = patch[key];
   }
-  return getDb().update<Profile>(TABLES.profiles, userId, clean);
+  return getDb().update(TABLES.profiles, userId, clean);
 }
 
 /** Fusion sélective des préférences : seuls les champs connus sont retenus. */
@@ -83,7 +80,7 @@ export async function updatePreferences(
     merged.tagsMasques = out;
   }
 
-  await getDb().update<Profile>(TABLES.profiles, userId, {
+  await getDb().update(TABLES.profiles, userId, {
     preferences: merged,
     // Révocation effective : couper l'opt-out doit refermer la porte,
     // sinon la préférence « Afficher le contenu +18 » serait décorative.
@@ -96,5 +93,5 @@ export async function updatePreferences(
 
 /** Modification de rôle : Admin et Gérant réservés au Gérant. */
 export async function setRole(userId: string, role: Role): Promise<void> {
-  await getDb().update<Profile>(TABLES.profiles, userId, { role });
+  await getDb().update(TABLES.profiles, userId, { role });
 }

@@ -1,4 +1,5 @@
-import { jsonError, guardNas } from "../guard";
+import { nasRoute } from "../guard";
+import { fail } from "@/server/http";
 import { isSafePath, nasErrorMessage, nasTree } from "@/lib/nas";
 
 export const runtime = "nodejs";
@@ -11,14 +12,11 @@ export const runtime = "nodejs";
  * La réponse est normalisée ici pour que l'interface n'affiche que
  * `{ name, isDir }`, sans détail technique du NAS.
  */
-export async function GET(request: Request) {
-  const guard = await guardNas(request);
-  if (!guard.ok) return guard.response;
-
-  const rawPath = new URL(request.url).searchParams.get("path") ?? "";
+export const GET = nasRoute(async ({ searchParams }) => {
+  const rawPath = searchParams.get("path") ?? "";
   const path = rawPath.trim();
   if (path && !isSafePath(path)) {
-    return jsonError("Chemin refusé (validation anti traversal).", "invalid_path", 400);
+    fail(400, "Chemin refusé (validation anti traversal).", "invalid_path");
   }
 
   try {
@@ -28,6 +26,6 @@ export async function GET(request: Request) {
       entries: tree.entries.map((entry) => ({ name: entry.name, isDir: entry.isDir })),
     });
   } catch (err) {
-    return jsonError(nasErrorMessage(err), "nas_error", 502);
+    fail(502, nasErrorMessage(err), "nas_error");
   }
-}
+});

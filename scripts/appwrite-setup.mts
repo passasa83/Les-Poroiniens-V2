@@ -187,7 +187,7 @@ const TABLES: Table[] = [
     name: "Pages",
     columns: [
       { key: "chapter_id", ...ID64 },
-      // `index` est un mot réservé SQL : stocké sous `ordre` (mapping dans src/lib/db/appwrite.ts)
+      // `index` est un mot réservé SQL : stocké sous `ordre` (mapping dans src/server/db/appwrite.ts)
       { key: "ordre", type: "integer" },
       // Chemin **relatif** au CDN : `${IMG_BASE_URL}/${chemin}?v=${hash}`
       { key: "chemin", type: "varchar", size: 512 },

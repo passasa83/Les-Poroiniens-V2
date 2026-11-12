@@ -47,9 +47,7 @@ export function UpdateCard({ item, fresh }: { item: UpdateCardData; fresh: boole
             </span>
           )}
           {item.lu && (
-            <span className="badge absolute bottom-1.5 right-1.5 bg-surface/90 text-muted">
-              Lu
-            </span>
+            <span className="badge absolute bottom-1.5 right-1.5 bg-surface/90 text-muted">Lu</span>
           )}
         </div>
         <p className="mt-2 truncate text-sm font-semibold text-fg group-hover:text-primary">

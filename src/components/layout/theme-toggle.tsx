@@ -39,7 +39,12 @@ export function SiteThemeToggle() {
   const theme = useSyncExternalStore(subscribe, getTheme, getServerTheme);
 
   return (
-    <button type="button" onClick={toggleTheme} className="btn-ghost px-2" aria-label="Changer de thème">
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="btn-ghost px-2"
+      aria-label="Changer de thème"
+    >
       {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </button>
   );

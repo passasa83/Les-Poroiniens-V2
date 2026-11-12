@@ -9,7 +9,7 @@ import {
   ScrollText,
   Settings,
 } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can, ROLE_LABELS } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge } from "@/components/ui/kit";
@@ -41,13 +41,21 @@ export default async function GerantLayout({ children }: { children: ReactNode }
       label: "Contenu",
       items: [
         { href: "/gerant/series", label: "Séries", icon: <LibraryBig className="size-4" /> },
-        { href: "/gerant/import", label: "Import de contenu", icon: <FolderUp className="size-4" /> },
+        {
+          href: "/gerant/import",
+          label: "Import de contenu",
+          icon: <FolderUp className="size-4" />,
+        },
       ],
     },
     {
       label: "Traçabilité",
       items: [
-        { href: "/gerant/audit", label: "Journal d'audit", icon: <ScrollText className="size-4" /> },
+        {
+          href: "/gerant/audit",
+          label: "Journal d'audit",
+          icon: <ScrollText className="size-4" />,
+        },
       ],
     },
     {
@@ -62,9 +70,7 @@ export default async function GerantLayout({ children }: { children: ReactNode }
     <div className="container-site py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Espace Gérant
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Espace Gérant</p>
           <h1 className="section-title">Pilotage du site</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
             <span className="font-semibold text-fg">{user?.pseudo}</span>

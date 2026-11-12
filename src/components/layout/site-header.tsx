@@ -1,16 +1,9 @@
-import {
-  Bell,
-  BookMarked,
-  Clock,
-  LogIn,
-  Menu,
-  Shield,
-  User as UserIcon,
-} from "lucide-react";
+import { Bell, BookMarked, Clock, LogIn, Menu, Shield, User as UserIcon } from "lucide-react";
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
-import { getSettings, listNotifications } from "@/lib/data/moderation";
+import { getSettings } from "@/lib/data/moderation";
+import { listNotifications } from "@/lib/data/notifications";
 import { HeaderShell } from "./header-shell";
 import { Breadcrumbs, HeaderSearch, NavLinks } from "./header-nav";
 import { SiteThemeToggle } from "./theme-toggle";

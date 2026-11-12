@@ -48,14 +48,26 @@ export function UserMenu({ user, unread }: { user: CurrentUser; unread: number }
           role="menu"
           className="absolute right-0 top-11 w-56 space-y-1 rounded-2xl border border-line bg-surface p-2 shadow-xl"
         >
-          <Link href={`/profil/${user.pseudo}`} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2" role="menuitem">
+          <Link
+            href={`/profil/${user.pseudo}`}
+            className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2"
+            role="menuitem"
+          >
             Mon profil
           </Link>
-          <Link href="/compte" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2" role="menuitem">
+          <Link
+            href="/compte"
+            className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2"
+            role="menuitem"
+          >
             <Settings className="mr-2 inline size-4 text-muted" />
             Paramètres
           </Link>
-          <Link href="/notifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2" role="menuitem">
+          <Link
+            href="/notifications"
+            className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2"
+            role="menuitem"
+          >
             Notifications
             {unread > 0 && (
               <span className="ml-2 rounded-full bg-adult/20 px-2 py-0.5 text-xs text-adult">
@@ -64,13 +76,21 @@ export function UserMenu({ user, unread }: { user: CurrentUser; unread: number }
             )}
           </Link>
           {can(user.role, "edit_series") && (
-            <Link href="/admin" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2" role="menuitem">
+            <Link
+              href="/admin"
+              className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2"
+              role="menuitem"
+            >
               <LayoutDashboard className="mr-2 inline size-4 text-muted" />
               Administration
             </Link>
           )}
           {can(user.role, "import_chapters") && (
-            <Link href="/gerant" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2" role="menuitem">
+            <Link
+              href="/gerant"
+              className="block rounded-lg px-3 py-2 text-sm hover:bg-surface2"
+              role="menuitem"
+            >
               <Upload className="mr-2 inline size-4 text-muted" />
               Espace Gérant
             </Link>

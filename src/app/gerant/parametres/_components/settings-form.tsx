@@ -2,16 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Loader2, Lock, RefreshCw, Save } from "lucide-react";
-import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/components/ui/kit";
+import { Loader2, Save } from "lucide-react";
+import { Button, Card, Field, Input, Textarea } from "@/components/ui/kit";
 import type { Role } from "@/lib/types";
+import { PasswordResetCard } from "./password-reset-card";
+import { SecretsCard, type SecretStatus } from "./secrets-card";
 
-export type SecretStatus = {
-  key: string;
-  label: string;
-  present: boolean;
-  hint?: string;
-};
+export type { SecretStatus } from "./secrets-card";
 
 type SettingsValues = {
   site_name: string;
@@ -45,19 +42,6 @@ export function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // État des secrets rechargé côté client pour vérifier la réponse masquée.
-  const [secretList, setSecretList] = useState(secrets);
-  const [secretError, setSecretError] = useState<string | null>(null);
-  const [secretsBusy, setSecretsBusy] = useState(false);
-
-  // Réinitialisation de mot de passe
-  const [targetUser, setTargetUser] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [resetBusy, setResetBusy] = useState(false);
-  const [resetMessage, setResetMessage] = useState<{ tone: "ok" | "adult"; text: string } | null>(
-    null,
-  );
-
   function set<K extends keyof SettingsValues>(key: K, value: SettingsValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
@@ -88,72 +72,6 @@ export function SettingsForm({
     }
   }
 
-  async function refreshSecrets() {
-    setSecretsBusy(true);
-    setSecretError(null);
-    try {
-      const res = await fetch("/api/owner/settings");
-      const data = (await res.json().catch(() => null)) as
-        | { secrets?: Record<string, { label: string; present: boolean }> }
-        | null;
-      if (!res.ok || !data?.secrets) {
-        setSecretError("Impossible de lire l'état des connexions.");
-        return;
-      }
-      setSecretList((prev) =>
-        prev.map((s) => ({
-          ...s,
-          present: data.secrets?.[s.key]?.present ?? s.present,
-        })),
-      );
-    } catch {
-      setSecretError("Erreur réseau : réessayez.");
-    } finally {
-      setSecretsBusy(false);
-    }
-  }
-
-  async function resetPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const user = users.find((u) => u.userId === targetUser);
-    if (!user) {
-      setResetMessage({ tone: "adult", text: "Sélectionnez un utilisateur." });
-      return;
-    }
-    if (newPassword.length < 8) {
-      setResetMessage({ tone: "adult", text: "Le mot de passe doit faire au moins 8 caractères." });
-      return;
-    }
-    const ok = window.confirm(
-      `Réinitialiser le mot de passe de ${user.pseudo} ? Il devra être communiqué hors ligne.`,
-    );
-    if (!ok) return;
-
-    setResetBusy(true);
-    setResetMessage(null);
-    try {
-      const res = await fetch("/api/owner/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.userId, password: newPassword }),
-      });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        setResetMessage({ tone: "adult", text: data?.error ?? "Réinitialisation impossible." });
-        return;
-      }
-      setResetMessage({
-        tone: "ok",
-        text: `Mot de passe de ${user.pseudo} réinitialisé (non journalisé).`,
-      });
-      setNewPassword("");
-    } catch {
-      setResetMessage({ tone: "adult", text: "Erreur réseau : réessayez." });
-    } finally {
-      setResetBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <form onSubmit={onSubmit} className="space-y-6">
@@ -169,7 +87,11 @@ export function SettingsForm({
                 required
               />
             </Field>
-            <Field label="Bannière d'annonce" htmlFor="st-announcement" hint="Laisser vide pour masquer.">
+            <Field
+              label="Bannière d'annonce"
+              htmlFor="st-announcement"
+              hint="Laisser vide pour masquer."
+            >
               <Input
                 id="st-announcement"
                 value={values.announcement}
@@ -209,9 +131,9 @@ export function SettingsForm({
             </label>
           </div>
           <p className="text-xs text-muted">
-            La dernière annonce publiée s&apos;affiche sur l&apos;accueil : en bandeau
-            compact si cette case est cochée, sinon en carte avec titre, date et extrait. Décochez
-            pour n&apos;afficher que la bannière d&apos;annonce ci-dessus.
+            La dernière annonce publiée s&apos;affiche sur l&apos;accueil : en bandeau compact si
+            cette case est cochée, sinon en carte avec titre, date et extrait. Décochez pour
+            n&apos;afficher que la bannière d&apos;annonce ci-dessus.
           </p>
         </Card>
 
@@ -321,95 +243,10 @@ export function SettingsForm({
       </form>
 
       {/* ── Clés et connexions ────────────────────────────────────────── */}
-      <Card className="space-y-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="section-title flex items-center gap-2">
-            <Lock className="size-4 text-primary" /> Clés et connexions
-          </h2>
-          <Button type="button" onClick={refreshSecrets} disabled={secretsBusy}>
-            {secretsBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            Actualiser l&apos;état
-          </Button>
-        </div>
-
-        <p className="text-xs text-muted">
-          Pour des raisons de sécurité, seuls la <span className="text-fg">présence</span> ou
-          l&apos;<span className="text-fg">absence</span> de chaque secret sont affichées : les
-          valeurs ne sont jamais renvoyées par l&apos;API ni journalisées.
-        </p>
-
-        {secretError && <p className="text-sm text-adult">{secretError}</p>}
-
-        <ul className="space-y-3">
-          {secretList.map((secret) => (
-            <li
-              key={secret.key}
-              className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3 last:border-0 last:pb-0"
-            >
-              <span className="text-sm text-muted">
-                {secret.label}
-                {secret.hint && <span className="mt-0.5 block text-xs text-muted/80">{secret.hint}</span>}
-              </span>
-              <Badge tone={secret.present ? "ok" : "neutral"}>
-                {secret.present ? "Présent" : "Absent"}
-              </Badge>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <SecretsCard secrets={secrets} />
 
       {/* ── Utilisateurs ──────────────────────────────────────────────── */}
-      <Card className="space-y-4 p-5">
-        <h2 className="section-title flex items-center gap-2">
-          <KeyRound className="size-4 text-primary" /> Réinitialisation d&apos;un mot de passe
-        </h2>
-        <p className="text-xs text-muted">
-          Aucun mail n&apos;est envoyé au lancement : communiquez le nouveau mot de passe
-          hors ligne. La valeur n&apos;est ni journalisée ni affichée.
-        </p>
-
-        <form onSubmit={resetPassword} className="grid gap-4 md:grid-cols-3">
-          <Field label="Utilisateur" htmlFor="st-user">
-            <Select id="st-user" value={targetUser} onChange={(e) => setTargetUser(e.target.value)}>
-              <option value="">— Choisir —</option>
-              {users.map((u) => (
-                <option key={u.userId} value={u.userId}>
-                  {u.pseudo} ({u.role})
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Nouveau mot de passe" htmlFor="st-password">
-            <Input
-              id="st-password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              minLength={8}
-              autoComplete="new-password"
-              placeholder="8 caractères minimum"
-            />
-          </Field>
-          <div className="flex items-end">
-            <Button type="submit" variant="danger" disabled={resetBusy}>
-              {resetBusy ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
-              Réinitialiser
-            </Button>
-          </div>
-        </form>
-
-        {resetMessage && (
-          <p
-            className={`rounded-xl border px-3 py-2 text-sm ${
-              resetMessage.tone === "ok"
-                ? "border-ok/40 bg-ok/10 text-ok"
-                : "border-adult/40 bg-adult/10 text-adult"
-            }`}
-          >
-            {resetMessage.text}
-          </p>
-        )}
-      </Card>
+      <PasswordResetCard users={users} />
     </div>
   );
 }

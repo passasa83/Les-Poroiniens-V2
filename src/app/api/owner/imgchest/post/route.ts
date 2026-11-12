@@ -1,4 +1,5 @@
-import { jsonError, guardImgChest } from "../guard";
+import { imgchestRoute } from "../guard";
+import { fail } from "@/server/http";
 import { imgchestErrorMessage, imgchestPost } from "@/lib/imgchest";
 
 export const runtime = "nodejs";
@@ -9,12 +10,9 @@ export const runtime = "nodejs";
  * Renvoie uniquement le nécessaire pour confirmer le choix (titre, nombre de
  * pages, dimensions totales) : les URLs CDN restent serveur jusqu'à l'import.
  */
-export async function GET(request: Request) {
-  const guard = await guardImgChest(request);
-  if (!guard.ok) return guard.response;
-
-  const id = (new URL(request.url).searchParams.get("id") ?? "").trim();
-  if (!id) return jsonError("Identifiant d'album manquant.", "invalid_id", 400);
+export const GET = imgchestRoute(async ({ searchParams }) => {
+  const id = (searchParams.get("id") ?? "").trim();
+  if (!id) fail(400, "Identifiant d'album manquant.", "invalid_id");
 
   try {
     const post = await imgchestPost(id);
@@ -27,6 +25,6 @@ export async function GET(request: Request) {
       bytes: post.files.reduce((sum, file) => sum + (file.bytes ?? 0), 0),
     });
   } catch (err) {
-    return jsonError(imgchestErrorMessage(err), "imgchest_error", 502);
+    fail(502, imgchestErrorMessage(err), "imgchest_error");
   }
-}
+});

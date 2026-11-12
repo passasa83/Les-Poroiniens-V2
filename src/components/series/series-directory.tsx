@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { FolderPlus, Search } from "lucide-react";
 import { Badge, Card, EmptyState, Input, Pagination, Select } from "@/components/ui/kit";
-import { ArchiveSeriesButton } from "./series-actions";
+import { ArchiveSeriesButton } from "./actions/archive-button";
 import { listSeries } from "@/lib/data/series";
-import { getDb, TABLES } from "@/lib/db";
+import { getDb, TABLES } from "@/server/db";
 import { SERIES_STATUT_LABELS, type Series, type SeriesStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -57,24 +57,31 @@ export async function SeriesDirectory({
   /** Intitulé de la page : « Séries » côté Gérant, « Catalogue » côté Admin. */
   heading?: string;
 }) {
-  const [result, chapterRes] = await Promise.all([
-    listSeries({
-      q: q || undefined,
-      statut: (statut || "") as SeriesStatus | "",
-      page,
-      perPage: 20,
-      includeAdult: true,
-      includeArchived: true,
-      sort: "maj",
-    }),
-    getDb().list<Record<string, unknown>>(TABLES.chapters, { limit: 5000 }),
-  ]);
+  const result = await listSeries({
+    q: q || undefined,
+    statut: (statut || "") as SeriesStatus | "",
+    page,
+    perPage: 20,
+    includeAdult: true,
+    includeArchived: true,
+    sort: "maj",
+  });
 
-  const counts = new Map<string, number>();
-  for (const row of chapterRes.items) {
-    const key = String(row.series_id ?? "");
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
+  /* Chapitres de chaque série affichée (brouillons compris) : un comptage
+     par série de la page, en parallèle, au lieu de télécharger jusqu'à 5000
+     chapitres de tout le catalogue. */
+  const counts = new Map<string, number>(
+    await Promise.all(
+      result.items.map(async (s) => {
+        const { total } = await getDb().list(TABLES.chapters, {
+          filters: [{ field: "series_id", op: "eq", value: s.id }],
+          select: ["series_id"],
+          limit: 1,
+        });
+        return [s.id, total] as const;
+      }),
+    ),
+  );
 
   const filtered = Boolean(q || statut);
 
@@ -95,22 +102,12 @@ export async function SeriesDirectory({
         )}
       </div>
 
-      <form
-        method="get"
-        action={basePath}
-        className="flex flex-wrap items-end gap-2"
-        role="search"
-      >
+      <form method="get" action={basePath} className="flex flex-wrap items-end gap-2" role="search">
         <div className="min-w-0 flex-1 sm:max-w-md">
           <label className="label" htmlFor="series-q">
             Rechercher
           </label>
-          <Input
-            id="series-q"
-            name="q"
-            defaultValue={q}
-            placeholder="Titre, auteur, tag…"
-          />
+          <Input id="series-q" name="q" defaultValue={q} placeholder="Titre, auteur, tag…" />
         </div>
         <div className="w-44">
           <label className="label" htmlFor="series-statut">
@@ -160,14 +157,15 @@ export async function SeriesDirectory({
                 <th className="px-4 py-3 font-semibold">Statut</th>
                 <th className="px-4 py-3 font-semibold">Type</th>
                 <th className="px-4 py-3 font-semibold">Classification</th>
-                <th className="px-4 py-3 text-right font-semibold" title="Chapitres ou tomes publiés">
+                <th
+                  className="px-4 py-3 text-right font-semibold"
+                  title="Chapitres ou tomes publiés"
+                >
                   Contenus
                 </th>
                 <th className="px-4 py-3 text-right font-semibold">Vues</th>
                 <th className="px-4 py-3 font-semibold">Mise à jour</th>
-                {canManage && (
-                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
-                )}
+                {canManage && <th className="px-4 py-3 text-right font-semibold">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -185,9 +183,7 @@ export async function SeriesDirectory({
                       >
                         {s.titre}
                       </Link>
-                      {archived && (
-                        <span className="ml-2 text-xs text-muted">(archivée)</span>
-                      )}
+                      {archived && <span className="ml-2 text-xs text-muted">(archivée)</span>}
                       {s.titresAlt.length > 0 && (
                         <span className="block truncate text-xs text-muted">
                           {s.titresAlt.join(" · ")}
@@ -210,9 +206,7 @@ export async function SeriesDirectory({
                     <td className="px-4 py-3 text-right tabular-nums text-muted">
                       {n(counts.get(s.id) ?? 0)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted">
-                      {n(s.vues)}
-                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted">{n(s.vues)}</td>
                     <td className="px-4 py-3 text-muted">{formatDate(s.updated_at)}</td>
                     {canManage && (
                       <td className="px-4 py-3">

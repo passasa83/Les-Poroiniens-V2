@@ -49,19 +49,18 @@ export function AdultGate({
       <div className="space-y-4 text-sm">
         <p className="text-muted">
           Une partie du catalogue est classée <strong className="text-adult">+18</strong>. En
-          continuant, vous confirmez avoir au moins 18 ans et acceptez d&apos;accéder à ce
-          contenu.
+          continuant, vous confirmez avoir au moins 18 ans et acceptez d&apos;accéder à ce contenu.
         </p>
         <p className="rounded-xl border border-line bg-surface2 p-3 text-xs text-muted">
           {authenticated ? (
             <>
-              Aucune vérification d&apos;identité n&apos;est réalisée. Votre choix est conservé
-              30 jours sur cet appareil (et dans vos préférences de compte).
+              Aucune vérification d&apos;identité n&apos;est réalisée. Votre choix est conservé 30
+              jours sur cet appareil (et dans vos préférences de compte).
             </>
           ) : (
             <>
-              L&apos;accès au contenu +18 nécessite un compte. Connectez-vous (ou créez-en un),
-              puis validez cette déclaration une seule fois.
+              L&apos;accès au contenu +18 nécessite un compte. Connectez-vous (ou créez-en un), puis
+              validez cette déclaration une seule fois.
             </>
           )}
         </p>

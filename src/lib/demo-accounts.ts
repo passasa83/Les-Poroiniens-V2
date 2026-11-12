@@ -1,6 +1,6 @@
 import "server-only";
-import { dataMode } from "@/lib/db";
-import { DEMO_ACCOUNTS } from "@/lib/db/seed";
+import { dataMode } from "@/server/db";
+import { DEMO_ACCOUNTS } from "@/server/db/seed";
 import type { DemoAccount } from "@/components/auth/connexion-form";
 
 /**

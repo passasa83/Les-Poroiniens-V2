@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { route } from "@/server/http";
 
 /** GET /api/me — identité de l'utilisateur connecté, jamais d'identité client. */
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Authentification requise.", code: "unauthorized" },
-      { status: 401 },
-    );
-  }
-
+export const GET = route({ auth: "user" }, async ({ user }) => {
   return NextResponse.json({
     id: user.id,
     pseudo: user.pseudo,
@@ -20,4 +12,4 @@ export async function GET() {
     adult_ok: user.adult_ok,
     preferences: user.preferences,
   });
-}
+});

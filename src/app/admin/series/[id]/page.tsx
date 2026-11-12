@@ -1,14 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Eye, PencilLine } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { atLeast, can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge, Card } from "@/components/ui/kit";
-import { ChapterActions } from "@/components/series/series-actions";
+import { ChapterActions } from "@/components/series/actions/chapter-actions";
 import { listChapters } from "@/lib/data/chapters";
 import { getSeriesById } from "@/lib/data/series";
-import { compteUnites, libelleUniteSingulier, libelleUnitesPluriel, titreUnite } from "@/lib/format";
+import {
+  compteUnites,
+  libelleUniteSingulier,
+  libelleUnitesPluriel,
+  titreUnite,
+} from "@/lib/format";
 import { SERIES_STATUT_LABELS, type Chapter, type SeriesStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -50,11 +55,7 @@ function Ligne({ label, children }: { label: string; children: React.ReactNode }
  * l'espace Gérant ; un Gérant voit le lien de raccourci, un administrateur
  * simplement l'information.
  */
-export default async function ViewSeriePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ViewSeriePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!atLeast(user?.role, "admin")) return <AccessDenied required="admin" />;
 
@@ -109,11 +110,7 @@ export default async function ViewSeriePage({
             {series.titresAlt.length ? series.titresAlt.join(" · ") : "—"}
           </Ligne>
           <Ligne label="Synopsis">
-            {series.synopsis ? (
-              <span className="whitespace-pre-wrap">{series.synopsis}</span>
-            ) : (
-              "—"
-            )}
+            {series.synopsis ? <span className="whitespace-pre-wrap">{series.synopsis}</span> : "—"}
           </Ligne>
           <Ligne label="Auteurs">{series.auteurs.length ? series.auteurs.join(", ") : "—"}</Ligne>
           <Ligne label="Genres">{series.genres.length ? series.genres.join(", ") : "—"}</Ligne>
@@ -125,9 +122,8 @@ export default async function ViewSeriePage({
             <span className="break-all font-mono text-xs">{series.couverture || "générée"}</span>
           </Ligne>
           <Ligne label="Statistiques">
-            {series.vues.toLocaleString("fr-FR")} vues · note{" "}
-            {series.noteMoy.toFixed(1)}/5 ({series.nbVotes} votes) ·{" "}
-            {compteUnites(series.nb_chapitres, series.unite)}
+            {series.vues.toLocaleString("fr-FR")} vues · note {series.noteMoy.toFixed(1)}/5 (
+            {series.nbVotes} votes) · {compteUnites(series.nb_chapitres, series.unite)}
           </Ligne>
           <Ligne label="Mise à jour">{formatDate(series.updated_at)}</Ligne>
         </dl>
@@ -210,7 +206,11 @@ export default async function ViewSeriePage({
                     {canEdit ? (
                       <>
                         {" "}
-                        (<a href="/gerant/import" className="link-muted">import</a>)
+                        (
+                        <a href="/gerant/import" className="link-muted">
+                          import
+                        </a>
+                        )
                       </>
                     ) : (
                       " (accès réservé au Gérant)"

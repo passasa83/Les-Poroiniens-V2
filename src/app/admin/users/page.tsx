@@ -1,13 +1,11 @@
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { atLeast, can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
-import { getDb, TABLES } from "@/lib/db";
-import type { Comment, Profile, Role } from "@/lib/types";
+import { listAll, TABLES } from "@/server/db";
+import type { Role } from "@/lib/types";
 import { UsersPanel, type UserRow } from "./_components/users-panel";
 
 export const dynamic = "force-dynamic";
-
-type ProfileRow = Profile & { banni?: boolean };
 
 /** Gestion des utilisateurs (admin+ : ban, rôles ≤ Modo). */
 export default async function AdminUsersPage() {
@@ -16,20 +14,20 @@ export default async function AdminUsersPage() {
     return <AccessDenied required="admin" />;
   }
 
-  const [profileRes, commentRes] = await Promise.all([
-    getDb().list<ProfileRow>(TABLES.profiles, {
+  /* Tous les profils (avant : 500 au plus) ; commentaires réduits à la
+     colonne auteur pour le compteur (avant : 5000 lignes complètes). */
+  const [profils, auteurs] = await Promise.all([
+    listAll(TABLES.profiles, {
       order: { field: "date_inscription", dir: "desc" },
-      limit: 500,
+      select: ["user_id", "pseudo", "role", "date_inscription", "banni"],
     }),
-    getDb().list<Comment>(TABLES.comments, { limit: 5000 }),
+    listAll(TABLES.comments, { select: ["user_id"] }),
   ]);
 
   const counts = new Map<string, number>();
-  for (const comment of commentRes.items) {
-    counts.set(comment.user_id, (counts.get(comment.user_id) ?? 0) + 1);
-  }
+  for (const { user_id } of auteurs) counts.set(user_id, (counts.get(user_id) ?? 0) + 1);
 
-  const rows: UserRow[] = profileRes.items.map((profile) => ({
+  const rows: UserRow[] = profils.map((profile) => ({
     userId: profile.user_id,
     pseudo: profile.pseudo,
     role: (profile.role ?? "membre") as Role,

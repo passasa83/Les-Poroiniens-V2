@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { audit, createReport, notify } from "@/lib/data/moderation";
+import { audit, createReport } from "@/lib/data/moderation";
+import { notify } from "@/lib/data/notifications";
 import { getSeriesBySlug, listSeries } from "@/lib/data/series";
 import { listProfiles } from "@/lib/data/users";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { route } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -55,74 +56,64 @@ async function resolveSeries(value: string) {
   }
 }
 
-export async function POST(request: Request) {
-  const ip = clientIp(request);
-  const limit = rateLimit(`legal-notice:${ip}`, { limit: 3, windowMs: 60 * 60 * 1000 });
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "too_many_requests", code: "RATE_LIMITED" },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
-    );
-  }
+export const POST = route(
+  {
+    rateLimit: {
+      key: "legal-notice",
+      limit: 3,
+      windowMs: 60 * 60 * 1000,
+      message: "too_many_requests",
+    },
+    body: NoticeSchema,
+    invalidBody: "invalid_payload",
+  },
+  async ({ body: input, ip }) => {
+    const chapitre = input.chapitre ?? "";
+    const nom = input.nom ?? "";
 
-  let payload: unknown = null;
-  try {
-    payload = await request.json();
-  } catch {
-    payload = null;
-  }
+    try {
+      const series = await resolveSeries(input.serie);
+      const details = [
+        `Série : ${input.serie}`,
+        chapitre && `Chapitre : ${chapitre}`,
+        `Emplacement : ${input.emplacement}`,
+        `Droits : ${input.droits}`,
+        `Contact : ${input.email}${nom ? ` (${nom})` : ""}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
 
-  const parsed = NoticeSchema.safeParse(payload);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "invalid_payload", code: "VALIDATION" }, { status: 400 });
-  }
+      const report = await createReport({
+        type: "series",
+        target_id: series?.id ?? `serie:${slugify(input.serie) || "inconnue"}`,
+        reporter_id: "anonyme",
+        raison: "notice-takedown",
+        details,
+      });
 
-  const input = parsed.data;
-  const chapitre = input.chapitre ?? "";
-  const nom = input.nom ?? "";
+      const payloadNote = {
+        titre: "Signalement de contenu (notice & takedown)",
+        message: `Série signalée : ${input.serie}${chapitre ? ` — ${chapitre}` : ""}`,
+        rapport: report.id,
+        lien: "/moderation",
+      };
+      const owners = (await listProfiles(500)).filter((p) => p.role === "owner");
+      await Promise.all(owners.map((o) => notify(o.user_id, "system", payloadNote)));
 
-  try {
-    const series = await resolveSeries(input.serie);
-    const details = [
-      `Série : ${input.serie}`,
-      chapitre && `Chapitre : ${chapitre}`,
-      `Emplacement : ${input.emplacement}`,
-      `Droits : ${input.droits}`,
-      `Contact : ${input.email}${nom ? ` (${nom})` : ""}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
+      await audit({
+        actorId: "anonyme",
+        actorPseudo: "Visiteur",
+        action: "legal.notice_takedown",
+        cible: report.target_id,
+        apres: { serie: input.serie, chapitre, rapport: report.id },
+        ip,
+      });
+    } catch {
+      // L'issue (base indisponible, série introuvable…) ne modifie jamais la
+      // réponse : le détail est journalisé côté serveur uniquement.
+      console.error("[legal/notice] enregistrement du signalement incomplet");
+    }
 
-    const report = await createReport({
-      type: "series",
-      target_id: series?.id ?? `serie:${slugify(input.serie) || "inconnue"}`,
-      reporter_id: "anonyme",
-      raison: "notice-takedown",
-      details,
-    });
-
-    const payloadNote = {
-      titre: "Signalement de contenu (notice & takedown)",
-      message: `Série signalée : ${input.serie}${chapitre ? ` — ${chapitre}` : ""}`,
-      rapport: report.id,
-      lien: "/moderation",
-    };
-    const owners = (await listProfiles(500)).filter((p) => p.role === "owner");
-    await Promise.all(owners.map((o) => notify(o.user_id, "system", payloadNote)));
-
-    await audit({
-      actorId: "anonyme",
-      actorPseudo: "Visiteur",
-      action: "legal.notice_takedown",
-      cible: report.target_id,
-      apres: { serie: input.serie, chapitre, rapport: report.id },
-      ip,
-    });
-  } catch {
-    // L'issue (base indisponible, série introuvable…) ne modifie jamais la
-    // réponse : le détail est journalisé côté serveur uniquement.
-    console.error("[legal/notice] enregistrement du signalement incomplet");
-  }
-
-  return NextResponse.json(NEUTRAL_BODY, { status: 200 });
-}
+    return NextResponse.json(NEUTRAL_BODY, { status: 200 });
+  },
+);

@@ -41,10 +41,7 @@ export function Modal({
 
     const focusables = () =>
       Array.from(dialog?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
-        (el) =>
-          el.tabIndex >= 0 &&
-          !el.closest('[aria-hidden="true"]') &&
-          !el.closest("[inert]"),
+        (el) => el.tabIndex >= 0 && !el.closest('[aria-hidden="true"]') && !el.closest("[inert]"),
       );
 
     const first = focusables()[0];

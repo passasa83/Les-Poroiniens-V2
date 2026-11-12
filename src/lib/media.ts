@@ -28,18 +28,6 @@ export function imageEnv() {
   };
 }
 
-/** État des variables d'environnement, affiché dans l'espace Gérant. */
-export function imageEnvStatus(): Record<string, boolean> {
-  const env = imageEnv();
-  return {
-    IMG_BASE_URL: Boolean(env.imgBase),
-    NAS_API_BASE: Boolean(env.nasApiBase),
-    IMG_SIGNING_SECRET: Boolean(process.env.IMG_SIGNING_SECRET),
-    CF_API_TOKEN: Boolean(env.cfToken && env.cfZone),
-    IMG_CDN_BLUR: env.cdnTransform,
-  };
-}
-
 const REMOTE = /^https?:\/\//i;
 const SIGNED_TTL_SECONDS = 600; // 10 minutes
 
@@ -90,13 +78,6 @@ export function pageUrl(
   return withQuery(url, params);
 }
 
-/** Vérification d'une URL signée (utilisée par les routes de prévisualisation). */
-export function verifySignature(path: string, exp: string, sig: string): boolean {
-  const expMs = Number(exp) * 1000;
-  if (!Number.isFinite(expMs) || expMs < Date.now()) return false;
-  return hmac(`${path}|${exp}`) === sig;
-}
-
 /* ── Couvertures et bannières ──────────────────────────────────── */
 
 /** Version d'URL dérivée de la dernière mise à jour de la série. */
@@ -111,7 +92,10 @@ function coverVersion(version?: string | null): string {
  * - chemin relatif NAS → `${IMG_BASE_URL}/…` ;
  * - URL complète → inchangée (données migrées de l'ancien site).
  */
-export function resolveCover(couverture: string | null | undefined, version?: string | null): string {
+export function resolveCover(
+  couverture: string | null | undefined,
+  version?: string | null,
+): string {
   const raw = (couverture ?? "").trim();
   if (!raw) return "";
   // Version déjà présente dans l'URL : on ne la touche pas.

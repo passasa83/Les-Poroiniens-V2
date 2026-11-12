@@ -35,12 +35,10 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
           </Link>
           .
         </li>
+        <li>Créez un compte ou connectez-vous : le suivi est réservé aux membres.</li>
         <li>
-          Créez un compte ou connectez-vous : le suivi est réservé aux membres.
-        </li>
-        <li>
-          Cliquez sur « Suivre » / « Ajouter à la bibliothèque », puis choisissez un statut (À
-          lire, En cours, Terminé, En pause, Abandonné) et, si vous le souhaitez, un favori.
+          Cliquez sur « Suivre » / « Ajouter à la bibliothèque », puis choisissez un statut (À lire,
+          En cours, Terminé, En pause, Abandonné) et, si vous le souhaitez, un favori.
         </li>
         <li>
           Retrouvez vos séries dans{" "}
@@ -54,8 +52,8 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
           .
         </li>
         <li>
-          Votre progression est enregistrée automatiquement : la fiche série et le lecteur
-          proposent de reprendre là où vous vous êtes arrêté.
+          Votre progression est enregistrée automatiquement : la fiche série et le lecteur proposent
+          de reprendre là où vous vous êtes arrêté.
         </li>
       </ol>
     ),
@@ -142,9 +140,9 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
           .
         </li>
         <li>
-          <strong className="text-fg">Contenu +18 invisible :</strong> il faut un
-          compte, puis valider la porte d&apos;accès +18 (une seule fois, dans
-          vos préférences ou à l&apos;ouverture d&apos;un contenu adulte).
+          <strong className="text-fg">Contenu +18 invisible :</strong> il faut un compte, puis
+          valider la porte d&apos;accès +18 (une seule fois, dans vos préférences ou à
+          l&apos;ouverture d&apos;un contenu adulte).
         </li>
       </ul>
     ),
@@ -154,9 +152,7 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
     titre: "Contacts et ressources",
     contenu: (
       <ul className="list-disc space-y-2 pl-5">
-        <li>
-          Problème de lecture ou de scan : bouton « Signaler un problème » dans le lecteur.
-        </li>
+        <li>Problème de lecture ou de scan : bouton « Signaler un problème » dans le lecteur.</li>
         <li>
           Demande relative à un contenu :{" "}
           <Link className="link-muted underline" href="/legal/dmca">
@@ -184,9 +180,8 @@ const FAQ: Array<{ icon: ReactNode; titre: string; contenu: ReactNode }> = [
         </li>
         <li>
           <Mail className="mr-1 inline size-4 align-[-2px]" aria-hidden />
-          Aucun fournisseur d&apos;e-mails n&apos;est activé au lancement : l&apos;équipe ne
-          répond pas par courrier électronique et les échanges passent par les notifications du
-          site.
+          Aucun fournisseur d&apos;e-mails n&apos;est activé au lancement : l&apos;équipe ne répond
+          pas par courrier électronique et les échanges passent par les notifications du site.
         </li>
       </ul>
     ),

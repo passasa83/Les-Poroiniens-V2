@@ -65,7 +65,11 @@ export function LibraryImport() {
           htmlFor="biblio-import"
           className="btn-secondary cursor-pointer text-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
         >
-          {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <Upload aria-hidden className="size-4" />}
+          {busy ? (
+            <Loader2 aria-hidden className="size-4 animate-spin" />
+          ) : (
+            <Upload aria-hidden className="size-4" />
+          )}
           Importer
         </label>
         <span className="text-xs text-muted">JSON ou CSV</span>

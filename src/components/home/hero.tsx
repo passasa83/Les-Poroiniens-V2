@@ -148,7 +148,10 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       {s.chapitre !== null && (
-                        <Link href={`/serie/${s.slug}/chapitre-${s.chapitre}`} className="btn-primary">
+                        <Link
+                          href={`/serie/${s.slug}/chapitre-${s.chapitre}`}
+                          className="btn-primary"
+                        >
                           <BookOpen className="size-4" />
                           Lire {libelleUnite(s.chapitre, s.unite)}
                         </Link>
@@ -196,7 +199,11 @@ export function Hero({ slides, authed }: { slides: HeroSlide[]; authed: boolean 
               type="button"
               className="grid h-11 w-11 place-items-center text-muted hover:text-fg"
               aria-pressed={!auto}
-              aria-label={auto ? "Mettre le défilement automatique en pause" : "Reprendre le défilement automatique"}
+              aria-label={
+                auto
+                  ? "Mettre le défilement automatique en pause"
+                  : "Reprendre le défilement automatique"
+              }
               title={auto ? "Pause" : "Lecture"}
               onClick={() => setAuto((v) => !v)}
             >

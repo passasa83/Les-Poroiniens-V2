@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { listChapters } from "@/lib/data/chapters";
-import { allSeries } from "@/lib/data/series";
+import { seriesIndex } from "@/lib/data/series";
 
 // Les fichiers sitemap sont mis en cache par défaut par Next : sans cette
 // option, le sitemap continuait de lister des séries supprimées jusqu'au
@@ -10,7 +10,11 @@ export const dynamic = "force-dynamic";
 const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 /** Routes statiques principales. */
-const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }> = [
+const STATIC_ROUTES: Array<{
+  path: string;
+  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority: number;
+}> = [
   { path: "/", changeFrequency: "daily", priority: 1 },
   { path: "/catalogue", changeFrequency: "daily", priority: 0.9 },
   { path: "/nouveautes", changeFrequency: "daily", priority: 0.8 },
@@ -35,9 +39,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: route.priority,
   }));
 
-  let series: Awaited<ReturnType<typeof allSeries>> = [];
+  let series: Awaited<ReturnType<typeof seriesIndex>> = [];
   try {
-    series = await allSeries();
+    series = await seriesIndex();
   } catch {
     // Base indisponible : le sitemap reste utilisable avec les routes statiques.
     return statics;

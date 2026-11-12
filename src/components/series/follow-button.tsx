@@ -23,13 +23,7 @@ export interface FollowState {
  * Suivi de la série (bibliothèque) + notation 1-10.
  * Toutes les écritures passent par POST /api/reading/follow.
  */
-export function FollowButton({
-  seriesId,
-  initial,
-}: {
-  seriesId: string;
-  initial: FollowState;
-}) {
+export function FollowButton({ seriesId, initial }: { seriesId: string; initial: FollowState }) {
   const [entry, setEntry] = useState<FollowState>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,9 +115,7 @@ export function FollowButton({
       </div>
 
       <div className="space-y-1.5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Votre note
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Votre note</p>
         <div className="flex flex-wrap gap-1" role="group" aria-label="Noter de 1 à 10">
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
             <button

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { audit, createReport, notify } from "@/lib/data/moderation";
+import { rateLimit } from "@/server/http/rate-limit";
+import { audit, createReport } from "@/lib/data/moderation";
+import { notify } from "@/lib/data/notifications";
 import { getSeriesBySlug, listSeries } from "@/lib/data/series";
 import { listProfiles } from "@/lib/data/users";
+import { fail, route } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -127,13 +128,13 @@ async function depotLegal(input: Legal, ip: string) {
       // Notification / audit best-efforts : l'enregistrement est déjà fait.
     }
   } catch {
-    return NextResponse.json(
-      { error: "Enregistrement impossible pour le moment. Réessayez plus tard.", code: "STORAGE" },
-      { status: 500 },
-    );
+    fail(500, "Enregistrement impossible pour le moment. Réessayez plus tard.", "STORAGE");
   }
 
-  return NextResponse.json({ ok: true, accusereception: accusereception(reportId) }, { status: 201 });
+  return NextResponse.json(
+    { ok: true, accusereception: accusereception(reportId) },
+    { status: 201 },
+  );
 }
 
 /* ── Signalement depuis la lecture : membre connecté ─────────────────────── */
@@ -164,31 +165,14 @@ async function signalementLecture(input: Lecture, user: { id: string }, ip: stri
 }
 
 /** Signalements : membre connecté, 5 signalements / 10 min. */
-export async function POST(request: Request) {
-  let json: unknown;
-  try {
-    json = await request.json();
-  } catch {
-    return NextResponse.json({ error: "corps invalide", code: "VALIDATION" }, { status: 400 });
-  }
+export const POST = route(
+  { auth: "optional", body: ReportSchema, invalidBody: "corps invalide" },
+  async ({ user, body, ip }) => {
+    // Dépôt DMCA : ouvert aux visiteurs (la page légale est publique).
+    if (body.type === "legal") return depotLegal(body, ip);
 
-  const parsed = ReportSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "corps invalide", code: "VALIDATION" }, { status: 400 });
-  }
+    if (!user) fail(401, "Vous devez être connecté pour signaler un problème.", "unauthorized");
 
-  const ip = clientIp(request);
-
-  // Dépôt DMCA : ouvert aux visiteurs (la page légale est publique).
-  if (parsed.data.type === "legal") return depotLegal(parsed.data, ip);
-
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json(
-      { error: "Vous devez être connecté pour signaler un problème.", code: "UNAUTHORIZED" },
-      { status: 401 },
-    );
-  }
-
-  return signalementLecture(parsed.data, user, ip);
-}
+    return signalementLecture(body, user, ip);
+  },
+);

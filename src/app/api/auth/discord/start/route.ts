@@ -8,7 +8,7 @@ import {
   OAUTH_TTL_SECONDS,
   type EtatOAuth,
 } from "@/lib/discord";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/server/http/rate-limit";
 
 export const runtime = "nodejs";
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FolderPlus, ListChecks, ShieldCheck } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { allSeries } from "@/lib/data/series";
@@ -46,8 +46,7 @@ export default async function GerantImportPage({
           <p className="section-title">Créez d&apos;abord une série</p>
           <p className="max-w-md text-sm text-muted">
             Une unité de lecture (chapitre ou tome) s&apos;attache toujours à une fiche série :
-            créez-la (titre, slug, classification), puis revenez importer son contenu depuis le
-            NAS.
+            créez-la (titre, slug, classification), puis revenez importer son contenu depuis le NAS.
           </p>
           <Link href="/gerant/series/nouvelle" className="btn-primary">
             <FolderPlus className="size-4" /> Créer une série

@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { logout } from "@/lib/auth";
+import { logout } from "@/server/auth";
+import { route } from "@/server/http";
 
 /** POST /api/auth/logout — destruction de la session. */
-export async function POST() {
+export const POST = route({}, async () => {
   await logout();
-  return NextResponse.json({ ok: true });
-}
+  return Response.json({ ok: true });
+});

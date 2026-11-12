@@ -1,15 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import {
-  BookOpen,
-  ExternalLink,
-  Gauge,
-  HardHat,
-  ShieldCheck,
-  Sparkles,
-  Users,
-} from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { BookOpen, ExternalLink, Gauge, HardHat, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { getCurrentUser } from "@/server/auth";
 import { atLeast, can, ROLE_LABELS } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { Badge } from "@/components/ui/kit";
@@ -39,9 +31,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     },
     {
       label: "Contenu",
-      items: [
-        { href: "/admin/series", label: "Catalogue", icon: <BookOpen className="size-4" /> },
-      ],
+      items: [{ href: "/admin/series", label: "Catalogue", icon: <BookOpen className="size-4" /> }],
     },
     {
       label: "Communauté",

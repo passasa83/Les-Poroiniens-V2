@@ -36,7 +36,7 @@
  * TABLE `series` (un fichier `data/series/*.json`)
  *   title                 → titre                tel quel (max 255)
  *   (dérivé)              → slug                 `slugify(title)`, même algorithme
- *                                                 que `src/lib/db/seed.ts`
+ *                                                 que `src/server/db/seed.ts`
  *   alternative_titles[]  → titresAlt[]          non vides, sans doublon, ≤20
  *   description           → synopsis             tel quel
  *   cover / covers_gallery[].url_lq|url_hq / vignette / preview_image
@@ -48,7 +48,7 @@
  *                                                 → image générée
  *                                                 `/api/img/cover/<slug>`
  *   (même valeur)         → banniere             identique à `couverture`
- *                                                 (convention `src/lib/db/seed.ts`)
+ *                                                 (convention `src/server/db/seed.ts`)
  *   release_status        → statut               Terminé/Fini/Finis → `termine`,
  *                                                 sinon `en_cours`
  *   manga_type + webtoon + magazine
@@ -120,7 +120,7 @@
  * `NAS_API_BASE/list?path=` pour la source `nas`)
  *   rang dans l'album     → ordre                 0..n-1 (la colonne publique
  *                                                 `index` est mappée sur `ordre`
- *                                                 par `src/lib/db/appwrite.ts`)
+ *                                                 par `src/server/db/appwrite.ts`)
  *   file.link             → chemin                URL CDN **complète**
  *                                                 `https://cdn.imgchest.com/…` :
  *                                                 `pageUrl()` la sert telle quelle
@@ -171,7 +171,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 import { Client, Query, TablesDB, Users } from "node-appwrite";
-import { rowId } from "../src/lib/db/ids";
+import { rowId } from "../src/server/db/ids";
 
 /* ── Environnement (.env.local lu manuellement, hors Next) ───────────────── */
 
@@ -560,7 +560,7 @@ function list(label: string, items: string[], max = 12): void {
 
 /* ── Utilitaires ─────────────────────────────────────────────────────────── */
 
-/** Même algorithme que `slugify()` de `src/lib/db/seed.ts`. */
+/** Même algorithme que `slugify()` de `src/server/db/seed.ts`. */
 function slugify(input: string): string {
   return input
     .toLowerCase()

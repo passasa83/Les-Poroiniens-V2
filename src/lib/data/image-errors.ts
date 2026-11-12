@@ -1,5 +1,6 @@
 import "server-only";
-import { getDb, invalidate, rowId, TABLES } from "@/lib/db";
+import { getDb, listAll, parLots, rowId, TABLES } from "@/server/db";
+import { invalidate } from "@/server/cache";
 
 /** Journée UTC courante (décalée pour le relevé sur deux jours glissants). */
 function today(offsetDays = 0): string {
@@ -7,24 +8,12 @@ function today(offsetDays = 0): string {
   return date.toISOString().slice(0, 10);
 }
 
-type ImageErrorRow = {
-  id: string;
-  day: string;
-  chapter_id: string;
-  page_index: number;
-  count: number;
-  updated_at: string;
-};
-
 /**
  * Télémétrie d'erreur d'images : le lecteur remonte les pages qui
  * n'ont pas pu être chargées après reprise, agrégées par jour, chapitre et
  * page. Aucune donnée personnelle n'est collectée.
  */
-export async function recordImageErrors(
-  chapterId: string,
-  pageIndexes: number[],
-): Promise<number> {
+export async function recordImageErrors(chapterId: string, pageIndexes: number[]): Promise<number> {
   if (!chapterId || pageIndexes.length === 0) return 0;
   const db = getDb();
   const day = today();
@@ -36,7 +25,7 @@ export async function recordImageErrors(
     // (et il hache automatiquement au-delà de 36 caractères).
     const id = rowId(day, chapterId, pageIndex);
     try {
-      const existing = await db.get<ImageErrorRow>(TABLES.imageErrors, id);
+      const existing = await db.get(TABLES.imageErrors, id);
       if (existing) {
         await db.update(TABLES.imageErrors, id, {
           count: (existing.count ?? 0) + 1,
@@ -44,7 +33,6 @@ export async function recordImageErrors(
         });
       } else {
         await db.create(TABLES.imageErrors, id, {
-          id,
           day,
           chapter_id: chapterId,
           page_index: pageIndex,
@@ -69,17 +57,15 @@ export async function recordImageErrors(
 export async function purgeImageErrors(chapterId: string): Promise<void> {
   const db = getDb();
   try {
-    const { items } = await db.list<ImageErrorRow>(TABLES.imageErrors, {
+    const items = await listAll(TABLES.imageErrors, {
       filters: [{ field: "chapter_id", op: "eq", value: chapterId }],
-      limit: 500,
+      select: ["chapter_id"],
     });
-    for (const row of items) {
-      try {
-        await db.remove(TABLES.imageErrors, row.id);
-      } catch {
+    await parLots(items, (row) =>
+      db.remove(TABLES.imageErrors, row.id).catch(() => {
         // ligne déjà absente
-      }
-    }
+      }),
+    );
     invalidate("image-errors:");
   } catch {
     // la base est indisponible : la suppression du chapitre doit passer
@@ -88,10 +74,9 @@ export async function purgeImageErrors(chapterId: string): Promise<void> {
 
 /** Volume des deux derniers jours (le fuseau UTC peut découper la journée). */
 export async function countRecentImageErrors(): Promise<{ total: number; byChapter: number }> {
-  const db = getDb();
-  const { items } = await db.list<ImageErrorRow>(TABLES.imageErrors, {
+  const items = await listAll(TABLES.imageErrors, {
     filters: [{ field: "day", op: "in", value: [today(), today(-1)] }],
-    limit: 1000,
+    select: ["chapter_id", "count"],
   });
   let total = 0;
   const chapters = new Set<string>();

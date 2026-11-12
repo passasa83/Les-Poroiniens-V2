@@ -1,18 +1,24 @@
 import "server-only";
-import { getDb, rowId, TABLES } from "@/lib/db";
+import { getDb, listAll, parLots, rowId, TABLES } from "@/server/db";
 import { exclureSeriesDemo } from "@/lib/demo-gate";
-import { getChapterById, listChapters } from "@/lib/data/chapters";
-import { mapSeries } from "@/lib/data/series";
+import { chaptersParIds, publishedChaptersOf } from "@/lib/data/chapters";
+import { allHistory } from "@/lib/data/history";
+import { seriesParIds } from "@/lib/data/series";
 import type { HistoryEntry, LibraryEntry, LibraryStatus, Series } from "@/lib/types";
 
+/*
+ * Bibliothèque : une ligne par (membre, série), identifiant
+ * `rowId(user, série)`. Lectures groupées (séries, chapitres) : plus aucun
+ * aller-retour par ligne.
+ */
+
+/** Toute la bibliothèque, la plus récemment modifiée d'abord. */
 export async function listLibrary(userId: string): Promise<LibraryEntry[]> {
-  const { items } = await getDb().list<LibraryEntry>(TABLES.library, {
+  const items = await listAll(TABLES.library, {
     filters: [{ field: "user_id", op: "eq", value: userId }],
     order: { field: "updated_at", dir: "desc" },
-    limit: 1000,
   });
-  /* Lignes sur une série de la graine : masquées en production (la fiche
-     l'est aussi, la ligne ne servirait qu'un identifiant brut à l'écran). */
+  /* Séries de la graine masquées en production (la fiche l'est aussi). */
   return exclureSeriesDemo(items);
 }
 
@@ -20,14 +26,7 @@ export async function getLibraryEntry(
   userId: string,
   seriesId: string,
 ): Promise<LibraryEntry | null> {
-  const { items } = await getDb().list<LibraryEntry>(TABLES.library, {
-    filters: [
-      { field: "user_id", op: "eq", value: userId },
-      { field: "series_id", op: "eq", value: seriesId },
-    ],
-    limit: 1,
-  });
-  return items[0] ?? null;
+  return getDb().get(TABLES.library, rowId(userId, seriesId));
 }
 
 export async function upsertLibraryEntry(
@@ -35,32 +34,30 @@ export async function upsertLibraryEntry(
   seriesId: string,
   patch: Partial<Omit<LibraryEntry, "user_id" | "series_id">>,
 ): Promise<LibraryEntry> {
-  const db = getDb();
   const existing = await getLibraryEntry(userId, seriesId);
-  const base: LibraryEntry = {
-    user_id: userId,
-    series_id: seriesId,
+  const next: LibraryEntry = {
     statut: "en_cours" as LibraryStatus,
     favori: false,
     note: null,
     last_chapter_id: null,
     last_page: 0,
-    updated_at: new Date().toISOString(),
-  };
-  const next = {
-    ...base,
     ...(existing ?? {}),
     ...patch,
     user_id: userId,
     series_id: seriesId,
     updated_at: new Date().toISOString(),
   };
-  const id = rowId(userId, seriesId);
-  if (existing) {
-    await db.update<LibraryEntry>(TABLES.library, id, next as unknown as Record<string, unknown>);
-  } else {
-    await db.create<LibraryEntry>(TABLES.library, id, next as unknown as Record<string, unknown>);
-  }
+  const { user_id, series_id, statut, favori, note, last_chapter_id, last_page, updated_at } = next;
+  await getDb().upsert(TABLES.library, rowId(userId, seriesId), {
+    user_id,
+    series_id,
+    statut,
+    favori,
+    note,
+    last_chapter_id,
+    last_page,
+    updated_at,
+  });
   return next;
 }
 
@@ -68,142 +65,22 @@ export async function removeLibraryEntry(userId: string, seriesId: string): Prom
   await getDb().remove(TABLES.library, rowId(userId, seriesId));
 }
 
-/* ── Historique de lecture ───────────────────────────────────────────── */
-
-export async function listHistory(userId: string, limit = 100): Promise<HistoryEntry[]> {
-  const { items } = await getDb().list<HistoryEntry>(TABLES.history, {
+/** Suppression de compte : toutes les lignes, séries de la graine comprises. */
+export async function clearLibrary(userId: string): Promise<void> {
+  const lignes = await listAll(TABLES.library, {
     filters: [{ field: "user_id", op: "eq", value: userId }],
-    order: { field: "read_at", dir: "desc" },
-    limit,
+    select: ["series_id"],
   });
-  /* Lectures d'une série de la graine : masquées en production, comme la
-     fiche — historique, statistiques et bloc « Continuer la lecture »
-     restent ainsi cohérents avec ce qui est affiché. */
-  return exclureSeriesDemo(items);
+  await parLots(lignes, (l) => getDb().remove(TABLES.library, l.id));
 }
 
-export async function recordProgress(input: {
-  userId: string;
-  chapterId: string;
-  seriesId: string;
-  page: number;
-  completed?: boolean;
-}): Promise<void> {
-  const db = getDb();
-  const id = rowId(input.userId, input.chapterId);
-  const entry: HistoryEntry = {
-    user_id: input.userId,
-    chapter_id: input.chapterId,
-    series_id: input.seriesId,
-    page: input.page,
-    completed: Boolean(input.completed),
-    read_at: new Date().toISOString(),
-  };
-  const existing = await db.get<HistoryEntry>(TABLES.history, id);
-  if (existing) {
-    await db.update<HistoryEntry>(TABLES.history, id, entry as unknown as Record<string, unknown>);
-  } else {
-    await db.create<HistoryEntry>(TABLES.history, id, entry as unknown as Record<string, unknown>);
-  }
-  if (input.page > 0 || input.completed) {
-    await upsertLibraryEntry(input.userId, input.seriesId, {
-      last_chapter_id: input.chapterId,
-      last_page: input.page,
-      statut: "en_cours",
-    });
-  }
-}
+export type LibraryWithSeries = LibraryEntry & { series: Series | null };
 
-export async function clearHistory(userId: string): Promise<void> {
-  const entries = await listHistory(userId, 1000);
-  for (const e of entries) {
-    await getDb().remove(TABLES.history, rowId(userId, e.chapter_id));
-  }
-}
-
-/* ── Statistiques lecteur ─────────────────────────────────────── */
-
-export interface UserStats {
-  chapitres_lus: number;
-  pages_lues: number;
-  minutes_estimes: number;
-  series_terminees: number;
-  series_suivies: number;
-  serie_preferee: string | null;
-  jours_consecutifs: number;
-  par_jour: Array<{ date: string; pages: number; chapitres: number }>;
-}
-
-export async function computeStats(
-  userId: string,
-): Promise<UserStats> {
-  const [history, library] = await Promise.all([
-    listHistory(userId, 1000),
-    listLibrary(userId),
-  ]);
-  const chapitres = history.length;
-  const pages = history.reduce((sum, h) => sum + Math.max(h.page, 0), 0);
-
-  const byDay = new Map<string, { pages: number; chapitres: number }>();
-  for (const h of history) {
-    const date = h.read_at.slice(0, 10);
-    const bucket = byDay.get(date) ?? { pages: 0, chapitres: 0 };
-    bucket.pages += Math.max(h.page, 0);
-    bucket.chapitres += 1;
-    byDay.set(date, bucket);
-  }
-  const par_jour = [...byDay.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, v]) => ({ date, ...v }));
-
-  // série de jours consécutifs
-  let jours = 0;
-  if (par_jour.length > 0) {
-    let cursor = new Date(par_jour[par_jour.length - 1].date);
-    for (let i = par_jour.length - 1; i >= 0; i--) {
-      const expected = cursor.toISOString().slice(0, 10);
-      if (par_jour[i].date !== expected) break;
-      jours += 1;
-      cursor = new Date(cursor.getTime() - 86_400_000);
-    }
-  }
-
-  const countBySeries = new Map<string, number>();
-  for (const h of history) {
-    countBySeries.set(h.series_id, (countBySeries.get(h.series_id) ?? 0) + 1);
-  }
-  let seriePreferee: string | null = null;
-  let best = 0;
-  for (const [id, count] of countBySeries) {
-    if (count > best) {
-      best = count;
-      seriePreferee = id;
-    }
-  }
-
-  return {
-    chapitres_lus: chapitres,
-    pages_lues: pages,
-    minutes_estimes: Math.round(pages * 0.6),
-    series_terminees: library.filter((l) => l.statut === "termine").length,
-    series_suivies: library.length,
-    serie_preferee: seriePreferee,
-    jours_consecutifs: jours,
-    par_jour,
-  };
-}
-
-/** Bibliothèque enrichie des fiches séries (page /bibliotheque). */
-export async function libraryWithSeries(
-  userId: string,
-): Promise<Array<LibraryEntry & { series: Series | null }>> {
+/** Bibliothèque enrichie des fiches séries (profil, export). */
+export async function libraryWithSeries(userId: string): Promise<LibraryWithSeries[]> {
   const entries = await listLibrary(userId);
-  const out: Array<LibraryEntry & { series: Series | null }> = [];
-  for (const entry of entries) {
-    const row = await getDb().get<Series>(TABLES.series, entry.series_id);
-    out.push({ ...entry, series: row ? mapSeries(row) : null });
-  }
-  return out;
+  const series = await seriesParIds(entries.map((e) => e.series_id));
+  return entries.map((entry) => ({ ...entry, series: series.get(entry.series_id) ?? null }));
 }
 
 /* ── Tableau de bord de la bibliothèque ───────────────────────────── */
@@ -234,58 +111,71 @@ export interface LibraryDashboardRow {
  * Lecture séquentielle assumée (le lecteur reprend toujours sur le dernier
  * chapitre atteint) : la progression suit le numéro de reprise et les
  * chapitres parus ensuite constituent les non-lus. Aucune écriture.
+ *
+ * Quatre lectures groupées en tout (bibliothèque + historique, séries,
+ * chapitres publiés, chapitres de reprise hors liste) au lieu de deux
+ * requêtes par série suivie.
  */
 export async function libraryDashboard(userId: string): Promise<LibraryDashboardRow[]> {
-  const [entries, history] = await Promise.all([listLibrary(userId), listHistory(userId, 1000)]);
+  const [entries, history] = await Promise.all([listLibrary(userId), allHistory(userId)]);
 
-  // Dernière lecture par série (le plus récent `read_at` l'emporte).
+  // Dernière lecture par série (historique trié du plus récent au plus ancien).
   const dernieresLectures = new Map<string, HistoryEntry>();
   for (const h of history) {
-    const courante = dernieresLectures.get(h.series_id);
-    if (!courante || h.read_at > courante.read_at) dernieresLectures.set(h.series_id, h);
+    if (!dernieresLectures.has(h.series_id)) dernieresLectures.set(h.series_id, h);
   }
 
-  const rows: LibraryDashboardRow[] = [];
-  for (const entry of entries) {
-    const [row, chapters] = await Promise.all([
-      getDb().get<Series>(TABLES.series, entry.series_id),
-      listChapters(entry.series_id, { publishedOnly: true }),
-    ]);
-    const series = row ? mapSeries(row) : null;
-    const byId = new Map(chapters.map((c) => [c.id, c]));
-    const numeros = chapters.map((c) => c.numero);
+  const seriesIds = entries.map((e) => e.series_id);
+  const [series, chapitresParSerie] = await Promise.all([
+    seriesParIds(seriesIds),
+    publishedChaptersOf(seriesIds),
+  ]);
+
+  /* Chapitre de reprise absent des chapitres publiés (dépublié depuis) :
+     relu en un seul lot, comme l'ancien `getChapterById` de repli. */
+  const connus = new Set([...chapitresParSerie.values()].flat().map((c) => c.id));
+  const manquants = entries.flatMap((e) =>
+    [dernieresLectures.get(e.series_id)?.chapter_id, e.last_chapter_id].filter(
+      (id): id is string => Boolean(id) && !connus.has(id!),
+    ),
+  );
+  const horsListe = await chaptersParIds(manquants);
+
+  return entries.map((entry) => {
+    const chapters = chapitresParSerie.get(entry.series_id) ?? [];
+    const numeroDe = (id: string | null | undefined) => {
+      if (!id) return null;
+      return chapters.find((c) => c.id === id)?.numero ?? horsListe.get(id)?.numero ?? null;
+    };
     const total = chapters.length;
-    const premierNumero = total > 0 ? Math.min(...numeros) : null;
-    // Dernière parution (« nouveautés ») : publication la plus récente.
+    const premierNumero = total > 0 ? Math.min(...chapters.map((c) => c.numero)) : null;
     const derniereSortie = chapters.reduce<string | null>((latest, c) => {
       const date = c.publish_at ?? c.created_at;
       return latest === null || date > latest ? date : latest;
     }, null);
 
-    // Reprise : historique d'abord, sinon la progression déjà en biblio.
+    // Reprise : historique d'abord, sinon la progression déjà en bibliothèque.
     const lecture = dernieresLectures.get(entry.series_id) ?? null;
     let reprise: { numero: number; page: number } | null = null;
     let derniereLecture: string | null = null;
+    const numeroLu = numeroDe(lecture?.chapter_id);
     if (lecture) {
-      const chapitre = byId.get(lecture.chapter_id) ?? (await getChapterById(lecture.chapter_id));
-      if (chapitre) reprise = { numero: chapitre.numero, page: Math.max(lecture.page, 1) };
+      if (numeroLu !== null) reprise = { numero: numeroLu, page: Math.max(lecture.page, 1) };
       derniereLecture = lecture.read_at;
     }
-    if (!reprise && entry.last_chapter_id) {
-      const chapitre = byId.get(entry.last_chapter_id) ?? (await getChapterById(entry.last_chapter_id));
-      if (chapitre) {
-        reprise = { numero: chapitre.numero, page: Math.max(entry.last_page, 1) };
-        derniereLecture = entry.updated_at;
-      }
+    const numeroBiblio = numeroDe(entry.last_chapter_id);
+    if (!reprise && numeroBiblio !== null) {
+      reprise = { numero: numeroBiblio, page: Math.max(entry.last_page, 1) };
+      derniereLecture = entry.updated_at;
     }
 
-    const atteint = reprise?.numero ?? 0;
     // Progression : part des chapitres publiés atteints (numéro ≤ reprise),
     // cohérente avec le badge « +N non lus » qui compte les suivants.
+    const atteint = reprise?.numero ?? 0;
     const nonLus = reprise ? chapters.filter((c) => c.numero > atteint).length : total;
-    rows.push({
+    return {
       entry,
-      series,
+      series: series.get(entry.series_id) ?? null,
       totalChapitres: total,
       premierNumero,
       reprise,
@@ -293,7 +183,6 @@ export async function libraryDashboard(userId: string): Promise<LibraryDashboard
       derniereSortie,
       nonLus,
       progression: total > 0 ? Math.round(((total - nonLus) / total) * 100) : 0,
-    });
-  }
-  return rows;
+    };
+  });
 }

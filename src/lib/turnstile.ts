@@ -19,8 +19,7 @@ const SECRET_KEY_ENV = "TURNSTILE_SECRET_KEY";
 const VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export type TurnstileOutcome =
-  | { ok: true; skipped: boolean }
-  | { ok: false; reason: "missing_token" | "invalid" };
+  { ok: true; skipped: boolean } | { ok: false; reason: "missing_token" | "invalid" };
 
 /** Clé publique à confier au client, ou `null` si non configurée. */
 export function turnstileSiteKey(): string | null {

@@ -1,10 +1,9 @@
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/server/auth";
 import { atLeast, can } from "@/lib/roles";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { allSeries } from "@/lib/data/series";
-import { getDb, TABLES } from "@/lib/db";
+import { listAll, TABLES } from "@/server/db";
 import { serieDeDemo } from "@/lib/demo-gate";
-import type { Recommendation } from "@/lib/types";
 import { RecommendationsPanel } from "./_components/recommendations-panel";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +18,7 @@ export default async function AdminRecommandationsPage() {
   }
 
   const [recoRes, series] = await Promise.all([
-    getDb().list<Recommendation>(TABLES.recommendations, {
-      order: { field: "ordre", dir: "asc" },
-      limit: 500,
-    }),
+    listAll(TABLES.recommendations, { order: { field: "ordre", dir: "asc" } }),
     allSeries(),
   ]);
 
@@ -33,15 +29,15 @@ export default async function AdminRecommandationsPage() {
 
   /* Recommandations de la graine (ou visant une série masquée) : écartées du
      panneau — `allSeries` ne contient plus leurs cibles en production. */
-  const recommandations = recoRes.items.filter((r) => !serieDeDemo(r.series_id));
+  const recommandations = recoRes.filter((r) => !serieDeDemo(r.series_id));
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="section-title">Recommandations</h1>
         <p className="mt-1 text-sm text-muted">
-          Sélections manuelles affichées sur la home, les fiches séries et la fin des lectures.
-          Le contenu +18 respecte le gate à l&apos;affichage.
+          Sélections manuelles affichées sur la home, les fiches séries et la fin des lectures. Le
+          contenu +18 respecte le gate à l&apos;affichage.
         </p>
       </div>
 
